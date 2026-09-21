@@ -8,12 +8,12 @@ See `CLAUDE.md` for how this fits alongside `spec.md` and `DEVLOG.md`.
 
 ## Phase 0 — Infrastructure, scaffolding & offline architecture
 
-- Firebase project created (Auth, Firestore, Hosting) — done together with Markus, step by step, per `CLAUDE.md`'s infrastructure-setup guidance.
+- Firebase project created (Auth, Firestore) — done together with Markus, step by step, per `CLAUDE.md`'s infrastructure-setup guidance.
 - React + Vite + Tailwind scaffolded (§1b.1); `vite-plugin-pwa` configured.
 - Single-admin-UID security rule in place (§1a).
 - **Point-in-Time Recovery (PITR) enabled at database creation** (§2.9a) — must be done via the `gcloud` CLI at creation time, not the Cloud console; the whole-database, 7-day generic safety net that everything else in §2.9a builds on top of.
 - **Offline architecture set up here, not retrofitted later** (external review, Sept 2026 — §1a already treats this as architectural, not a bolt-on): Firestore persistent cache configuration, the Auth-init timeout handling, and the service-worker strategy — roughly a day of work that shapes how every later screen loads data. Getting this wrong and discovering it in Phase 7, after six phases were built against an implicitly-online assumption, is exactly how §1.1's original bug (aggregation queries silently failing offline) would get rediscovered at the worst possible time.
-- Deployed to Firebase Hosting.
+- Deployed to GitHub Pages (§1b.1 — Firebase Auth's authorized-domains list updated to trust the Pages URL).
 
 **Testable deliverable:** Markus can open the deployed URL on both phone and tablet, sign in with Google, install it as a PWA, and see a blank authenticated shell. Then, with WiFi off, reload the app and confirm it still opens (empty, but alive) rather than showing a white screen or an auth error — the offline foundation working before any real screen is built on top of it. Separately, PITR's status is confirmed enabled directly in the Firebase console's Disaster Recovery page — a real check, not just trusting the setup command ran correctly.
 
