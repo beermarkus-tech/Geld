@@ -1,17 +1,18 @@
 # CLAUDE.md — Read This First
 
-Claude Code reads this file automatically at the start of every session — that's exactly why the project's own reading order lives here: **before touching any code, read `spec.md` first, then `PLAN.md`, then `DEVLOG.md`.** This file itself is just the instructions for how to use those three; it rarely changes and isn't where the project's actual content lives.
+Claude Code reads this file automatically at the start of every session — that's exactly why the project's own reading order lives here: **before touching any code, read `spec.md` first, then `PLAN.md`, then `DEVLOG.md`, then `CODEMAP.md`.** This file itself is just the instructions for how to use those four; it rarely changes and isn't where the project's actual content lives.
 
-## The four documents, and what each one is for
+## The five documents, and what each one is for
 
-This project is split across four files with four different jobs. Confusing them is the single easiest way to make this project incoherent across sessions, so the boundary matters more than it might seem.
+This project is split across five files with five different jobs. Confusing them is the single easiest way to make this project incoherent across sessions, so the boundary matters more than it might seem.
 
 1. **`spec.md`** — the single source of truth for *what the app is*. Every screen, every data model field, every resolved design decision lives here. If spec.md and the running code ever disagree, that is a bug to fix or a decision to escalate — never silently resolve it by trusting the code over the spec.
 2. **`PLAN.md`** — the single source of truth for *the intended build order*: staged phases, each with a concrete testable deliverable. Revised when the plan itself changes (a phase gets reordered, split, or rescoped) — similar cadence to spec.md, not appended to every session the way DEVLOG.md is.
 3. **`DEVLOG.md`** — the single source of truth for *what has actually happened* during development: what's been built, what broke, what's still undecided, what the next session should pick up. Append-only. Never a diary of hourly progress — one entry per work session, written when the session ends. Entries should reference which PLAN.md phase they correspond to.
-4. **This file, `CLAUDE.md`** — instructions for how to use the other three. Rarely changes.
+4. **`CODEMAP.md`** — the single source of truth for *where things physically live in the codebase*: the app's actual architecture — top-level structure, which file/component owns which screen, where the shared/pure calculation functions and their tests live, and any known duplication or drift to watch. Distinct from spec.md (which describes the app's behavior, not its code layout): this describes reality as built, not what's planned. Updated on real structural change only (a new major component, a folder reorganization, a new shared module) — same cadence discipline as spec.md and PLAN.md, not appended to every session.
+5. **This file, `CLAUDE.md`** — instructions for how to use the other four. Rarely changes.
 
-Nothing else is authoritative. If you (Claude Code) generate scratch notes, TODOs in code comments, or intermediate reasoning, none of that carries forward — only what lands in spec.md, PLAN.md, or DEVLOG.md survives to the next session.
+Nothing else is authoritative. If you (Claude Code) generate scratch notes, TODOs in code comments, or intermediate reasoning, none of that carries forward — only what lands in spec.md, PLAN.md, DEVLOG.md, or CODEMAP.md survives to the next session.
 
 ## spec.md is not a diary — how it actually gets updated
 
@@ -41,15 +42,29 @@ Format suggestion (adjust naturally, this isn't rigid): a level-2 heading per se
 
 Do **not** use DEVLOG.md for: line-by-line narration of what you typed, restating the spec, or optimism about future sessions. It should read like a competent handoff note to a colleague picking up the project cold — not a transcript.
 
+## CODEMAP.md — what goes in it, and how
+
+CODEMAP.md exists so that no session has to re-derive the codebase's shape by reading around it — without it, that re-derivation is exactly how two components quietly end up doing the same job across sessions. It answers "where does X live," not "what does X do" (that's spec.md) or "in what order was it built" (that's PLAN.md/DEVLOG.md).
+
+It starts as a scaffold with no real content, since no code exists yet at project start. The first session that creates real project structure (PLAN.md Phase 0) is responsible for filling in its sections with what actually exists — never what's planned or intended. Its four sections:
+- **Top-level structure** — directory layout, where components/screens/shared logic live.
+- **Screen-to-component map** — which file/component owns which screen from spec.md §3, so a session working on one screen doesn't accidentally duplicate logic another screen already has.
+- **Shared/pure calculation functions** — `balance()`, the split-transaction invariant, allocation-tag reconciliation, the `Budget` formula, and similar — pointing to both the implementation and its test file for each.
+- **Known duplication or drift to watch** — a flag for the next session if two components are found doing similar things, or something has diverged from what this file describes. Not silently fixed, not silently ignored — logged here.
+
+Update it whenever a session makes a real structural change (a new major component, a folder reorganization, a new shared module) — same "real change, not routine progress" discipline as spec.md and PLAN.md, not a running diary. Routine within-file edits that don't change the codebase's shape don't need a CODEMAP.md update.
+
 ## Starting a new session
 
 At the start of any session:
 1. Skim spec.md's table of contents / section headers to reorient on the app's shape if it's been a while.
 2. Read PLAN.md to see which phase is current and what its testable deliverable is.
 3. Read DEVLOG.md's most recent 2 to 3 entries to pick up exactly where the last session left off — current state, and anything flagged as still open.
-4. If DEVLOG.md flags an unresolved decision that blocks what you're about to do, resolve it with Markus before proceeding, per the rule above — don't quietly pick an answer to keep moving.
-5. If DEVLOG.md has accumulated non-blocking open items from a previous session, offer them to Markus now as a batch, in case he wants to resolve any before you continue.
-6. If work this session reveals PLAN.md itself needs to change (a phase was wrong, too big, missing something) — that's a PLAN.md edit, following the same "real change, not routine progress" discipline as spec.md, not a DEVLOG entry pretending to be a plan revision.
+4. Skim CODEMAP.md to reorient on where things actually live in the codebase before writing or moving code.
+5. If DEVLOG.md flags an unresolved decision that blocks what you're about to do, resolve it with Markus before proceeding, per the rule above — don't quietly pick an answer to keep moving.
+6. If DEVLOG.md has accumulated non-blocking open items from a previous session, offer them to Markus now as a batch, in case he wants to resolve any before you continue.
+7. If work this session reveals PLAN.md itself needs to change (a phase was wrong, too big, missing something) — that's a PLAN.md edit, following the same "real change, not routine progress" discipline as spec.md, not a DEVLOG entry pretending to be a plan revision.
+8. If work this session changes the codebase's structure, update CODEMAP.md before the session ends, per the rule above.
 
 ## Working with Markus (carried over from spec.md — applies here too)
 
