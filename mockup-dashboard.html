@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — UI Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F5F6F8; --surface: #FFFFFF; --surface-sunken: #EEF0F3; --border: #DFE3E8;
+    --text: #171B21; --text-secondary: #5B6472; --text-tertiary: #8891A0;
+    --blue: #2E5AAC; --blue-bg: #E8EEF9; --blue-light: #AFC4E6;
+    --green: #2F7D53; --green-bg: #E5F3EB; --green-light: #A9D6BD;
+    --amber: #B4740E; --amber-bg: #FBF0DD;
+    --purple: #6E4FA8; --purple-bg: #EFE9F8;
+    --red: #B0271F; --red-bg: #FBEAE9;
+    --radius: 6px; --radius-lg: 10px;
+    --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-num: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  [data-theme="dark"] {
+    --bg: #14171C; --surface: #1B1F26; --surface-sunken: #21262E; --border: #2C323C;
+    --text: #E8EAED; --text-secondary: #A2AAB6; --text-tertiary: #6E7683;
+    --blue: #7FA6E8; --blue-bg: #1E2C42; --blue-light: #3C557D;
+    --green: #6FCB98; --green-bg: #1B3327; --green-light: #2E5240;
+    --amber: #E3B25C; --amber-bg: #3A2E14;
+    --purple: #B79EE6; --purple-bg: #2E2440;
+    --red: #E8746C; --red-bg: #3B1E1C;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: var(--font-ui); background:#DADFE6; color:var(--text); padding:32px; }
+  .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+  .toolbar { max-width:1500px; margin:0 auto 20px; display:flex; gap:12px; align-items:center; }
+  .toolbar button { font-family: var(--font-ui); font-size:13px; font-weight:600; padding:8px 14px; border-radius:var(--radius); border:1px solid #B9C0CC; background:#fff; cursor:pointer; }
+  .toolbar span { font-size:13px; color:#4A5261; }
+  .frames { max-width:1500px; margin:0 auto; display:flex; gap:32px; align-items:flex-start; flex-wrap:wrap; }
+
+  /* ---------- SHELL ---------- */
+  .tablet { width:1060px; background:var(--bg); border-radius:18px; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,0.18); display:flex; height:720px; }
+  .sidebar { width:176px; background:var(--surface); border-right:1px solid var(--border); padding:16px 10px; flex-shrink:0; }
+  .sidebar .brand { font-size:13px; font-weight:700; color:var(--text-secondary); padding:4px 10px 16px; }
+  .navitem { display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:var(--radius); font-size:13.5px; font-weight:500; color:var(--text-secondary); margin-bottom:2px; }
+  .navitem.active { background:var(--blue-bg); color:var(--blue); font-weight:600; }
+  .navitem .dot { width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.5; flex-shrink:0; }
+  .navdivider { height:1px; background:var(--border); margin:10px 4px; }
+  .main { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .appbar { height:44px; display:flex; align-items:center; justify-content:space-between; padding:0 16px; border-bottom:1px solid var(--border); background:var(--surface); flex-shrink:0; }
+  .appbar-title { font-size:14px; font-weight:600; }
+  .year-select { display:flex; align-items:center; gap:2px; background:var(--surface-sunken); border-radius:14px; padding:2px; }
+  .year-select button { width:22px; height:22px; border:none; background:transparent; color:var(--text-tertiary); font-size:12px; border-radius:50%; cursor:pointer; }
+  .year-select .yr { font-size:12.5px; font-weight:700; padding:0 8px; min-width:38px; text-align:center; }
+
+  .dash-scroll { flex:1; overflow:auto; padding:14px 18px 24px; }
+
+  /* ---------- ALERTS BAND ---------- */
+  .alerts { display:flex; flex-direction:column; gap:6px; margin-bottom:16px; }
+  .alert-row { display:flex; align-items:center; gap:10px; background:var(--red-bg); border:1px solid transparent; border-radius:var(--radius); padding:8px 12px; font-size:12px; cursor:pointer; }
+  .alert-row .alert-icon { color:var(--red); font-size:13px; flex-shrink:0; }
+  .alert-row .alert-text { color:var(--text); flex:1; }
+  .alert-row .alert-text b { color:var(--red); }
+  .alert-row .alert-go { font-size:10.5px; font-weight:700; color:var(--red); flex-shrink:0; }
+  .alerts-empty { display:flex; align-items:center; gap:8px; background:var(--green-bg); color:var(--green); border-radius:var(--radius); padding:8px 12px; font-size:12px; font-weight:600; margin-bottom:16px; }
+
+  /* ---------- HERO CARD (Prognose) ---------- */
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px 18px; margin-bottom:16px; }
+  .card-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+  .card-title { font-size:12.5px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--text-secondary); }
+  .card-link { font-size:11px; font-weight:600; color:var(--blue); cursor:pointer; }
+  .legend { display:flex; gap:14px; margin-top:8px; }
+  .legend span { font-size:10px; color:var(--text-tertiary); display:flex; align-items:center; gap:5px; }
+  .legend .sw { width:14px; height:2.5px; display:inline-block; border-radius:1px; }
+  .legend .sw.dashed { background: repeating-linear-gradient(90deg, var(--text-secondary) 0 4px, transparent 4px 7px); }
+  .legend .sw.dotted { background: repeating-linear-gradient(90deg, var(--text-secondary) 0 2px, transparent 2px 4px); }
+  .legend .swbox { width:9px; height:9px; border-radius:2px; }
+
+  /* ---------- STATUS MINI-BARS ---------- */
+  .status-row { display:flex; gap:14px; align-items:flex-end; height:150px; margin-top:6px; }
+  .status-bar-col { display:flex; flex-direction:column; align-items:center; flex:1; height:100%; position:relative; }
+  .status-bar-track { width:26px; flex:1; display:flex; flex-direction:column-reverse; border-radius:3px 3px 0 0; overflow:visible; position:relative; background:var(--surface-sunken); }
+  .status-bar-seg { width:100%; }
+  .status-dashline { position:absolute; left:-6px; right:-6px; border-top:1.5px dashed var(--text-tertiary); opacity:.6; }
+  .status-dot { position:absolute; left:50%; transform:translate(-50%,50%); width:6px; height:6px; border-radius:50%; background:var(--text); }
+  .status-label { font-size:9.5px; color:var(--text-tertiary); margin-top:6px; text-align:center; max-width:60px; }
+  .status-val { font-size:9px; color:var(--text-tertiary); margin-top:1px; }
+
+  /* ---------- CARD GRID (two-up row) ---------- */
+  .card-row { display:flex; gap:16px; margin-bottom:16px; }
+  .card-row .card { flex:1; margin-bottom:0; min-width:0; }
+  .card-note { font-size:10px; color:var(--text-tertiary); margin-top:8px; font-style:italic; }
+
+  /* ---------- YEARLY BALANCE SUMMARY (mini) ---------- */
+  .ybs-row { display:flex; gap:16px; align-items:flex-end; height:120px; margin-top:6px; }
+  .ybs-col { display:flex; flex-direction:column; align-items:center; flex:1; height:100%; justify-content:flex-end; }
+  .ybs-bar { width:34px; border-radius:3px 3px 0 0; }
+  .ybs-val { font-size:9.5px; color:var(--text-secondary); margin-bottom:3px; }
+  .ybs-label { font-size:9.5px; color:var(--text-tertiary); margin-top:6px; }
+
+  /* ---------- FUND-LOCATION (mini) ---------- */
+  .fl-row { display:flex; flex-direction:column; gap:10px; margin-top:6px; }
+  .fl-item { display:flex; align-items:center; gap:10px; }
+  .fl-label { font-size:10.5px; color:var(--text-secondary); width:88px; flex-shrink:0; }
+  .fl-track { flex:1; height:16px; border-radius:3px; overflow:hidden; display:flex; background:var(--surface-sunken); }
+  .fl-seg { height:100%; }
+  .fl-val { font-size:10px; color:var(--text-tertiary); width:48px; text-align:right; flex-shrink:0; }
+
+
+  /* ---------- QUICKVIEW SHORTCUT ---------- */
+  .qv-shortcut { display:flex; align-items:center; justify-content:space-between; background:var(--blue-bg); border-radius:var(--radius-lg); padding:14px 18px; cursor:pointer; }
+  .qv-shortcut-left { display:flex; flex-direction:column; gap:2px; }
+  .qv-shortcut-title { font-size:13px; font-weight:700; color:var(--blue); }
+  .qv-shortcut-sub { font-size:11px; color:var(--text-secondary); }
+  .qv-shortcut-arrow { font-size:18px; color:var(--blue); }
+
+  /* ---------- PHONE ---------- */
+  .phone { width:320px; background:var(--bg); border-radius:30px; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,.18); height:720px; display:flex; flex-direction:column; border:6px solid #0B0D10; }
+  .phone .appbar { border-radius:0; }
+  .phone-scroll { flex:1; overflow:auto; padding:12px; }
+  .bottomnav { height:58px; flex-shrink:0; background:var(--surface); border-top:1px solid var(--border); display:flex; }
+  .bnav-item { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-size:10px; color:var(--text-tertiary); }
+  .bnav-item.active { color:var(--blue); font-weight:600; }
+  .bnav-icon { width:18px; height:18px; border-radius:5px; background:currentColor; opacity:.85; }
+
+  .caption { max-width:1500px; margin:20px auto 0; font-size:12.5px; color:#4A5261; line-height:1.6; }
+  .caption b { color:#171B21; }
+</style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <button onclick="document.documentElement.setAttribute('data-theme','light'); sync()">Light</button>
+    <button onclick="document.documentElement.setAttribute('data-theme','dark'); sync()">Dark</button>
+    <span>Dashboard — card grid: alerts, Prognose, Jahresbilanz, Geldanlage-Standort, Status, Quickview</span>
+  </div>
+
+  <div class="frames">
+
+    <!-- ===================== TABLET ===================== -->
+    <div class="tablet" data-theme="light" id="tabletFrame">
+      <div class="sidebar">
+        <div class="brand">Geld</div>
+        <div class="navitem active"><span class="dot"></span>Dashboard</div>
+        <div class="navitem"><span class="dot"></span>Konten</div>
+        <div class="navitem"><span class="dot"></span>Verlauf</div>
+        <div class="navitem"><span class="dot"></span>Planung</div>
+        <div class="navdivider"></div>
+        <div class="navitem"><span class="dot"></span>Monatsabschluss</div>
+        <div class="navitem"><span class="dot"></span>Außenstände</div>
+        <div class="navdivider"></div>
+        <div class="navitem"><span class="dot"></span>Import/Export</div>
+        <div class="navitem"><span class="dot"></span>Einstellungen</div>
+      </div>
+
+      <div class="main">
+        <div class="appbar">
+          <div class="appbar-title">Dashboard</div>
+          <div class="year-select"><button>‹</button><span class="yr">2026</span><button>›</button></div>
+        </div>
+
+        <div class="dash-scroll">
+
+          <!-- ALERTS -->
+          <div class="alerts">
+            <div class="alert-row">
+              <span class="alert-icon">⚠</span>
+              <span class="alert-text"><b>Außenstände:</b> 2026-05 HAM noch offen — −336,50 €</span>
+              <span class="alert-go">Zu Außenstände →</span>
+            </div>
+            <div class="alert-row">
+              <span class="alert-icon">⚠</span>
+              <span class="alert-text"><b>Rücklagen-Check:</b> Sparen Familie/Sophia/Julia + Rücklagen Steuern ≠ Livret A Sparen — Differenz 42,00 €</span>
+              <span class="alert-go">Zu Konten →</span>
+            </div>
+          </div>
+
+          <!-- PROGNOSE (primary card) -->
+          <div class="card">
+            <div class="card-head">
+              <span class="card-title">Prognose — Jahresverlauf</span>
+              <span class="card-link" onclick="alert('→ Detailansicht mit vollem Kontrollumfang über Filter/Anzeige')">Details ›</span>
+            </div>
+            <svg viewBox="0 0 860 260" style="width:100%; height:220px;">
+              <!-- background bars: Sparkonten / Geldanlage, secondary scale -->
+              <g id="bg-bars"></g>
+              <!-- gridlines -->
+              <line x1="40" y1="20" x2="40" y2="220" stroke="var(--border)" stroke-width="1"/>
+              <line x1="40" y1="220" x2="840" y2="220" stroke="var(--border)" stroke-width="1"/>
+              <g id="lines"></g>
+              <g id="ylabels" font-size="9" fill="var(--text-tertiary)" font-family="var(--font-num)"></g>
+              <g id="xlabels" font-size="9" fill="var(--text-tertiary)" text-anchor="middle"></g>
+            </svg>
+            <div class="legend">
+              <span><i class="sw" style="background:var(--red)"></i>Barkonten (Prog/Actual)</span>
+              <span><i class="sw dashed"></i>Plan 1</span>
+              <span><i class="sw dotted"></i>Plan 0</span>
+              <span><i class="swbox" style="background:var(--green-light)"></i>Sparkonten</span>
+              <span><i class="swbox" style="background:var(--green)"></i>Geldanlage</span>
+            </div>
+          </div>
+
+          <!-- YEARLY BALANCE SUMMARY + FUND-LOCATION (two-up row) -->
+          <div class="card-row">
+            <div class="card">
+              <div class="card-head">
+                <span class="card-title">Jahresbilanz</span>
+                <span class="card-link" onclick="alert('→ Detailansicht mit vollständiger Aufschlüsselung je Rücklagen-Tag und Plan0/Plan1/Prognose-Overlay')">Details ›</span>
+              </div>
+              <div class="ybs-row" id="ybsRow"></div>
+              <div class="card-note">Karte zeigt Jahresanfang/Einnahmen/Ausgaben/Jahresende vereinfacht — volle Aufschlüsselung je Tag in der Detailansicht</div>
+            </div>
+            <div class="card">
+              <div class="card-head">
+                <span class="card-title">Geldanlage-Standort</span>
+                <span class="card-link" onclick="alert('→ Detailansicht mit allen 7 Rücklagen-Tags')">Details ›</span>
+              </div>
+              <div class="fl-row" id="flRow"></div>
+              <div class="card-note">3 von 7 Rücklagen-Tags gezeigt — volle Liste in der Detailansicht</div>
+            </div>
+          </div>
+
+          <!-- STATUS (condensed selection) -->
+          <div class="card">
+            <div class="card-head">
+              <span class="card-title">Status — am stärksten abweichend</span>
+              <span class="card-link" onclick="alert('→ öffnet Status mit vollständiger Kategorienliste')">Status öffnen ›</span>
+            </div>
+            <div class="status-row" id="statusRow"></div>
+          </div>
+
+          <!-- QUICKVIEW SHORTCUT -->
+          <div class="qv-shortcut" onclick="alert('→ öffnet Quickview')">
+            <div class="qv-shortcut-left">
+              <div class="qv-shortcut-title">Quickview</div>
+              <div class="qv-shortcut-sub">Letzte Auswahl: Lebensmittel &amp; Haushalt</div>
+            </div>
+            <div class="qv-shortcut-arrow">›</div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== PHONE ===================== -->
+    <div class="phone" data-theme="light" id="phoneFrame">
+      <div class="appbar">
+        <div class="appbar-title">Dashboard</div>
+        <div class="year-select" style="transform:scale(.85);"><button>‹</button><span class="yr">2026</span><button>›</button></div>
+      </div>
+      <div class="phone-scroll">
+
+        <div class="alerts">
+          <div class="alert-row">
+            <span class="alert-icon">⚠</span>
+            <span class="alert-text"><b>2026-05 HAM</b> offen — −336,50 €</span>
+          </div>
+          <div class="alert-row">
+            <span class="alert-icon">⚠</span>
+            <span class="alert-text"><b>Rücklagen-Check</b> — Differenz 42,00 €</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Prognose</span>
+            <span class="card-link">›</span>
+          </div>
+          <svg viewBox="0 0 300 180" style="width:100%; height:150px;">
+            <g id="bg-bars-p"></g>
+            <line x1="26" y1="10" x2="26" y2="150" stroke="var(--border)" stroke-width="1"/>
+            <line x1="26" y1="150" x2="290" y2="150" stroke="var(--border)" stroke-width="1"/>
+            <g id="lines-p"></g>
+          </svg>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Jahresbilanz</span>
+            <span class="card-link">›</span>
+          </div>
+          <div class="ybs-row" id="ybsRowPhone" style="height:90px;"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Geldanlage-Standort</span>
+            <span class="card-link">›</span>
+          </div>
+          <div class="fl-row" id="flRowPhone"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Status</span>
+            <span class="card-link">›</span>
+          </div>
+          <div class="status-row" id="statusRowPhone" style="height:110px;"></div>
+        </div>
+
+        <div class="qv-shortcut">
+          <div class="qv-shortcut-left">
+            <div class="qv-shortcut-title">Quickview</div>
+            <div class="qv-shortcut-sub">Lebensmittel &amp; Haushalt</div>
+          </div>
+          <div class="qv-shortcut-arrow">›</div>
+        </div>
+
+      </div>
+      <div class="bottomnav">
+        <div class="bnav-item active"><div class="bnav-icon"></div>Dashboard</div>
+        <div class="bnav-item"><div class="bnav-icon"></div>Konten</div>
+        <div class="bnav-item"><div class="bnav-icon"></div>Verlauf</div>
+        <div class="bnav-item"><div class="bnav-icon"></div>Planung</div>
+        <div class="bnav-item"><div class="bnav-icon"></div>Mehr</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="caption">
+    <b>Reading this mockup:</b> Dashboard is now a **pinned alerts band + a grid of individual cards**, each a condensed view that opens a fuller detail view on tap (§1b.2) — Prognose and Status have no separate screens of their own; this page and its cards' detail views are the entirety of both. The <b>alerts band</b> stays pinned above the grid, not itself a card, since these need to be seen immediately (real open Außenstände item, 2026-05 HAM −336,50 €, plus a Rücklagen-check mismatch, each tappable straight through); an all-clear state would collapse this to a single green line rather than disappearing. <b>Prognose</b> is the largest/primary card — Barkonten actual/prognosis (red) against Plan1 (dashed) and Plan0 (dotted), Sparkonten/Geldanlage as background bars, shaped after your real chart's mid-year spike-then-drop pattern. Below it, two new cards that were previously missing a home entirely: <b>Jahresbilanz</b> (the yearly balance summary — Jahresanfang/Einnahmen/Ausgaben/Jahresende, shown here as plain condensed bars; the full version breaks each down by allocation tag with Plan0/Plan1/Prognose overlaid, in the detail view) and <b>Geldanlage-Standort</b> (the fund-location chart — which account(s) actually hold each allocation tag's money; card shows 3 of the real 7 tags, full list in the detail view). <b>Status</b> is condensed to the most-deviating categories only (here: Urlaube, Haustiere, Lebensmittel) rather than the full list — tapping it opens every category. <b>Quickview</b> stays a pure doorway, no chart of its own. Every card's "Details ›" / "öffnen ›" link is where its detail view takes over — exact filter/display controls inside each detail view aren't designed yet, parked as a follow-up. On phone, all cards stack vertically in the same order: alerts → Prognose → Jahresbilanz → Geldanlage-Standort → Status → Quickview.
+  </div>
+
+<script>
+  function sync(){
+    var t = document.documentElement.getAttribute('data-theme');
+    document.getElementById('tabletFrame').setAttribute('data-theme', t);
+    document.getElementById('phoneFrame').setAttribute('data-theme', t);
+  }
+
+  // ---- Prognose hero chart data (illustrative, shaped after the real Gsheet chart) ----
+  var months = ['Start','Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+  var barkonten = [22.2,20.5,15.9,17.4,66.9,64.0,66.7,56.0,52.5,12.8,10.6,8.6,9.8];
+  var plan1     = [22.2,20.3,18.8,15.9,64.5,61.8,64.9,58.0,52.6,9.2,7.0,5.1,6.2];
+  var plan0     = [22.2,20.0,17.0,14.5,60.0,58.0,60.0,55.0,50.0,8.0,6.0,4.5,5.5];
+  var sparkonten= [32.3,33.0,37.8,37.9,39.4,40.0,35.3,34.2,34.3,72.0,72.1,72.2,72.3];
+
+  function buildChart(svgLinesId, svgBarsId, w, x0, x1, y0, y1, showLabels){
+    var n = months.length;
+    var maxV = 75, maxBar = 100;
+    function px(i){ return x0 + (x1-x0) * i/(n-1); }
+    function pyLine(v){ return y1 - (y1-y0) * (v/maxV); }
+    function pyBar(v){ return y1 - (y1-y0) * (v/maxBar); }
+
+    var bars = document.getElementById(svgBarsId);
+    var bw = (x1-x0)/n*0.5;
+    for (var i=0;i<n;i++){
+      var bx = px(i) - bw/2;
+      var by = pyBar(sparkonten[i]);
+      var r = document.createElementNS('http://www.w3.org/2000/svg','rect');
+      r.setAttribute('x', bx); r.setAttribute('y', by);
+      r.setAttribute('width', bw); r.setAttribute('height', y1-by);
+      r.setAttribute('fill', 'var(--green-light)'); r.setAttribute('opacity','0.7');
+      bars.appendChild(r);
+    }
+
+    function poly(data, color, dash){
+      var pts = data.map(function(v,i){ return px(i)+','+pyLine(v); }).join(' ');
+      var p = document.createElementNS('http://www.w3.org/2000/svg','polyline');
+      p.setAttribute('points', pts);
+      p.setAttribute('fill','none');
+      p.setAttribute('stroke', color);
+      p.setAttribute('stroke-width', 2);
+      if (dash) p.setAttribute('stroke-dasharray', dash);
+      document.getElementById(svgLinesId).appendChild(p);
+    }
+    poly(plan0, getComputedStyle(document.body).getPropertyValue('--text-tertiary').trim() || '#8891A0', '2,3');
+    poly(plan1, getComputedStyle(document.body).getPropertyValue('--text-secondary').trim() || '#5B6472', '5,4');
+    poly(barkonten, '#B0271F', null);
+
+    if (showLabels){
+      var yl = document.getElementById('ylabels');
+      [0,25,50,75].forEach(function(v){
+        var t = document.createElementNS('http://www.w3.org/2000/svg','text');
+        t.setAttribute('x', 34); t.setAttribute('y', pyLine(v)+3); t.setAttribute('text-anchor','end');
+        t.textContent = v+'k'; yl.appendChild(t);
+      });
+      var xl = document.getElementById('xlabels');
+      months.forEach(function(m,i){
+        var t = document.createElementNS('http://www.w3.org/2000/svg','text');
+        t.setAttribute('x', px(i)); t.setAttribute('y', 233);
+        t.textContent = m; xl.appendChild(t);
+      });
+    }
+  }
+  buildChart('lines','bg-bars', 860, 40, 840, 20, 220, true);
+  buildChart('lines-p','bg-bars-p', 300, 26, 290, 10, 150, false);
+
+  // ---- Status mini-bars (condensed on tablet card, most-deviating only) ----
+  var statusCats = [
+    {name:'Urlaube', spent:88, budget:100, over:8, dot:60},
+    {name:'Haustiere', spent:70, budget:100, over:5, dot:60},
+    {name:'Lebensmittel', spent:62, budget:100, over:0, dot:60}
+  ];
+  var statusCatsPhone = statusCats.slice(0,2);
+  function renderStatus(containerId, compact, data){
+    var el = document.getElementById(containerId);
+    if (!el) return;
+    (data || statusCats).forEach(function(c){
+      var col = document.createElement('div'); col.className='status-bar-col';
+      var track = document.createElement('div'); track.className='status-bar-track';
+      var over = document.createElement('div'); over.className='status-bar-seg';
+      over.style.height = c.over+'%'; over.style.background='var(--red)';
+      var spent = document.createElement('div'); spent.className='status-bar-seg';
+      spent.style.height = c.spent+'%'; spent.style.background='var(--blue)';
+      var rest = document.createElement('div'); rest.className='status-bar-seg';
+      rest.style.height = (100-c.spent-c.over)+'%'; rest.style.background='var(--blue-light)';
+      track.appendChild(rest); track.appendChild(spent); track.appendChild(over);
+      var dashline = document.createElement('div'); dashline.className='status-dashline';
+      dashline.style.bottom = '60%';
+      var dot = document.createElement('div'); dot.className='status-dot';
+      dot.style.bottom = c.dot+'%';
+      track.appendChild(dashline); track.appendChild(dot);
+      col.appendChild(track);
+      if (!compact){
+        var lbl = document.createElement('div'); lbl.className='status-label'; lbl.textContent=c.name;
+        col.appendChild(lbl);
+      }
+      el.appendChild(col);
+    });
+  }
+  renderStatus('statusRow', false, statusCats);
+  renderStatus('statusRowPhone', true, statusCatsPhone);
+
+  // ---- Yearly balance summary (condensed: 4 plain bars, Jahresanfang/Einnahmen/Ausgaben/Jahresende) ----
+  var ybsData = [
+    {label:'Jahresanfang', val:74.1, color:'var(--blue)'},
+    {label:'Einnahmen', val:86.3, color:'var(--green)'},
+    {label:'Ausgaben', val:61.9, color:'var(--amber)'},
+    {label:'Jahresende', val:98.5, color:'var(--blue)'}
+  ];
+  function renderYbs(containerId, compact){
+    var el = document.getElementById(containerId);
+    if (!el) return;
+    var maxV = 100;
+    ybsData.forEach(function(d){
+      var col = document.createElement('div'); col.className='ybs-col';
+      var val = document.createElement('div'); val.className='ybs-val num'; val.textContent=d.val.toFixed(1)+'k€';
+      var bar = document.createElement('div'); bar.className='ybs-bar';
+      bar.style.height = (d.val/maxV*100)+'%'; bar.style.background = d.color;
+      col.appendChild(val); col.appendChild(bar);
+      if (!compact){
+        var lbl = document.createElement('div'); lbl.className='ybs-label'; lbl.textContent=d.label;
+        col.appendChild(lbl);
+      }
+      el.appendChild(col);
+    });
+  }
+  renderYbs('ybsRow', false);
+  renderYbs('ybsRowPhone', true);
+
+  // ---- Fund-location (condensed: 3 of 7 allocation tags) ----
+  var flData = [
+    {label:'Sparen Familie', val:'12,5k€', segs:[{pct:100, color:'var(--red)', name:'Livret A Sparen'}]},
+    {label:'Anlage Familie', val:'8,1k€', segs:[{pct:94, color:'var(--amber)', name:'ESOP'},{pct:6, color:'var(--green)', name:'Crypto'}]},
+    {label:'Steuern', val:'4,9k€', segs:[{pct:100, color:'var(--red)', name:'Livret A Sparen'}]}
+  ];
+  function renderFl(containerId){
+    var el = document.getElementById(containerId);
+    if (!el) return;
+    flData.forEach(function(d){
+      var item = document.createElement('div'); item.className='fl-item';
+      var lbl = document.createElement('div'); lbl.className='fl-label'; lbl.textContent=d.label;
+      var track = document.createElement('div'); track.className='fl-track';
+      d.segs.forEach(function(s){
+        var seg = document.createElement('div'); seg.className='fl-seg';
+        seg.style.width = s.pct+'%'; seg.style.background = s.color;
+        seg.title = s.name+' '+s.pct+'%';
+        track.appendChild(seg);
+      });
+      var val = document.createElement('div'); val.className='fl-val num'; val.textContent=d.val;
+      item.appendChild(lbl); item.appendChild(track); item.appendChild(val);
+      el.appendChild(item);
+    });
+  }
+  renderFl('flRow');
+  renderFl('flRowPhone');
+</script>
+</body>
+</html>

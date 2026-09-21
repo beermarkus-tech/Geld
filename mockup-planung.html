@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Planung — UI Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F5F6F8; --surface: #FFFFFF; --surface-sunken: #EEF0F3; --border: #DFE3E8;
+    --text: #171B21; --text-secondary: #5B6472; --text-tertiary: #8891A0;
+    --blue: #2E5AAC; --blue-bg: #E8EEF9;
+    --green: #2F7D53; --green-bg: #E5F3EB;
+    --amber: #B4740E; --amber-bg: #FBF0DD;
+    --purple: #6E4FA8; --purple-bg: #EFE9F8;
+    --yellow: #8A6D00; --yellow-bg: #FCEEA6;
+    --red: #B0271F; --red-bg: #FBEAE9;
+    --radius: 6px;
+    --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-num: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  [data-theme="dark"] {
+    --bg: #14171C; --surface: #1B1F26; --surface-sunken: #21262E; --border: #2C323C;
+    --text: #E8EAED; --text-secondary: #A2AAB6; --text-tertiary: #6E7683;
+    --blue: #7FA6E8; --blue-bg: #1E2C42;
+    --green: #6FCB98; --green-bg: #1B3327;
+    --amber: #E3B25C; --amber-bg: #3A2E14;
+    --purple: #B79EE6; --purple-bg: #2E2440;
+    --yellow: #E8CE5C; --yellow-bg: #3D3410;
+    --red: #E8746C; --red-bg: #3B1E1C;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: var(--font-ui); background:#DADFE6; color:var(--text); padding:32px; }
+  .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+  .toolbar { max-width:1500px; margin:0 auto 20px; display:flex; gap:12px; align-items:center; }
+  .toolbar button { font-family: var(--font-ui); font-size:13px; font-weight:600; padding:8px 14px; border-radius:var(--radius); border:1px solid #B9C0CC; background:#fff; cursor:pointer; }
+  .toolbar span { font-size:13px; color:#4A5261; }
+  .frames { max-width:1500px; margin:0 auto; display:flex; gap:32px; align-items:flex-start; flex-wrap:wrap; }
+
+  /* ---------- SHELL (shared) ---------- */
+  .tablet { width:1060px; background:var(--bg); border-radius:18px; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,0.18); display:flex; height:700px; }
+  .sidebar { width:176px; background:var(--surface); border-right:1px solid var(--border); padding:16px 10px; flex-shrink:0; }
+  .sidebar .brand { font-size:13px; font-weight:700; color:var(--text-secondary); padding:4px 10px 16px; }
+  .navitem { display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:var(--radius); font-size:13.5px; font-weight:500; color:var(--text-secondary); margin-bottom:2px; }
+  .navitem.active { background:var(--blue-bg); color:var(--blue); font-weight:600; }
+  .navitem .dot { width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.5; flex-shrink:0; }
+  .navdivider { height:1px; background:var(--border); margin:10px 4px; }
+  .main { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .appbar { height:44px; display:flex; align-items:center; justify-content:space-between; padding:0 16px; border-bottom:1px solid var(--border); background:var(--surface); flex-shrink:0; }
+  .appbar-title { font-size:14px; font-weight:600; }
+  .appbar-right { display:flex; align-items:center; gap:10px; }
+  .toggle-btn { font-size:11.5px; font-weight:600; padding:5px 11px; border-radius:14px; border:1px solid var(--border); background:var(--surface-sunken); color:var(--text-secondary); cursor:pointer; }
+  .toggle-btn.on { background:var(--blue-bg); color:var(--blue); border-color:transparent; }
+
+  /* ---------- YEAR SELECTOR (global shell element, §1b.2a) ---------- */
+  .year-select { display:flex; align-items:center; gap:2px; background:var(--surface-sunken); border-radius:14px; padding:2px; }
+  .year-select button { width:22px; height:22px; border:none; background:transparent; color:var(--text-tertiary); font-size:12px; border-radius:50%; cursor:pointer; }
+  .year-select .yr { font-size:12.5px; font-weight:700; padding:0 8px; min-width:38px; text-align:center; }
+
+  /* ---------- PLANUNG REPORT ---------- */
+  .report-wrap { flex:1; overflow:auto; padding:16px 20px 28px; }
+  .plan-cols-note { display:flex; gap:20px; align-items:center; margin-bottom:14px; }
+  .refyear-label { font-size:11.5px; color:var(--text-tertiary); }
+  .refyear-label b { color:var(--text-secondary); }
+  .plansrc-select { display:flex; gap:2px; background:var(--surface-sunken); border-radius:10px; padding:2px; }
+  .plansrc-select span { font-size:10.5px; font-weight:600; padding:3px 9px; border-radius:8px; color:var(--text-tertiary); cursor:pointer; }
+  .plansrc-select span.on { background:var(--surface); color:var(--blue); box-shadow:0 1px 2px rgba(0,0,0,.08); }
+
+  table.planung { width:100%; border-collapse:collapse; font-size:11.5px; }
+  table.planung th { position:sticky; top:0; z-index:2; background:var(--surface-sunken); font-size:10px; font-weight:600; color:var(--text-tertiary); text-transform:uppercase; letter-spacing:.04em; padding:6px 8px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  table.planung th.namecol { text-align:left; position:sticky; left:0; z-index:3; }
+  table.planung td { padding:4px 8px; border-bottom:1px solid var(--border); text-align:right; white-space:nowrap; }
+  table.planung td.namecol { text-align:left; position:sticky; left:0; background:var(--surface); font-weight:600; }
+
+  tr.section-band td { background:var(--surface-sunken); font-weight:700; font-size:11px; text-align:left; padding:7px 8px; text-transform:uppercase; letter-spacing:.03em; color:var(--text-secondary); }
+  tr.section-band td.namecol { position:sticky; left:0; background:var(--surface-sunken); }
+  tr.subtotal-row td { font-weight:700; border-top:1px solid var(--border); }
+  tr.startcash-row td { font-weight:700; }
+  tr.budget-band td { font-weight:700; }
+  tr.budget-band.total td { background:var(--blue-bg); color:var(--blue); }
+  tr.budget-band.alert td { color: var(--text); }
+  .delta-pos { color:var(--green); } .delta-neg { color:var(--amber); }
+
+  .amt-neg { color:var(--amber); } .amt-pos { color:var(--green); }
+  .split-pill { display:inline-block; font-size:9.5px; font-weight:600; padding:1px 6px; border-radius:8px; background:var(--purple-bg); color:var(--purple); margin-left:4px; }
+  .comment-icon { display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px; border-radius:50%; background:var(--surface-sunken); color:var(--text-tertiary); font-size:8.5px; margin-left:5px; cursor:pointer; vertical-align:middle; }
+  .comment-icon.has-note { background:var(--amber-bg); color:var(--amber); }
+  .note-row td { text-align:left; padding:0 8px 6px; border-bottom:1px solid var(--border); font-size:10.5px; font-style:italic; color:var(--text-tertiary); background:var(--surface); }
+  .note-row.hidden { display:none; }
+  .note-row .note-year { font-weight:600; font-style:normal; color:var(--text-secondary); margin-right:5px; }
+
+  /* ---------- CHART (horizontal bars) ---------- */
+  .chart-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px 10px; margin-bottom:16px; }
+  .chart-title { font-size:11px; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:.03em; margin-bottom:12px; }
+  .chart-group { margin-bottom:14px; }
+  .chart-group:last-child { margin-bottom:2px; }
+  .chart-group-label { font-size:11px; font-weight:700; margin-bottom:5px; }
+  .chart-row { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
+  .chart-row-label { width:64px; flex-shrink:0; font-size:10px; color:var(--text-tertiary); text-align:right; }
+  .chart-track { flex:1; height:16px; background:var(--surface-sunken); border-radius:3px; overflow:hidden; display:flex; }
+  .chart-fill { height:100%; }
+  .chart-val { font-size:10.5px; font-weight:600; width:58px; flex-shrink:0; }
+  .chart-legend { display:flex; gap:14px; margin-top:8px; padding-top:8px; border-top:1px solid var(--border); }
+  .chart-legend span { font-size:10px; color:var(--text-tertiary); display:flex; align-items:center; gap:5px; }
+  .chart-legend .sw { width:9px; height:9px; border-radius:2px; display:inline-block; }
+
+  /* ---------- PHONE ---------- */
+  .phone { width:320px; background:var(--bg); border-radius:30px; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,.18); height:700px; display:flex; flex-direction:column; border:6px solid #0B0D10; }
+  .phone .appbar { border-radius:0; }
+  .phone-scroll { flex:1; overflow:auto; padding:12px; }
+  .p-section-title { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--text-secondary); margin:14px 0 6px; }
+  .p-section-title:first-child { margin-top:0; }
+  .p-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:9px 12px; margin-bottom:6px; }
+  .p-card-top { display:flex; justify-content:space-between; align-items:baseline; }
+  .p-card-name { font-size:12.5px; font-weight:600; }
+  .p-card-rows { display:flex; justify-content:space-between; font-size:11px; margin-top:4px; }
+  .p-card-rows .yr { color:var(--text-tertiary); }
+  .p-card-rows .val { font-family:var(--font-num); font-weight:600; }
+  .p-card-split { margin-top:5px; padding-top:5px; border-top:1px dashed var(--border); font-size:10px; color:var(--text-tertiary); display:flex; justify-content:space-between; }
+  .p-budget-card { background:var(--blue-bg); border:none; border-radius:var(--radius); padding:10px 12px; margin-bottom:10px; }
+  .p-budget-row { display:flex; justify-content:space-between; font-size:12px; color:var(--blue); font-weight:600; margin-bottom:3px; }
+  .p-budget-row:last-child { margin-bottom:0; }
+  .bottomnav { height:58px; flex-shrink:0; background:var(--surface); border-top:1px solid var(--border); display:flex; }
+  .bnav-item { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-size:10px; color:var(--text-tertiary); }
+  .bnav-item.active { color:var(--blue); font-weight:600; }
+  .bnav-icon { width:18px; height:18px; border-radius:5px; background:currentColor; opacity:.85; }
+
+  .caption { max-width:1500px; margin:20px auto 0; font-size:12.5px; color:#4A5261; line-height:1.6; }
+  .caption b { color:#171B21; }
+</style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <button onclick="document.documentElement.setAttribute('data-theme','light'); sync()">Light</button>
+    <button onclick="document.documentElement.setAttribute('data-theme','dark'); sync()">Dark</button>
+    <span>Planung — annotated report over Verlauf's Plan0/Plan1/Prog, tablet and phone side by side</span>
+  </div>
+
+  <div class="frames">
+
+    <!-- ===================== TABLET ===================== -->
+    <div class="tablet" data-theme="light" id="tabletFrame">
+      <div class="sidebar">
+        <div class="brand">Geld</div>
+        <div class="navitem"><span class="dot"></span>Dashboard</div>
+        <div class="navitem"><span class="dot"></span>Konten</div>
+        <div class="navitem"><span class="dot"></span>Verlauf</div>
+        <div class="navitem active"><span class="dot"></span>Planung</div>
+        <div class="navdivider"></div>
+        <div class="navitem"><span class="dot"></span>Reisekosten</div>
+        <div class="navitem"><span class="dot"></span>CPAM</div>
+        <div class="navitem"><span class="dot"></span>Amazon</div>
+        <div class="navdivider"></div>
+        <div class="navitem"><span class="dot"></span>Import/Export</div>
+        <div class="navitem"><span class="dot"></span>Einstellungen</div>
+      </div>
+
+      <div class="main">
+        <div class="appbar">
+          <div class="appbar-title">Planung</div>
+          <div class="appbar-right">
+            <div class="year-select"><button>‹</button><span class="yr">2026</span><button>›</button></div>
+          </div>
+        </div>
+
+        <div class="report-wrap">
+          <div class="plan-cols-note">
+            <span class="refyear-label">Referenzjahr <b>2025</b> · immer Plan 0 (abgeschlossen)</span>
+            <span class="refyear-label">Planungsjahr <b>2026</b> · Spalte zeigt:</span>
+            <div class="plansrc-select">
+              <span class="on">Plan 0</span><span>Plan 1</span><span>Prog</span>
+            </div>
+          </div>
+
+          <div class="chart-card">
+            <div class="chart-title">Budget vs. Ausgaben + Rücklagen</div>
+            <div class="chart-group">
+              <div class="chart-group-label">2025</div>
+              <div class="chart-row">
+                <div class="chart-row-label">Budget</div>
+                <div class="chart-track"><div class="chart-fill" style="width:100%; background:var(--green);"></div></div>
+                <div class="chart-val num">104.344 €</div>
+              </div>
+              <div class="chart-row">
+                <div class="chart-row-label">Ausgaben</div>
+                <div class="chart-track">
+                  <div class="chart-fill" style="width:87.9%; background:var(--amber);"></div>
+                  <div class="chart-fill" style="width:5.1%; background:var(--purple);"></div>
+                </div>
+                <div class="chart-val num">97.000 €</div>
+              </div>
+            </div>
+            <div class="chart-group">
+              <div class="chart-group-label">2026</div>
+              <div class="chart-row">
+                <div class="chart-row-label">Budget</div>
+                <div class="chart-track"><div class="chart-fill" style="width:62%; background:var(--green);"></div></div>
+                <div class="chart-val num">64.682 €</div>
+              </div>
+              <div class="chart-row">
+                <div class="chart-row-label">Ausgaben</div>
+                <div class="chart-track">
+                  <div class="chart-fill" style="width:58.3%; background:var(--amber);"></div>
+                  <div class="chart-fill" style="width:1.3%; background:var(--purple);"></div>
+                </div>
+                <div class="chart-val num">62.193 €</div>
+              </div>
+            </div>
+            <div class="chart-legend">
+              <span><i class="sw" style="background:var(--green)"></i>Budget</span>
+              <span><i class="sw" style="background:var(--amber)"></i>Ausgaben</span>
+              <span><i class="sw" style="background:var(--purple)"></i>Rücklagen</span>
+            </div>
+          </div>
+
+          <table class="planung">
+            <thead>
+              <tr>
+                <th class="namecol">Kategorie</th>
+                <th>2025</th>
+                <th>2026</th>
+                <th>Regulär Jahr</th>
+                <th>Regulär Monat</th>
+                <th>Einmal Jahr</th>
+              </tr>
+            </thead>
+            <tbody>
+
+              <tr class="startcash-row">
+                <td class="namecol">Alle Barkonten</td><td class="num">13.687 €</td><td class="num">22.240 €</td><td colspan="3"></td>
+              </tr>
+              <tr>
+                <td class="namecol" style="font-weight:400; color:var(--text-tertiary);">Puffer</td><td class="num">−8.000 €</td><td class="num">−8.000 €</td><td colspan="3"></td>
+              </tr>
+              <tr class="subtotal-row">
+                <td class="namecol">Jahresanfang (Barkonten − Puffer)</td><td class="num">5.687 €</td><td class="num">14.240 €</td><td colspan="3"></td>
+              </tr>
+
+              <tr class="section-band"><td class="namecol">Einnahmen</td><td colspan="5"></td></tr>
+              <tr>
+                <td class="namecol">Gehalt Markus</td>
+                <td class="num">95.232 €</td>
+                <td class="num">95.232 €<span class="comment-icon">💬</span></td>
+                <td class="num">95.232 €</td><td class="num">7.936 €</td><td class="num">0 €</td>
+              </tr>
+              <tr class="note-row hidden" data-for="gehalt-2026"><td colspan="6"><span class="note-year">2026:</span><span style="color:var(--text-tertiary);">Kein Kommentar — klicken zum Hinzufügen</span></td></tr>
+              <tr>
+                <td class="namecol">Sonderzahlungen</td>
+                <td class="num">27.841 €</td>
+                <td class="num">27.262 €<span class="comment-icon">💬</span></td>
+                <td class="num">0 €</td><td class="num">0 €</td><td class="num">27.262 €</td>
+              </tr>
+              <tr class="subtotal-row">
+                <td class="namecol">Einnahmen gesamt</td><td class="num amt-pos">166.373 €</td><td class="num amt-pos">133.788 €</td><td class="num">96.699 €</td><td class="num">8.058 €</td><td class="num">37.089 €</td>
+              </tr>
+
+              <tr class="section-band"><td class="namecol">Fixkosten</td><td colspan="5"></td></tr>
+              <tr>
+                <td class="namecol">Steuerausgaben</td>
+                <td class="num">−22.296 €<span class="comment-icon has-note">💬</span></td>
+                <td class="num">−21.195 €</td>
+                <td class="num">−12.717 €</td><td class="num">−1.060 €</td><td class="num">−8.478 €</td>
+              </tr>
+              <tr class="note-row" data-for="steuer-2025"><td colspan="6"><span class="note-year">2025:</span>Geringere Steuerausgaben</td></tr>
+              <tr>
+                <td class="namecol">Krankenkasse</td>
+                <td class="num">−16.944 €</td>
+                <td class="num">−28.742 €<span class="comment-icon has-note">💬</span></td>
+                <td class="num">−28.742 €</td><td class="num">−2.395 €</td><td class="num">0 €</td>
+              </tr>
+              <tr class="note-row" data-for="kk-2026"><td colspan="6"><span class="note-year">2026:</span>Höhere Krankenversicherung</td></tr>
+              <tr class="subtotal-row">
+                <td class="namecol">Fixkosten gesamt</td><td class="num amt-neg">−67.716 €</td><td class="num amt-neg">−83.346 €</td><td class="num">−74.867 €</td><td class="num">−6.239 €</td><td class="num">−8.478 €</td>
+              </tr>
+
+              <tr class="budget-band total">
+                <td class="namecol">Budget</td><td class="num">104.344 €</td><td class="num">64.682 €</td><td colspan="3"></td>
+              </tr>
+              <tr class="budget-band">
+                <td class="namecol" style="font-weight:400;">Ausgaben vs. Budget <span style="font-weight:400; color:var(--text-tertiary); font-size:10px;">— sollte nahe Null sein</span></td>
+                <td class="num delta-pos">7.344 €</td><td class="num delta-pos">2.489 €</td><td colspan="3"></td>
+              </tr>
+              <tr class="budget-band">
+                <td class="namecol" style="font-weight:400;">… gebildete Rücklagen (Teil der Ausgaben)</td>
+                <td class="num">5.249 €</td><td class="num">1.350 €</td><td colspan="3"></td>
+              </tr>
+
+              <tr class="section-band"><td class="namecol">Wohnen</td><td colspan="5"></td></tr>
+              <tr>
+                <td class="namecol">Nebenkosten</td>
+                <td class="num amt-neg">−3.108 €</td>
+                <td class="num amt-neg">−3.350 €<span class="comment-icon has-note">💬</span></td>
+                <td class="num amt-neg">−2.680 €</td><td class="num amt-neg">−223 €</td>
+                <td class="num amt-neg">−670 €<span class="split-pill">80/20</span></td>
+              </tr>
+              <tr class="note-row" data-for="neben-2026"><td colspan="6"><span class="note-year">2026:</span>Ausgaben zeitversetzt zum Bonus</td></tr>
+              <tr>
+                <td class="namecol">Instandhaltung</td>
+                <td class="num amt-neg">−1.634 €</td>
+                <td class="num amt-neg">−1.720 €</td>
+                <td class="num amt-neg">0 €</td><td class="num amt-neg">0 €</td>
+                <td class="num amt-neg">−1.720 €<span class="split-pill">0/100</span></td>
+              </tr>
+
+              <tr class="section-band"><td class="namecol">Sonstiges</td><td colspan="5"></td></tr>
+              <tr>
+                <td class="namecol">Urlaube</td>
+                <td class="num amt-neg">−13.167 €</td>
+                <td class="num amt-neg">−10.455 €<span class="comment-icon has-note">💬</span></td>
+                <td class="num amt-neg">0 €</td><td class="num amt-neg">0 €</td>
+                <td class="num amt-neg">−10.455 €<span class="split-pill">0/100</span></td>
+              </tr>
+              <tr class="note-row" data-for="urlaube-2026"><td colspan="6"><span class="note-year">2026:</span>6.300 € Schottland · 1.900 € Rostock · 1.100 € Sophia Kanu &amp; Ski</td></tr>
+
+              <tr class="section-band"><td class="namecol">Rücklagen</td><td colspan="5"></td></tr>
+              <tr>
+                <td class="namecol">Für Sparen Familie</td>
+                <td class="num">3.300 €</td>
+                <td class="num amt-neg">−5.000 €<span class="comment-icon has-note">💬</span></td>
+                <td class="num">0 €</td><td class="num">0 €</td>
+                <td class="num amt-neg">−5.000 €<span class="split-pill">0/100</span></td>
+              </tr>
+              <tr class="note-row" data-for="sparen-2026"><td colspan="6"><span class="note-year">2026:</span>Rücklagen vom Bonus unsicher</td></tr>
+              <tr>
+                <td class="namecol">Für Steuern</td>
+                <td class="num amt-neg">−3.261 €</td>
+                <td class="num">5.950 €<span class="comment-icon has-note">💬</span></td>
+                <td class="num">5.950 €</td><td class="num">496 €</td>
+                <td class="num">0 €</td>
+              </tr>
+              <tr class="note-row" data-for="steuern-2026"><td colspan="6"><span class="note-year">2026:</span>Unsichtbar: +/− 2.000 €</td></tr>
+
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== PHONE ===================== -->
+    <div class="phone" data-theme="light" id="phoneFrame">
+      <div class="appbar">
+        <div class="appbar-title">Planung</div>
+        <div class="year-select"><button>‹</button><span class="yr">2026</span><button>›</button></div>
+      </div>
+      <div class="phone-scroll">
+
+        <div class="p-budget-card">
+          <div class="p-budget-row"><span>Budget 2026</span><span class="num">64.682 €</span></div>
+          <div class="p-budget-row"><span>Ausgaben vs. Budget</span><span class="num">2.489 €</span></div>
+        </div>
+
+        <div class="p-section-title">Einnahmen</div>
+        <div class="p-card">
+          <div class="p-card-top"><div class="p-card-name">Gehalt Markus</div></div>
+          <div class="p-card-rows"><span class="yr">2025</span><span class="val">95.232 €</span></div>
+          <div class="p-card-rows"><span class="yr">2026 <span class="comment-icon">💬</span></span><span class="val">95.232 €</span></div>
+        </div>
+
+        <div class="p-section-title">Fixkosten</div>
+        <div class="p-card">
+          <div class="p-card-top"><div class="p-card-name">Krankenkasse</div></div>
+          <div class="p-card-rows"><span class="yr">2025</span><span class="val">−16.944 €</span></div>
+          <div class="p-card-rows"><span class="yr">2026 <span class="comment-icon has-note">💬</span></span><span class="val amt-neg">−28.742 €</span></div>
+          <div class="p-card-split"><span>↳ 2026: Höhere Krankenversicherung</span></div>
+        </div>
+
+        <div class="p-section-title">Wohnen</div>
+        <div class="p-card">
+          <div class="p-card-top"><div class="p-card-name">Nebenkosten</div></div>
+          <div class="p-card-rows"><span class="yr">2025</span><span class="val amt-neg">−3.108 €</span></div>
+          <div class="p-card-rows"><span class="yr">2026 <span class="comment-icon has-note">💬</span></span><span class="val amt-neg">−3.350 €</span></div>
+          <div class="p-card-split"><span>Regulär 80% · Einmal 20%</span><span class="num">−670 €</span></div>
+        </div>
+
+        <div class="p-section-title">Sonstiges</div>
+        <div class="p-card">
+          <div class="p-card-top"><div class="p-card-name">Urlaube</div></div>
+          <div class="p-card-rows"><span class="yr">2025</span><span class="val amt-neg">−13.167 €</span></div>
+          <div class="p-card-rows"><span class="yr">2026 <span class="comment-icon has-note">💬</span></span><span class="val amt-neg">−10.455 €</span></div>
+          <div class="p-card-split"><span>Regulär 0% · Einmal 100%</span><span class="num">−10.455 €</span></div>
+        </div>
+
+        <div class="p-section-title">Rücklagen</div>
+        <div class="p-card">
+          <div class="p-card-top"><div class="p-card-name">Für Sparen Familie</div></div>
+          <div class="p-card-rows"><span class="yr">2025</span><span class="val">3.300 €</span></div>
+          <div class="p-card-rows"><span class="yr">2026 <span class="comment-icon has-note">💬</span></span><span class="val amt-neg">−5.000 €</span></div>
+          <div class="p-card-split"><span>↳ 2026: Rücklagen vom Bonus unsicher</span></div>
+        </div>
+
+      </div>
+      <div class="bottomnav">
+        <div class="bnav-item"><div class="bnav-icon"></div>Konten</div>
+        <div class="bnav-item"><div class="bnav-icon"></div>Dashboard</div>
+        <div class="bnav-item"><div class="bnav-icon"></div>Verlauf</div>
+        <div class="bnav-item active"><div class="bnav-icon"></div>Planung</div>
+        <div class="bnav-item"><div class="bnav-icon"></div>Mehr</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="caption">
+    <b>Reading this mockup:</b> Planung is a <b>report, not an editing surface</b> — every category figure here is a live mirror of Verlauf's Plan0/Plan1/Prog; nothing is typed into a category amount on this screen. The <b>global year selector</b> (top-right, both tablet and phone — §1b.2a) picks the planning year; the reference-year column is always <code>selectedYear − 1</code>, always Plan 0 (closed years never change). The <b>2026 column has its own small source switcher</b> (Plan 0 / Plan 1 / Prog) — a quick lens on how the plan has drifted, not a different planning target; comments and the split stay pinned to Plan 0 regardless of which lens is active. <b>Regulär/Einmal Jahr + the % pill</b> are fully automatic (median-based, §2.8/§3c) — no input control, just the computed result. The <b>💬 icon</b> marks a per-category-per-year comment (amber when a note exists); click to expand — Steuerausgaben's "Geringere Steuerausgaben" and Urlaube's trip breakdown are shown expanded as an example. The <b>chart</b> plots Budget (green) against stacked Ausgaben (amber) + Rücklagen (purple) for both years, using the confirmed exact formulas from §3c — note 2026 reads distinctly tighter than 2025, which is the point of the visual. On phone, the report becomes a scrolling stack of cards grouped the same way.
+  </div>
+
+<script>
+  function sync(){
+    var t = document.documentElement.getAttribute('data-theme');
+    document.getElementById('tabletFrame').setAttribute('data-theme', t);
+    document.getElementById('phoneFrame').setAttribute('data-theme', t);
+  }
+  document.querySelectorAll('.comment-icon').forEach(function(icon){
+    icon.addEventListener('click', function(){
+      var row = icon.closest('tr');
+      var next = row ? row.nextElementSibling : null;
+      if (next && next.classList.contains('note-row')) next.classList.toggle('hidden');
+    });
+  });
+  document.querySelectorAll('.plansrc-select span').forEach(function(opt){
+    opt.addEventListener('click', function(){
+      opt.parentElement.querySelectorAll('span').forEach(function(s){ s.classList.remove('on'); });
+      opt.classList.add('on');
+    });
+  });
+</script>
+</body>
+</html>

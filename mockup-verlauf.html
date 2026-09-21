@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verlauf — UI Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F5F6F8; --surface: #FFFFFF; --surface-sunken: #EEF0F3; --border: #DFE3E8;
+    --text: #171B21; --text-secondary: #5B6472; --text-tertiary: #8891A0;
+    --blue: #2E5AAC; --blue-bg: #E8EEF9;
+    --green: #2F7D53; --green-bg: #E5F3EB;
+    --amber: #B4740E; --amber-bg: #FBF0DD;
+    --purple: #6E4FA8; --purple-bg: #EFE9F8;
+    --yellow: #8A6D00; --yellow-bg: #FCEEA6;
+    --red: #B0271F; --red-bg: #FBEAE9;
+    --teal: #147D74; --teal-bg: #E1F3F1;
+    --indigo: #4C51BF; --indigo-bg: #E9EAF9;
+    --breakdown-bg: #EFEDF7;
+    --radius: 6px;
+    --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-num: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  [data-theme="dark"] {
+    --bg: #14171C; --surface: #1B1F26; --surface-sunken: #21262E; --border: #2C323C;
+    --text: #E8EAED; --text-secondary: #A2AAB6; --text-tertiary: #6E7683;
+    --blue: #7FA6E8; --blue-bg: #1E2C42;
+    --green: #6FCB98; --green-bg: #1B3327;
+    --amber: #E3B25C; --amber-bg: #3A2E14;
+    --purple: #B79EE6; --purple-bg: #2E2440;
+    --yellow: #E8CE5C; --yellow-bg: #3D3410;
+    --red: #E8746C; --red-bg: #3B1E1C;
+    --teal: #5FC4B9; --teal-bg: #123330;
+    --indigo: #9BA2E8; --indigo-bg: #262A4A;
+    --breakdown-bg: #242131;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: var(--font-ui); background:#DADFE6; color:var(--text); padding:32px; }
+  .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+  .toolbar { max-width:1500px; margin:0 auto 20px; display:flex; gap:12px; align-items:center; }
+  .toolbar button { font-family: var(--font-ui); font-size:13px; font-weight:600; padding:8px 14px; border-radius:var(--radius); border:1px solid #B9C0CC; background:#fff; cursor:pointer; }
+  .toolbar span { font-size:13px; color:#4A5261; }
+  .frames { max-width:1500px; margin:0 auto; display:flex; gap:32px; align-items:flex-start; flex-wrap:wrap; }
+
+  /* ---------- TABLET ---------- */
+  .tablet { width:1020px; background:var(--bg); border-radius:18px; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,0.18); display:flex; height:660px; }
+  .sidebar { width:176px; background:var(--surface); border-right:1px solid var(--border); padding:16px 10px; flex-shrink:0; }
+  .sidebar .brand { font-size:13px; font-weight:700; color:var(--text-secondary); padding:4px 10px 16px; }
+  .navitem { display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:var(--radius); font-size:13.5px; font-weight:500; color:var(--text-secondary); margin-bottom:2px; }
+  .navitem.active { background:var(--blue-bg); color:var(--blue); font-weight:600; }
+  .navitem .dot { width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.5; flex-shrink:0; }
+  .navdivider { height:1px; background:var(--border); margin:10px 4px; }
+  .main { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .appbar { height:44px; display:flex; align-items:center; justify-content:space-between; padding:0 16px; border-bottom:1px solid var(--border); background:var(--surface); flex-shrink:0; }
+  .appbar-title { font-size:14px; font-weight:600; }
+  .appbar-right { display:flex; align-items:center; gap:10px; }
+  .toggle-btn {
+    font-size:11.5px; font-weight:600; padding:5px 11px; border-radius:14px;
+    border:1px solid var(--border); background:var(--surface-sunken); color:var(--text-secondary); cursor:pointer;
+  }
+  .toggle-btn.on { background:var(--blue-bg); color:var(--blue); border-color:transparent; }
+  .check-badge { font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:20px; background:var(--green-bg); color:var(--green); display:flex; align-items:center; gap:5px; }
+  .check-badge.alert { background:var(--red-bg); color:var(--red); }
+
+  .grid-wrap { flex:1; overflow:auto; background:var(--surface); }
+  table.verlauf { width:100%; border-collapse:collapse; font-size:11.5px; }
+  table.verlauf th {
+    position:sticky; top:0; z-index:2;
+    background:var(--surface-sunken); font-size:10px; font-weight:600; color:var(--text-tertiary);
+    text-transform:uppercase; letter-spacing:.04em; padding:5px 7px; border-bottom:1px solid var(--border); white-space:nowrap;
+  }
+  table.verlauf th.catcol { position:sticky; left:0; z-index:3; text-align:center; width:34px; min-width:34px; background:var(--surface-sunken); }
+  table.verlauf td.catcol { position:sticky; left:0; background:var(--surface); z-index:1; border-right:1px solid var(--border); vertical-align:middle; width:34px; }
+  table.verlauf th.subcatcol { position:sticky; left:34px; z-index:3; text-align:left; width:1%; white-space:nowrap; background:var(--surface-sunken); }
+  table.verlauf td.subcatcol { position:sticky; left:34px; background:var(--surface); z-index:1; border-right:1px solid var(--border); vertical-align:middle; font-weight:600; white-space:nowrap; }
+  td.groupcell {
+    writing-mode: vertical-rl; transform: rotate(180deg); text-align:center;
+    font-weight:700; font-size:11.5px; color:var(--text-secondary); letter-spacing:.03em;
+    padding:8px 4px; white-space:nowrap;
+  }
+  .ok-row th { padding-top:3px; padding-bottom:5px; }
+  .ok-switch { width:26px; height:14px; border-radius:8px; background:var(--border); position:relative; display:inline-block; cursor:pointer; margin-top:2px; }
+  .ok-switch.on { background:var(--green); }
+  .ok-switch::after { content:''; width:10px; height:10px; border-radius:50%; background:#fff; position:absolute; top:2px; left:2px; transition:.15s; }
+  .ok-switch.on::after { left:14px; }
+
+  table.verlauf td { padding:3px 7px; border-bottom:1px solid var(--border); text-align:right; white-space:nowrap; }
+  tr.group-header td { background:var(--surface-sunken); font-weight:700; font-size:11px; text-align:left; padding:6px 7px; text-transform:uppercase; letter-spacing:.03em; color:var(--text-secondary); }
+  tr.cat-row td.catcol { font-weight:700; padding-top:7px; }
+  tr.cat-row td { padding-top:7px; }
+  .linecell { display:flex; justify-content:space-between; gap:8px; text-align:left !important; }
+  .linecell .lbl { color:var(--text-secondary); }
+  tr.breakdown-row .linecell .lbl { color:var(--text-secondary); font-weight:400; }
+  tr.plan0-row .linecell .lbl { font-style:italic; color:var(--text-tertiary); }
+  tr.prog-row .linecell .lbl { font-weight:600; color:var(--text); }
+  tr.plan1-row .linecell .lbl { font-weight:400; color:var(--text-secondary); }
+  tr.prog-row td.actual { color:var(--text); font-weight:600; }
+  tr.prog-row td.forecast { color:var(--text-tertiary); font-weight:400; }
+  tr.plan0-row.hidden { display:none; }
+  tr.plan0-row td { color:var(--text-tertiary); }
+  tr.breakdown-row td { font-size:10.5px; background:var(--breakdown-bg); }
+  tr.auto-rollup-row td { font-size:10.5px; background:var(--blue-bg); }
+  tr.auto-rollup-row td.subcatcol { background:var(--blue-bg); }
+  .auto-badge { font-size:7.5px; font-weight:700; text-transform:uppercase; letter-spacing:.02em; padding:1px 5px; border-radius:6px; background:var(--surface); color:var(--blue); margin-left:5px; vertical-align:1px; }
+  tr.breakdown-row td.subcatcol { background:var(--breakdown-bg); }
+  tr.breakdown-row.plan0bd td { font-style:italic; color:var(--text-tertiary); }
+  tr.breakdown-row.hidden { display:none; }
+  tr.breakdown-toggle-row.hidden { display:none; }
+  .expand-toggle { cursor:pointer; color:var(--text-tertiary); font-size:9px; margin-right:5px; display:inline-block; width:8px; }
+  .lock-icon { font-size:9px; color:var(--text-tertiary); margin-left:4px; }
+  .amt-neg { color:var(--amber); } .amt-pos { color:var(--green); }
+  .year-col { background:var(--surface-sunken); font-weight:700; min-width:80px; }
+  .breakdown-toggle-row td { background: var(--breakdown-bg); border:none; padding:3px 7px 6px 7px; text-align:left; font-size:10px; }
+  .breakdown-toggle-row td.subcatcol { background: var(--breakdown-bg); }
+  .add-breakdown { font-size:10px; color:var(--blue); cursor:pointer; }
+
+  /* ---------- PHONE ---------- */
+  .phone { width:320px; background:var(--bg); border-radius:30px; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,.18); height:660px; display:flex; flex-direction:column; border:6px solid #0B0D10; }
+  .phone .appbar { border-radius:0; }
+  .month-nav { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:var(--surface); border-bottom:1px solid var(--border); }
+  .month-nav button { border:none; background:var(--surface-sunken); width:28px; height:28px; border-radius:50%; font-size:14px; color:var(--text-secondary); }
+  .month-label { font-size:14px; font-weight:700; display:flex; align-items:center; gap:8px; }
+  .ok-pill { font-size:9.5px; font-weight:700; padding:2px 8px; border-radius:10px; background:var(--green-bg); color:var(--green); }
+  .phone-list { flex:1; overflow:auto; padding:8px 10px; }
+  .pcat-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:9px 12px; margin-bottom:6px; }
+  .pcat-top { display:flex; justify-content:space-between; align-items:baseline; }
+  .pcat-name { font-size:12.5px; font-weight:600; }
+  .pcat-prog { font-family:var(--font-num); font-size:12.5px; font-weight:700; }
+  .pcat-sub { display:flex; justify-content:space-between; font-size:10.5px; color:var(--text-tertiary); margin-top:3px; }
+  .pcat-bar { height:5px; border-radius:3px; background:var(--surface-sunken); margin-top:6px; overflow:hidden; }
+  .pcat-bar-fill { height:100%; background:var(--blue); }
+  .pcat-bar-fill.over { background:var(--red); }
+  .bottomnav { height:58px; flex-shrink:0; background:var(--surface); border-top:1px solid var(--border); display:flex; }
+  .bnav-item { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-size:10px; color:var(--text-tertiary); }
+  .bnav-item.active { color:var(--blue); font-weight:600; }
+  .bnav-icon { width:18px; height:18px; border-radius:5px; background:currentColor; opacity:.85; }
+
+  .caption { max-width:1500px; margin:20px auto 0; font-size:12.5px; color:#4A5261; line-height:1.6; }
+  .caption b { color:#171B21; }
+</style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <button onclick="document.documentElement.setAttribute('data-theme','light'); sync()">Light</button>
+    <button onclick="document.documentElement.setAttribute('data-theme','dark'); sync()">Dark</button>
+    <span>Verlauf — tablet (category × month grid) and phone (one month at a time) side by side</span>
+  </div>
+
+  <div class="frames">
+
+    <!-- ===================== TABLET ===================== -->
+    <div class="tablet" data-theme="light" id="tabletFrame">
+      <div class="sidebar">
+        <div class="brand">Geld</div>
+        <div class="navitem"><span class="dot"></span>Dashboard</div>
+        <div class="navitem"><span class="dot"></span>Konten</div>
+        <div class="navitem active"><span class="dot"></span>Verlauf</div>
+        <div class="navitem"><span class="dot"></span>Planung</div>
+        <div class="navdivider"></div>
+        <div class="navitem"><span class="dot"></span>Reisekosten</div>
+        <div class="navitem"><span class="dot"></span>CPAM</div>
+        <div class="navitem"><span class="dot"></span>Amazon</div>
+        <div class="navdivider"></div>
+        <div class="navitem"><span class="dot"></span>Import/Export</div>
+        <div class="navitem"><span class="dot"></span>Einstellungen</div>
+      </div>
+
+      <div class="main">
+        <div class="appbar">
+          <div class="appbar-title">Verlauf — 2026</div>
+          <div class="appbar-right">
+            <button class="toggle-btn on" id="p0btn" onclick="togglePlan0()">Plan 0 anzeigen</button>
+            <button class="toggle-btn on" id="bdbtn" onclick="toggleAllBreakdown()">Aufschlüsselung anzeigen</button>
+            <div class="check-badge alert">⚠ Rücklagen −250 €</div>
+          </div>
+        </div>
+
+        <div class="grid-wrap">
+          <table class="verlauf" id="verlaufTable">
+            <thead>
+              <tr>
+                <th class="catcol">Kat.</th>
+                <th class="subcatcol">Unterkategorie</th>
+                <th class="year-col">Jahr</th>
+                <th>Jan</th><th>Feb</th><th>Mär</th><th>Apr</th><th>Mai</th><th>Jun</th>
+                <th>Jul</th><th>Aug</th><th>Sep</th><th>Okt</th><th>Nov</th><th>Dez</th>
+              </tr>
+              <tr class="ok-row">
+                <th class="catcol"></th><th class="subcatcol"></th><th></th>
+                <th><span class="ok-switch on"></span></th><th><span class="ok-switch on"></span></th>
+                <th><span class="ok-switch on"></span></th><th><span class="ok-switch on"></span></th>
+                <th><span class="ok-switch on"></span></th><th><span class="ok-switch on"></span></th>
+                <th><span class="ok-switch on"></span></th><th><span class="ok-switch"></span></th>
+                <th><span class="ok-switch"></span></th><th><span class="ok-switch"></span></th>
+                <th><span class="ok-switch"></span></th><th><span class="ok-switch"></span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="prog-row" data-group="konten">
+                <td class="catcol groupcell" data-group-anchor="konten">Konten</td>
+                <td class="subcatcol" data-subcat-anchor="barkonten">Barkonten</td>
+                <td class="year-col num"><div class="linecell"><span class="lbl">Prog</span><span class="num">9.763 €</span></div></td>
+                <td class="num">22.240</td><td class="num">20.301</td><td class="num">15.931</td><td class="num">14.995</td><td class="num">66.860</td><td class="num">63.967</td><td class="num">66.748</td><td class="num">56.016</td><td class="num">52.499</td><td class="num">12.756</td><td class="num">10.553</td><td class="num">8.626</td>
+              </tr>
+
+              <tr class="prog-row" data-group="einnahmen" data-subcat="gehalt">
+                <td class="catcol groupcell" data-group-anchor="einnahmen">Einnahmen</td>
+                <td class="subcatcol" data-subcat-anchor="gehalt">Gehalt Markus</td>
+                <td class="year-col num"><div class="linecell"><span class="lbl">Prog</span><span class="num">95.634 €</span></div></td>
+                <td class="num actual">7.936</td><td class="num actual">7.936</td><td class="num actual">7.936</td><td class="num actual">7.936</td><td class="num actual">7.936</td><td class="num actual">7.936</td><td class="num actual">8.137</td><td class="num forecast">8.137</td><td class="num forecast">7.936</td><td class="num forecast">7.936</td><td class="num forecast">7.936</td><td class="num forecast">7.936</td>
+              </tr>
+              <tr class="plan1-row" data-group="einnahmen" data-subcat="gehalt">
+                <td class="year-col"><div class="linecell"><span class="lbl">Plan 1</span><span class="num">95.634 €</span></div></td>
+                <td class="num">7.936</td><td class="num">7.936</td><td class="num">7.936</td><td class="num">7.936</td><td class="num">7.936</td><td class="num">7.936</td><td class="num">8.137</td><td class="num">8.137</td><td class="num">7.936</td><td class="num">7.936</td><td class="num">7.936</td><td class="num">7.936</td>
+              </tr>
+              <tr class="plan0-row" data-group="einnahmen" data-subcat="gehalt">
+                <td class="year-col"><div class="linecell"><span class="lbl">Plan 0 🔒</span><span class="num">95.232 €</span></div></td>
+                <td class="num">7.936</td><td class="num">7.936</td><td class="num">7.936</td><td class="num">7.936</td><td class="num">7.936</td><td class="num">7.936</td><td class="num">7.936</td><td class="num">7.936</td><td class="num">7.936</td><td class="num">7.936</td><td class="num">7.936</td><td class="num">7.936</td>
+              </tr>
+
+              <tr class="prog-row" data-group="wohnen" data-subcat="nebenkosten">
+                <td class="catcol groupcell" data-group-anchor="wohnen">Wohnen</td>
+                <td class="subcatcol" data-subcat-anchor="nebenkosten">Nebenkosten</td>
+                <td class="year-col num amt-neg"><div class="linecell"><span class="lbl">Prog</span><span class="num">−3.523 €</span></div></td>
+                <td class="num amt-neg actual">−233</td><td class="num amt-neg actual">−1.091</td><td class="num amt-neg actual">−213</td><td class="num amt-neg actual">−285</td><td class="num amt-neg actual">−213</td><td class="num amt-neg actual">−213</td><td class="num amt-neg actual">−213</td><td class="num amt-neg forecast">−213</td><td class="num amt-neg forecast">−213</td><td class="num amt-neg forecast">−213</td><td class="num amt-neg forecast">−213</td><td class="num amt-neg forecast">−213</td>
+              </tr>
+              <tr class="plan1-row" data-group="wohnen" data-subcat="nebenkosten">
+                <td class="year-col amt-neg"><div class="linecell"><span class="lbl">Plan 1</span><span class="num">−3.350 €</span></div></td>
+                <td class="num amt-neg">−213</td><td class="num amt-neg">−1.013</td><td class="num amt-neg">−213</td><td class="num amt-neg">−213</td><td class="num amt-neg">−213</td><td class="num amt-neg">−213</td><td class="num amt-neg">−213</td><td class="num amt-neg">−213</td><td class="num amt-neg">−213</td><td class="num amt-neg">−213</td><td class="num amt-neg">−213</td><td class="num amt-neg">−213</td>
+              </tr>
+              <tr class="plan0-row" data-group="wohnen" data-subcat="nebenkosten">
+                <td class="year-col amt-neg"><div class="linecell"><span class="lbl">Plan 0 🔒</span><span class="num">−3.350 €</span></div></td>
+                <td class="num amt-neg">−213</td><td class="num amt-neg">−1.013</td><td class="num amt-neg">−213</td><td class="num amt-neg">−213</td><td class="num amt-neg">−213</td><td class="num amt-neg">−213</td><td class="num amt-neg">−213</td><td class="num amt-neg">−213</td><td class="num amt-neg">−213</td><td class="num amt-neg">−213</td><td class="num amt-neg">−213</td><td class="num amt-neg">−213</td>
+              </tr>
+
+              <tr class="prog-row" data-group="sonstiges" data-subcat="urlaube">
+                <td class="catcol groupcell" data-group-anchor="sonstiges">Sonstiges</td>
+                <td class="subcatcol" data-subcat-anchor="urlaube">Urlaube</td>
+                <td class="year-col num amt-neg"><div class="linecell"><span class="lbl">Prog</span><span class="num">−11.923 €</span></div></td>
+                <td class="num amt-neg actual"></td><td class="num amt-neg actual">−839</td><td class="num amt-neg actual">−900</td><td class="num amt-neg actual">−265</td><td class="num amt-neg actual">−245</td><td class="num amt-neg actual">−1.395</td><td class="num amt-neg actual">−4.850</td><td class="num amt-neg forecast">−2.021</td><td class="num amt-neg forecast">−730</td><td class="num amt-neg forecast">−650</td><td class="num amt-neg forecast"></td><td class="num amt-neg forecast"></td>
+              </tr>
+              <tr class="plan1-row" data-group="sonstiges" data-subcat="urlaube">
+                <td class="year-col amt-neg"><div class="linecell"><span class="lbl"><span class="expand-toggle" data-cat="urlaube-plan1" onclick="toggleBreakdown(this)">▾</span>Plan 1</span><span class="num">−11.894 €</span></div></td>
+                <td class="num amt-neg"></td><td class="num amt-neg">−839</td><td class="num amt-neg">−900</td><td class="num amt-neg">−265</td><td class="num amt-neg">−245</td><td class="num amt-neg">−1.395</td><td class="num amt-neg">−4.850</td><td class="num amt-neg">−2.021</td><td class="num amt-neg">−730</td><td class="num amt-neg">−650</td><td class="num amt-neg"></td><td class="num amt-neg"></td>
+              </tr>
+              <tr class="auto-rollup-row" data-cat="urlaube-plan1" data-group="sonstiges" data-subcat="urlaube">
+                <td class="year-col amt-neg"><div class="linecell"><span class="lbl">Schottland <span class="auto-badge">automatisch</span></span><span class="num">−6.791 €</span></div></td>
+                <td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg actual">−2.705</td><td class="num amt-neg forecast">−704</td><td class="num amt-neg forecast">−3.382</td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td>
+              </tr>
+              <tr class="breakdown-row" data-cat="urlaube-plan1" data-group="sonstiges" data-subcat="urlaube">
+                <td class="year-col amt-neg"><div class="linecell"><span class="lbl">↳ Schottland: Unterkünfte</span><span class="num">−4.236 €</span></div></td>
+                <td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg">−441</td><td class="num amt-neg">−512</td><td class="num amt-neg">−3.283</td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td>
+              </tr>
+              <tr class="breakdown-row" data-cat="urlaube-plan1" data-group="sonstiges" data-subcat="urlaube">
+                <td class="year-col amt-neg"><div class="linecell"><span class="lbl">↳ Schottland: Flug &amp; Auto</span><span class="num">−2.604 €</span></div></td>
+                <td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg">−2.313</td><td class="num amt-neg">−192</td><td class="num amt-neg">−99</td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td>
+              </tr>
+              <tr class="breakdown-toggle-row" data-cat="urlaube-plan1" data-group="sonstiges" data-subcat="urlaube">
+                <td class="year-col" colspan="1"><span class="add-breakdown">+ Plan 1 Aufschlüsselung</span></td>
+                <td colspan="12"></td>
+              </tr>
+              <tr class="plan0-row" data-group="sonstiges" data-subcat="urlaube">
+                <td class="year-col amt-neg"><div class="linecell"><span class="lbl"><span class="expand-toggle" data-cat="urlaube-plan0" onclick="toggleBreakdown(this)">▾</span>Plan 0 🔒</span><span class="num">−11.865 €</span></div></td>
+                <td class="num amt-neg"></td><td class="num amt-neg">−839</td><td class="num amt-neg">−901</td><td class="num amt-neg">−265</td><td class="num amt-neg">−192</td><td class="num amt-neg">−1.419</td><td class="num amt-neg">−5.090</td><td class="num amt-neg">−1.779</td><td class="num amt-neg">−730</td><td class="num amt-neg">−650</td><td class="num amt-neg"></td><td class="num amt-neg"></td>
+              </tr>
+              <tr class="breakdown-row plan0bd" data-cat="urlaube-plan0" data-group="sonstiges" data-subcat="urlaube">
+                <td class="year-col amt-neg"><div class="linecell"><span class="lbl">↳ Schottland: Unterkünfte</span><span class="num">−4.179 €</span></div></td>
+                <td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg">−441</td><td class="num amt-neg"></td><td class="num amt-neg">−3.738</td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td>
+              </tr>
+              <tr class="breakdown-row plan0bd" data-cat="urlaube-plan0" data-group="sonstiges" data-subcat="urlaube">
+                <td class="year-col amt-neg"><div class="linecell"><span class="lbl">↳ Flug &amp; Auto</span><span class="num">−2.313 €</span></div></td>
+                <td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg">−2.313</td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td><td class="num amt-neg"></td>
+              </tr>
+              <tr class="breakdown-toggle-row plan0bd" data-cat="urlaube-plan0" data-group="sonstiges" data-subcat="urlaube">
+                <td class="year-col"><span class="add-breakdown">+ Plan 0 Aufschlüsselung</span></td>
+                <td colspan="12"></td>
+              </tr>
+
+              <tr class="prog-row" data-group="sonstiges" data-subcat="geschenke">
+                <td class="subcatcol" data-subcat-anchor="geschenke">Geschenke</td>
+                <td class="year-col num amt-neg"><div class="linecell"><span class="lbl">Prog</span><span class="num">−1.348 €</span></div></td>
+                <td class="num amt-neg actual">−106</td><td class="num amt-neg actual">−76</td><td class="num amt-neg actual">−294</td><td class="num amt-neg actual">−37</td><td class="num amt-neg actual">−77</td><td class="num amt-neg actual">−111</td><td class="num amt-neg actual">−47</td><td class="num amt-neg forecast"></td><td class="num amt-neg forecast">−150</td><td class="num amt-neg forecast">−150</td><td class="num amt-neg forecast">−150</td><td class="num amt-neg forecast">−150</td>
+              </tr>
+              <tr class="plan1-row" data-group="sonstiges" data-subcat="geschenke">
+                <td class="year-col amt-neg"><div class="linecell"><span class="lbl">Plan 1</span><span class="num">−1.800 €</span></div></td>
+                <td class="num amt-neg">−150</td><td class="num amt-neg">−150</td><td class="num amt-neg">−150</td><td class="num amt-neg">−150</td><td class="num amt-neg">−150</td><td class="num amt-neg">−150</td><td class="num amt-neg">−150</td><td class="num amt-neg">−150</td><td class="num amt-neg">−150</td><td class="num amt-neg">−150</td><td class="num amt-neg">−150</td><td class="num amt-neg">−150</td>
+              </tr>
+              <tr class="plan0-row" data-group="sonstiges" data-subcat="geschenke">
+                <td class="year-col amt-neg"><div class="linecell"><span class="lbl">Plan 0 🔒</span><span class="num">−1.800 €</span></div></td>
+                <td class="num amt-neg">−150</td><td class="num amt-neg">−150</td><td class="num amt-neg">−150</td><td class="num amt-neg">−150</td><td class="num amt-neg">−150</td><td class="num amt-neg">−150</td><td class="num amt-neg">−150</td><td class="num amt-neg">−150</td><td class="num amt-neg">−150</td><td class="num amt-neg">−150</td><td class="num amt-neg">−150</td><td class="num amt-neg">−150</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== PHONE ===================== -->
+    <div class="phone" data-theme="light" id="phoneFrame">
+      <div class="appbar">
+        <div class="appbar-title">Verlauf</div>
+        <div class="check-badge alert">⚠</div>
+      </div>
+      <div class="month-nav">
+        <button>‹</button>
+        <div class="month-label">August 2026 <span class="ok-pill">ok</span></div>
+        <button>›</button>
+      </div>
+      <div class="phone-list">
+
+        <div class="pcat-card">
+          <div class="pcat-top"><div class="pcat-name">Gehalt Markus</div><div class="pcat-prog">8.137 €</div></div>
+          <div class="pcat-sub"><span>Plan 1: 7.936 €</span><span>Plan 0: 7.936 €</span></div>
+        </div>
+
+        <div class="pcat-card">
+          <div class="pcat-top"><div class="pcat-name">Nebenkosten</div><div class="pcat-prog">−213 €</div></div>
+          <div class="pcat-sub"><span>Plan 1: −213 €</span><span>Plan 0: −213 €</span></div>
+        </div>
+
+        <div class="pcat-card">
+          <div class="pcat-top"><div class="pcat-name">Urlaube <span class="expand-toggle" style="margin-left:4px;">▾</span></div><div class="pcat-prog">−2.021 €</div></div>
+          <div class="pcat-sub"><span>Plan 1: −2.021 €</span><span>Plan 0: −1.779 €</span></div>
+          <div class="pcat-bar"><div class="pcat-bar-fill over" style="width:88%"></div></div>
+          <div style="margin-top:6px; padding-top:6px; border-top:1px dashed var(--border);">
+            <div class="pcat-sub"><span>↳ Schottland: Unterkünfte</span><span class="num">−512 €</span></div>
+            <div class="pcat-sub"><span>↳ Flug &amp; Auto</span><span class="num">−192 €</span></div>
+          </div>
+        </div>
+
+        <div class="pcat-card">
+          <div class="pcat-top"><div class="pcat-name">Geschenke</div><div class="pcat-prog"></div></div>
+          <div class="pcat-sub"><span>Plan 1: −150 €</span><span>Plan 0: −150 €</span></div>
+        </div>
+
+      </div>
+      <div class="bottomnav">
+        <div class="bnav-item"><div class="bnav-icon"></div>Konten</div>
+        <div class="bnav-item"><div class="bnav-icon"></div>Dashboard</div>
+        <div class="bnav-item active"><div class="bnav-icon"></div>Verlauf</div>
+        <div class="bnav-item"><div class="bnav-icon"></div>Planung</div>
+        <div class="bnav-item"><div class="bnav-icon"></div>Mehr</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="caption">
+    <b>Reading this mockup:</b> three real sticky columns now, matching the actual Gsheet structure — <b>Kategorie</b> (rotated, spans the whole group, e.g. "Sonstiges"), <b>Unterkategorie</b> (spans only that subcategory's own rows, e.g. "Urlaube"), and a third column combining each row's <b>label + yearly total</b> (Prog/Plan 1/Plan 0, or a breakdown item's name when applicable) — breakdown names never touch the Unterkategorie column, exactly as in the sheet. Both label columns use <b>dynamically recomputed rowspan</b> (not a static HTML rowspan): every time a row is hidden or shown, a small script recounts how many visible rows belong to that category/subcategory and resizes the spanning cell accordingly — this is what makes "Urlaube" correctly shrink when its breakdown rows collapse, the same way Google Sheets' merge behaves. Try the Plan 0 toggle, the global breakdown toggle, and the individual ▾ arrows on Plan 1/Plan 0 to see the spans resize live. Breakdown rows keep their distinct lavender tint, covering the full row including the Unterkategorie cell's edge. <b>New:</b> Plan 1's Urlaube breakdown now shows a blue-tinted <b>"Schottland (automatisch)"</b> header row above its own children (Unterkünfte, Flug &amp; Auto) — this one row is computed, not typed: it mirrors the children's Plan 1 sum for any month not yet closed (Aug–Dez here), and becomes the real tagged total from Konten for any month that is closed (Jan–Jul) — July shows −2.705 €, a deliberately small gap under the children's planned −2.754 €, to illustrate that this is a live comparison sitting *next to* the manual plan, never overwriting it. This automated row only ever appears inside Plan 1's block, never Plan 0's, and only where breakdown lines actually share a common parent tag — a flat, unnested breakdown line gets no such row. Also new: any cell that's genuinely zero now renders **empty** rather than showing "0", across every row type — quieter grid, easier to spot where something real is happening. On phone, navigation is one month at a time.
+  </div>
+
+<script>
+  function recomputeRowspans(){
+    var table = document.getElementById('verlaufTable');
+    // Group column
+    var groups = {};
+    table.querySelectorAll('tr[data-group]').forEach(function(tr){
+      var g = tr.dataset.group;
+      if (getComputedStyle(tr).display === 'none') return;
+      (groups[g] = groups[g] || []).push(tr);
+    });
+    table.querySelectorAll('[data-group-anchor]').forEach(function(cell){
+      var g = cell.dataset.groupAnchor;
+      cell.rowSpan = (groups[g] || [cell.closest('tr')]).length;
+    });
+    // Subcategory column
+    var subcats = {};
+    table.querySelectorAll('tr[data-subcat]').forEach(function(tr){
+      if (getComputedStyle(tr).display === 'none') return;
+      var s = tr.dataset.subcat;
+      (subcats[s] = subcats[s] || []).push(tr);
+    });
+    table.querySelectorAll('[data-subcat-anchor]').forEach(function(cell){
+      var s = cell.dataset.subcatAnchor;
+      cell.rowSpan = (subcats[s] || [cell.closest('tr')]).length;
+    });
+  }
+
+  function sync(){
+    var t = document.documentElement.getAttribute('data-theme');
+    document.getElementById('tabletFrame').setAttribute('data-theme', t);
+    document.getElementById('phoneFrame').setAttribute('data-theme', t);
+  }
+
+  var planZeroVisible = true;
+  var breakdownExpanded = {}; // per plan-line key, e.g. {"urlaube-plan1": true, "urlaube-plan0": true}
+  document.querySelectorAll('.expand-toggle[data-cat]').forEach(function(el){
+    breakdownExpanded[el.dataset.cat] = (el.textContent.trim() === '▾');
+  });
+
+  function applyBreakdownVisibility(key){
+    var expanded = !!breakdownExpanded[key];
+    var isPlan0Side = key.endsWith('-plan0');
+    var visible = expanded && (!isPlan0Side || planZeroVisible);
+    document.querySelectorAll('[data-cat="'+key+'"]').forEach(function(row){
+      if (row.classList.contains('expand-toggle')) return; // the arrow itself, not a row
+      if (row.classList.contains('breakdown-row') || row.classList.contains('breakdown-toggle-row')) {
+        row.classList.toggle('hidden', !visible);
+      }
+    });
+  }
+
+  function toggleBreakdown(arrowEl){
+    var key = arrowEl.dataset.cat;
+    breakdownExpanded[key] = !breakdownExpanded[key];
+    arrowEl.textContent = breakdownExpanded[key] ? '▾' : '▸';
+    applyBreakdownVisibility(key);
+    recomputeRowspans();
+  }
+
+  function toggleAllBreakdown(){
+    var btn = document.getElementById('bdbtn');
+    var expandAll = !btn.classList.contains('on');
+    Object.keys(breakdownExpanded).forEach(function(key){
+      breakdownExpanded[key] = expandAll;
+      applyBreakdownVisibility(key);
+    });
+    document.querySelectorAll('.expand-toggle[data-cat]').forEach(function(el){
+      el.textContent = expandAll ? '▾' : '▸';
+    });
+    btn.classList.toggle('on', expandAll);
+    btn.textContent = expandAll ? 'Aufschlüsselung anzeigen' : 'Aufschlüsselung ausblenden';
+    recomputeRowspans();
+  }
+
+  function togglePlan0(){
+    var btn = document.getElementById('p0btn');
+    planZeroVisible = !btn.classList.contains('on');
+    document.querySelectorAll('.plan0-row').forEach(function(r){ r.classList.toggle('hidden', !planZeroVisible); });
+    // re-apply breakdown visibility for every key so *-plan0 rows respect both flags
+    Object.keys(breakdownExpanded).forEach(applyBreakdownVisibility);
+    btn.classList.toggle('on', planZeroVisible);
+    btn.textContent = planZeroVisible ? 'Plan 0 anzeigen' : 'Plan 0 einblenden';
+    recomputeRowspans();
+  }
+
+  recomputeRowspans();
+</script>
+</body>
+</html>

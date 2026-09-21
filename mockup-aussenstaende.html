@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Außenstände — UI Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F5F6F8; --surface: #FFFFFF; --surface-sunken: #EEF0F3; --border: #DFE3E8;
+    --text: #171B21; --text-secondary: #5B6472; --text-tertiary: #8891A0;
+    --blue: #2E5AAC; --blue-bg: #E8EEF9;
+    --green: #2F7D53; --green-bg: #E5F3EB;
+    --amber: #B4740E; --amber-bg: #FBF0DD;
+    --purple: #6E4FA8; --purple-bg: #EFE9F8;
+    --red: #B0271F; --red-bg: #FBEAE9;
+    --teal: #147D74; --teal-bg: #E1F3F1;
+    --indigo: #4C51BF; --indigo-bg: #E9EAF9;
+    --rose: #B0466E; --rose-bg: #FAE9F0;
+    --slate: #5B6472; --slate-bg: #EAEDF1;
+    --radius: 6px;
+    --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-num: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  [data-theme="dark"] {
+    --bg: #14171C; --surface: #1B1F26; --surface-sunken: #21262E; --border: #2C323C;
+    --text: #E8EAED; --text-secondary: #A2AAB6; --text-tertiary: #6E7683;
+    --blue: #7FA6E8; --blue-bg: #1E2C42;
+    --green: #6FCB98; --green-bg: #1B3327;
+    --amber: #E3B25C; --amber-bg: #3A2E14;
+    --purple: #B79EE6; --purple-bg: #2E2440;
+    --red: #E8746C; --red-bg: #3B1E1C;
+    --teal: #5FC4B9; --teal-bg: #123330;
+    --indigo: #9BA2E8; --indigo-bg: #262A4A;
+    --rose: #E893B8; --rose-bg: #3A2130;
+    --slate: #A2AAB6; --slate-bg: #262A30;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: var(--font-ui); background:#DADFE6; color:var(--text); padding:32px; }
+  .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+  .toolbar { max-width:1500px; margin:0 auto 20px; display:flex; gap:12px; align-items:center; }
+  .toolbar button { font-family: var(--font-ui); font-size:13px; font-weight:600; padding:8px 14px; border-radius:var(--radius); border:1px solid #B9C0CC; background:#fff; cursor:pointer; }
+  .toolbar span { font-size:13px; color:#4A5261; }
+  .frames { max-width:1500px; margin:0 auto; display:flex; gap:32px; align-items:flex-start; flex-wrap:wrap; }
+
+  /* ---------- SHELL (shared) ---------- */
+  .tablet { width:900px; background:var(--bg); border-radius:18px; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,0.18); display:flex; height:700px; }
+  .sidebar { width:176px; background:var(--surface); border-right:1px solid var(--border); padding:16px 10px; flex-shrink:0; }
+  .sidebar .brand { font-size:13px; font-weight:700; color:var(--text-secondary); padding:4px 10px 16px; }
+  .navitem { display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:var(--radius); font-size:13.5px; font-weight:500; color:var(--text-secondary); margin-bottom:2px; }
+  .navitem.active { background:var(--blue-bg); color:var(--blue); font-weight:600; }
+  .navitem .dot { width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.5; flex-shrink:0; }
+  .navdivider { height:1px; background:var(--border); margin:10px 4px; }
+  .main { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .appbar { height:44px; display:flex; align-items:center; justify-content:space-between; padding:0 16px; border-bottom:1px solid var(--border); background:var(--surface); flex-shrink:0; }
+  .appbar-title { font-size:14px; font-weight:600; }
+  .appbar-right { display:flex; align-items:center; gap:8px; }
+  .filter-pill { font-size:11px; font-weight:600; padding:4px 10px; border-radius:12px; background:var(--surface-sunken); color:var(--text-tertiary); cursor:pointer; }
+  .filter-pill.on { background:var(--blue-bg); color:var(--blue); }
+
+  /* ---------- LIST ---------- */
+  .list-wrap { flex:1; overflow:auto; padding:14px 16px; }
+  .aus-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:8px; overflow:hidden; }
+  .aus-head { display:flex; align-items:center; gap:10px; padding:11px 14px; cursor:pointer; }
+  .aus-chevron { font-size:10px; color:var(--text-tertiary); width:10px; transition:transform .15s; flex-shrink:0; }
+  .aus-card.expanded .aus-chevron { transform:rotate(90deg); }
+  .aus-tagpill { font-size:10.5px; font-weight:700; padding:2px 9px; border-radius:10px; white-space:nowrap; }
+  .aus-tagpill.claim { background:var(--indigo-bg); color:var(--indigo); }
+  .aus-typelabel { font-size:10.5px; color:var(--text-tertiary); flex-shrink:0; }
+  .aus-spacer { flex:1; }
+  .aus-net { font-size:13px; font-weight:700; }
+  .aus-net.zero { color:var(--green); }
+  .aus-net.open { color:var(--red); }
+  .aus-status-icon { font-size:12px; width:16px; text-align:center; flex-shrink:0; }
+
+  .aus-body { border-top:1px solid var(--border); background:var(--surface-sunken); padding:4px 14px 10px; display:none; }
+  .aus-card.expanded .aus-body { display:block; }
+  .aus-cat-group { margin-top:8px; }
+  .aus-cat-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--rose); margin-bottom:3px; display:flex; align-items:center; gap:5px; }
+  .aus-cat-label .sw { width:7px; height:7px; border-radius:2px; background:var(--rose); display:inline-block; }
+  .aus-line { display:flex; justify-content:space-between; align-items:baseline; font-size:12px; padding:3px 0 3px 12px; border-bottom:1px dashed var(--border); }
+  .aus-line:last-child { border-bottom:none; }
+  .aus-line-label { color:var(--text-secondary); }
+  .aus-line-amt { font-weight:600; }
+  .aus-settle-line { display:flex; justify-content:space-between; align-items:baseline; font-size:12px; padding:6px 0 2px 12px; margin-top:4px; border-top:1px solid var(--border); font-weight:700; }
+  .aus-settle-line .aus-line-label { color:var(--text); }
+  .aus-nocategory { font-size:10px; color:var(--text-tertiary); margin-top:6px; margin-bottom:2px; font-style:italic; }
+
+  /* ---------- PHONE ---------- */
+  .phone { width:320px; background:var(--bg); border-radius:30px; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,.18); height:700px; display:flex; flex-direction:column; border:6px solid #0B0D10; }
+  .phone .appbar { border-radius:0; }
+  .phone-scroll { flex:1; overflow:auto; padding:10px; }
+  .bottomnav { height:58px; flex-shrink:0; background:var(--surface); border-top:1px solid var(--border); display:flex; }
+  .bnav-item { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-size:10px; color:var(--text-tertiary); }
+  .bnav-item.active { color:var(--blue); font-weight:600; }
+  .bnav-icon { width:18px; height:18px; border-radius:5px; background:currentColor; opacity:.85; }
+
+  .caption { max-width:1500px; margin:20px auto 0; font-size:12.5px; color:#4A5261; line-height:1.6; }
+  .caption b { color:#171B21; }
+</style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <button onclick="document.documentElement.setAttribute('data-theme','light'); sync()">Light</button>
+    <button onclick="document.documentElement.setAttribute('data-theme','dark'); sync()">Dark</button>
+    <span>Außenstände — generalized open-claims/loans tracker, tablet and phone side by side</span>
+  </div>
+
+  <div class="frames">
+
+    <!-- ===================== TABLET ===================== -->
+    <div class="tablet" data-theme="light" id="tabletFrame">
+      <div class="sidebar">
+        <div class="brand">Geld</div>
+        <div class="navitem"><span class="dot"></span>Dashboard</div>
+        <div class="navitem"><span class="dot"></span>Konten</div>
+        <div class="navitem"><span class="dot"></span>Verlauf</div>
+        <div class="navitem"><span class="dot"></span>Planung</div>
+        <div class="navdivider"></div>
+        <div class="navitem active"><span class="dot"></span>Außenstände</div>
+        <div class="navdivider"></div>
+        <div class="navitem"><span class="dot"></span>Import/Export</div>
+        <div class="navitem"><span class="dot"></span>Einstellungen</div>
+      </div>
+
+      <div class="main">
+        <div class="appbar">
+          <div class="appbar-title">Außenstände</div>
+          <div class="appbar-right">
+            <span class="filter-pill on">Offen (2)</span>
+            <span class="filter-pill">Abgeschlossen (3)</span>
+          </div>
+        </div>
+
+        <div class="list-wrap" id="ausList">
+
+          <!-- OPEN — Airbus trip -->
+          <div class="aus-card expanded" onclick="toggleCard(this)">
+            <div class="aus-head">
+              <span class="aus-chevron">▸</span>
+              <span class="aus-tagpill claim">2026-05 HAM</span>
+              <span class="aus-typelabel">Airbus Reisekosten</span>
+              <span class="aus-spacer"></span>
+              <span class="aus-net open num">−336,50 €</span>
+              <span class="aus-status-icon">🔴</span>
+            </div>
+            <div class="aus-body" onclick="event.stopPropagation()">
+              <div class="aus-cat-group">
+                <div class="aus-cat-label"><span class="sw"></span>Meal</div>
+                <div class="aus-line"><span class="aus-line-label">LS Ciao Bella E · 26.05.</span><span class="aus-line-amt num">−44,80 €</span></div>
+                <div class="aus-line"><span class="aus-line-label">Kantine Hamburg · 27.05.</span><span class="aus-line-amt num">−12,40 €</span></div>
+                <div class="aus-line"><span class="aus-line-label">Kantine Hamburg · 28.05.</span><span class="aus-line-amt num">−6,95 €</span></div>
+              </div>
+              <div class="aus-cat-group">
+                <div class="aus-cat-label"><span class="sw"></span>Team Meal</div>
+                <div class="aus-line"><span class="aus-line-label">Hidden Kitchen Hamburg · 27.05.</span><span class="aus-line-amt num">−263,20 €</span></div>
+              </div>
+              <div class="aus-cat-group">
+                <div class="aus-cat-label"><span class="sw"></span>Hotel</div>
+                <div class="aus-line"><span class="aus-line-label">Moxy Hamburg FI · 28.05.</span><span class="aus-line-amt num">−9,15 €</span></div>
+              </div>
+              <div class="aus-settle-line"><span class="aus-line-label">Überweisung Airbus — noch offen</span><span class="aus-line-amt num">—</span></div>
+            </div>
+          </div>
+
+          <!-- OPEN — informal loan -->
+          <div class="aus-card" onclick="toggleCard(this)">
+            <div class="aus-head">
+              <span class="aus-chevron">▸</span>
+              <span class="aus-tagpill claim">Dirk Sept</span>
+              <span class="aus-typelabel">Geld verliehen</span>
+              <span class="aus-spacer"></span>
+              <span class="aus-net open num">−50,00 €</span>
+              <span class="aus-status-icon">🔴</span>
+            </div>
+            <div class="aus-body" onclick="event.stopPropagation()">
+              <div class="aus-nocategory">Kein Claim-Kategorie-Tag — einfaches Darlehen</div>
+              <div class="aus-line"><span class="aus-line-label">Bar Markus → Geld verliehen · 05.09.</span><span class="aus-line-amt num">−50,00 €</span></div>
+              <div class="aus-settle-line"><span class="aus-line-label">Rückzahlung — noch offen</span><span class="aus-line-amt num">—</span></div>
+            </div>
+          </div>
+
+          <!-- SETTLED — Airbus trip -->
+          <div class="aus-card" onclick="toggleCard(this)">
+            <div class="aus-head">
+              <span class="aus-chevron">▸</span>
+              <span class="aus-tagpill claim">2026-03 GET</span>
+              <span class="aus-typelabel">Airbus Reisekosten</span>
+              <span class="aus-spacer"></span>
+              <span class="aus-net zero num">0,00 €</span>
+              <span class="aus-status-icon">✅</span>
+            </div>
+            <div class="aus-body" onclick="event.stopPropagation()">
+              <div class="aus-cat-group">
+                <div class="aus-cat-label"><span class="sw"></span>Team Meal</div>
+                <div class="aus-line"><span class="aus-line-label">SQ*The Fix Cof · 09.03.</span><span class="aus-line-amt num">−117,50 €</span></div>
+                <div class="aus-line"><span class="aus-line-label">H. Melia Madrid · 09.03.</span><span class="aus-line-amt num">−30,00 €</span></div>
+                <div class="aus-line"><span class="aus-line-label">Aerop. Adolfo S · 11.03.</span><span class="aus-line-amt num">−28,15 €</span></div>
+              </div>
+              <div class="aus-cat-group">
+                <div class="aus-cat-label"><span class="sw"></span>Meal</div>
+                <div class="aus-line"><span class="aus-line-label">Licencia 7400 · 09.03.</span><span class="aus-line-amt num">−23,41 €</span></div>
+              </div>
+              <div class="aus-cat-group">
+                <div class="aus-cat-label"><span class="sw"></span>Taxi</div>
+                <div class="aus-line"><span class="aus-line-label">Cerveceria Asga · 11.03.</span><span class="aus-line-amt num">−35,70 €</span></div>
+                <div class="aus-line"><span class="aus-line-label">01941 Almudena · 10.03.</span><span class="aus-line-amt num">−33,80 €</span></div>
+                <div class="aus-line"><span class="aus-line-label">Licencia 01250 · 10.03.</span><span class="aus-line-amt num">−30,60 €</span></div>
+                <div class="aus-line"><span class="aus-line-label">Lic 02.557 Javi · 09.03.</span><span class="aus-line-amt num">−54,65 €</span></div>
+              </div>
+              <div class="aus-settle-line"><span class="aus-line-label">Überweisung Airbus · 22.04.</span><span class="aus-line-amt num">509,71 €</span></div>
+            </div>
+          </div>
+
+          <!-- SETTLED — Airbus trip, small -->
+          <div class="aus-card" onclick="toggleCard(this)">
+            <div class="aus-head">
+              <span class="aus-chevron">▸</span>
+              <span class="aus-tagpill claim">2026-04 HAM</span>
+              <span class="aus-typelabel">Airbus Reisekosten</span>
+              <span class="aus-spacer"></span>
+              <span class="aus-net zero num">0,00 €</span>
+              <span class="aus-status-icon">✅</span>
+            </div>
+            <div class="aus-body" onclick="event.stopPropagation()">
+              <div class="aus-cat-group">
+                <div class="aus-cat-label"><span class="sw"></span>Meal</div>
+                <div class="aus-line"><span class="aus-line-label">Rewe Roman Krie · 27.04.</span><span class="aus-line-amt num">−16,47 €</span></div>
+                <div class="aus-line"><span class="aus-line-label">Rewe Roman Krie · 28.04.</span><span class="aus-line-amt num">−11,53 €</span></div>
+              </div>
+              <div class="aus-settle-line"><span class="aus-line-label">Überweisung Airbus · 26.06.</span><span class="aus-line-amt num">28,00 €</span></div>
+            </div>
+          </div>
+
+          <!-- SETTLED — Amazon return -->
+          <div class="aus-card" onclick="toggleCard(this)">
+            <div class="aus-head">
+              <span class="aus-chevron">▸</span>
+              <span class="aus-tagpill claim">Rasenroboter Retoure</span>
+              <span class="aus-typelabel">Amazon</span>
+              <span class="aus-spacer"></span>
+              <span class="aus-net zero num">0,00 €</span>
+              <span class="aus-status-icon">✅</span>
+            </div>
+            <div class="aus-body" onclick="event.stopPropagation()">
+              <div class="aus-nocategory">Kein Claim-Kategorie-Tag — Retoure, kein Airbus-Claim</div>
+              <div class="aus-line"><span class="aus-line-label">Amazon Markus (DE) · 03.08.</span><span class="aus-line-amt num">−449,00 €</span></div>
+              <div class="aus-settle-line"><span class="aus-line-label">Erstattung Amazon · 12.08.</span><span class="aus-line-amt num">449,00 €</span></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== PHONE ===================== -->
+    <div class="phone" data-theme="light" id="phoneFrame">
+      <div class="appbar">
+        <div class="appbar-title">Außenstände</div>
+        <span class="filter-pill on">Offen (2)</span>
+      </div>
+      <div class="phone-scroll" id="ausListPhone">
+
+        <div class="aus-card expanded" onclick="toggleCard(this)">
+          <div class="aus-head">
+            <span class="aus-chevron">▸</span>
+            <span class="aus-tagpill claim">2026-05 HAM</span>
+            <span class="aus-spacer"></span>
+            <span class="aus-net open num">−336,50 €</span>
+          </div>
+          <div class="aus-body" onclick="event.stopPropagation()">
+            <div class="aus-cat-group">
+              <div class="aus-cat-label"><span class="sw"></span>Meal</div>
+              <div class="aus-line"><span class="aus-line-label">LS Ciao Bella E</span><span class="aus-line-amt num">−44,80 €</span></div>
+              <div class="aus-line"><span class="aus-line-label">Kantine Hamburg</span><span class="aus-line-amt num">−12,40 €</span></div>
+              <div class="aus-line"><span class="aus-line-label">Kantine Hamburg</span><span class="aus-line-amt num">−6,95 €</span></div>
+            </div>
+            <div class="aus-cat-group">
+              <div class="aus-cat-label"><span class="sw"></span>Team Meal</div>
+              <div class="aus-line"><span class="aus-line-label">Hidden Kitchen HH</span><span class="aus-line-amt num">−263,20 €</span></div>
+            </div>
+            <div class="aus-cat-group">
+              <div class="aus-cat-label"><span class="sw"></span>Hotel</div>
+              <div class="aus-line"><span class="aus-line-label">Moxy Hamburg FI</span><span class="aus-line-amt num">−9,15 €</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="aus-card" onclick="toggleCard(this)">
+          <div class="aus-head">
+            <span class="aus-chevron">▸</span>
+            <span class="aus-tagpill claim">Dirk Sept</span>
+            <span class="aus-spacer"></span>
+            <span class="aus-net open num">−50,00 €</span>
+          </div>
+          <div class="aus-body" onclick="event.stopPropagation()">
+            <div class="aus-nocategory">Einfaches Darlehen, kein Kategorie-Tag</div>
+            <div class="aus-line"><span class="aus-line-label">Bar Markus</span><span class="aus-line-amt num">−50,00 €</span></div>
+          </div>
+        </div>
+
+      </div>
+      <div class="bottomnav">
+        <div class="bnav-item"><div class="bnav-icon"></div>Konten</div>
+        <div class="bnav-item"><div class="bnav-icon"></div>Dashboard</div>
+        <div class="bnav-item"><div class="bnav-icon"></div>Verlauf</div>
+        <div class="bnav-item active"><div class="bnav-icon"></div>Mehr</div>
+        <div class="bnav-item"><div class="bnav-icon"></div>Planung</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="caption">
+    <b>Reading this mockup:</b> every card here is just a <b>query result over tagged Konten lines</b> — there's no dedicated claim data of its own. Each card is one <code>claim</code>-type tag (indigo pill); expanding it groups its lines by whichever <code>claim-category</code> tag they also carry (rose labels, e.g. Meal/Team Meal/Hotel) — <b>never summed within a group</b>, so three separately-tagged Meal lines show as three lines, matching your Gsheet's habit exactly. A tag with no category tags at all (the "Dirk Sept" loan, the Amazon return) just shows its lines flat, no grouping layer — same screen, same mechanism, no special-casing. The <b>net total</b> is the only status that exists now: red with the outstanding amount while a claim/loan is open, green ✓ the instant every tagged line plus the settlement transaction nets to zero — no manual "Neu/Eingereicht/Abgerechnet" field anywhere. "Offen"-filtered claims/loans sort first, since that's what you'd actually want to check on any given day. CPAM isn't shown here since it's still on hold — this same screen picks it up automatically once tagging starts there, no separate build needed. On phone, cards stack and expand the same way, tap to open/close.
+  </div>
+
+<script>
+  function sync(){
+    var t = document.documentElement.getAttribute('data-theme');
+    document.getElementById('tabletFrame').setAttribute('data-theme', t);
+    document.getElementById('phoneFrame').setAttribute('data-theme', t);
+  }
+  function toggleCard(card){
+    card.classList.toggle('expanded');
+    var chev = card.querySelector('.aus-chevron');
+  }
+</script>
+</body>
+</html>

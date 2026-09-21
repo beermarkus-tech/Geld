@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monatsabschluss — UI Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F5F6F8; --surface: #FFFFFF; --surface-sunken: #EEF0F3; --border: #DFE3E8;
+    --text: #171B21; --text-secondary: #5B6472; --text-tertiary: #8891A0; --text-disabled: #C3C9D1;
+    --blue: #2E5AAC; --blue-bg: #E8EEF9;
+    --green: #2F7D53; --green-bg: #E5F3EB;
+    --amber: #B4740E; --amber-bg: #FBF0DD;
+    --red: #B0271F; --red-bg: #FBEAE9;
+    --radius: 6px;
+    --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-num: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  [data-theme="dark"] {
+    --bg: #14171C; --surface: #1B1F26; --surface-sunken: #21262E; --border: #2C323C;
+    --text: #E8EAED; --text-secondary: #A2AAB6; --text-tertiary: #6E7683; --text-disabled: #3A4048;
+    --blue: #7FA6E8; --blue-bg: #1E2C42;
+    --green: #6FCB98; --green-bg: #1B3327;
+    --amber: #E3B25C; --amber-bg: #3A2E14;
+    --red: #E8746C; --red-bg: #3B1E1C;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: var(--font-ui); background:#DADFE6; color:var(--text); padding:32px; }
+  .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+  .toolbar { max-width:1500px; margin:0 auto 20px; display:flex; gap:12px; align-items:center; }
+  .toolbar button { font-family: var(--font-ui); font-size:13px; font-weight:600; padding:8px 14px; border-radius:var(--radius); border:1px solid #B9C0CC; background:#fff; cursor:pointer; }
+  .toolbar span { font-size:13px; color:#4A5261; }
+  .frames { max-width:1500px; margin:0 auto; display:flex; gap:32px; align-items:flex-start; flex-wrap:wrap; }
+
+  /* ---------- SHELL ---------- */
+  .tablet { width:1060px; background:var(--bg); border-radius:18px; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,0.18); display:flex; height:700px; }
+  .sidebar { width:176px; background:var(--surface); border-right:1px solid var(--border); padding:16px 10px; flex-shrink:0; }
+  .sidebar .brand { font-size:13px; font-weight:700; color:var(--text-secondary); padding:4px 10px 16px; }
+  .navitem { display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:var(--radius); font-size:13.5px; font-weight:500; color:var(--text-secondary); margin-bottom:2px; }
+  .navitem.active { background:var(--blue-bg); color:var(--blue); font-weight:600; }
+  .navitem .dot { width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.5; flex-shrink:0; }
+  .navdivider { height:1px; background:var(--border); margin:10px 4px; }
+  .main { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .appbar { height:44px; display:flex; align-items:center; justify-content:space-between; padding:0 16px; border-bottom:1px solid var(--border); background:var(--surface); flex-shrink:0; }
+  .appbar-title { font-size:14px; font-weight:600; }
+  .appbar-right { display:flex; align-items:center; gap:10px; }
+  .year-select { display:flex; align-items:center; gap:2px; background:var(--surface-sunken); border-radius:14px; padding:2px; }
+  .year-select button { width:22px; height:22px; border:none; background:transparent; color:var(--text-tertiary); font-size:12px; border-radius:50%; cursor:pointer; }
+  .year-select .yr { font-size:12.5px; font-weight:700; padding:0 8px; min-width:38px; text-align:center; }
+
+  .status-banner { margin:12px 16px 0; padding:9px 14px; border-radius:var(--radius); font-size:12.5px; font-weight:600; display:flex; justify-content:space-between; align-items:center; }
+  .status-banner.progress { background:var(--amber-bg); color:var(--amber); }
+  .status-banner.done { background:var(--green-bg); color:var(--green); }
+
+  /* ---------- GRID ---------- */
+  .grid-wrap { flex:1; overflow:auto; padding:12px 16px 20px; }
+  table.abschluss { width:100%; border-collapse:collapse; font-size:11px; }
+  table.abschluss th { position:sticky; top:0; z-index:2; background:var(--surface-sunken); font-size:10px; font-weight:600; color:var(--text-tertiary); padding:5px 4px; border-bottom:1px solid var(--border); text-align:center; width:52px; }
+  table.abschluss th.itemcol { text-align:left; position:sticky; left:34px; z-index:3; min-width:170px; width:auto; }
+  table.abschluss th.phasecol { position:sticky; left:0; z-index:3; width:34px; }
+  th.current-month, td.current-month { background:var(--blue-bg) !important; }
+  table.abschluss td { padding:4px; border-bottom:1px solid var(--border); text-align:center; }
+  td.itemcol { text-align:left; position:sticky; left:34px; background:var(--surface); font-weight:500; padding:5px 8px; }
+  td.phasecell { writing-mode: vertical-rl; transform: rotate(180deg); text-align:center; font-weight:700; font-size:10px; color:var(--text-secondary); letter-spacing:.03em; position:sticky; left:0; background:var(--surface); vertical-align:middle; }
+
+  .icon { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; font-size:10px; font-weight:700; }
+  .icon.ok { background:var(--green-bg); color:var(--green); }
+  .icon.warn { background:var(--red-bg); color:var(--red); cursor:pointer; }
+  .icon.future { background:transparent; color:var(--text-disabled); }
+  .icon.future::before { content:"–"; }
+
+  .chk { width:16px; height:16px; border-radius:4px; border:1.5px solid var(--text-tertiary); cursor:pointer; display:inline-block; position:relative; }
+  .chk.checked { background:var(--green); border-color:var(--green); }
+  .chk.checked::after { content:"✓"; position:absolute; inset:0; color:#fff; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+  .chk.future { border-color:var(--border); cursor:default; }
+
+  tr.phase-first td.phasecell, tr.phase-first { border-top: 2px solid var(--border); }
+  .type-tag { font-size:8.5px; font-weight:700; text-transform:uppercase; letter-spacing:.02em; padding:1px 5px; border-radius:6px; margin-left:6px; }
+  .type-tag.auto { background:var(--blue-bg); color:var(--blue); }
+
+  /* ---------- PHONE ---------- */
+  .phone { width:320px; background:var(--bg); border-radius:30px; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,.18); height:700px; display:flex; flex-direction:column; border:6px solid #0B0D10; }
+  .phone .appbar { border-radius:0; }
+  .month-nav { display:flex; align-items:center; justify-content:space-between; padding:8px 14px; background:var(--surface); border-bottom:1px solid var(--border); }
+  .month-nav button { border:none; background:var(--surface-sunken); width:26px; height:26px; border-radius:50%; color:var(--text-secondary); font-size:13px; }
+  .month-nav .m-label { font-size:13px; font-weight:700; }
+  .phone-scroll { flex:1; overflow:auto; padding:10px 12px; }
+  .p-phase-title { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--text-secondary); margin:12px 0 6px; }
+  .p-phase-title:first-child { margin-top:0; }
+  .p-item { display:flex; align-items:center; justify-content:space-between; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:8px 10px; margin-bottom:5px; font-size:12px; font-weight:500; }
+  .bottomnav { height:58px; flex-shrink:0; background:var(--surface); border-top:1px solid var(--border); display:flex; }
+  .bnav-item { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-size:10px; color:var(--text-tertiary); }
+  .bnav-item.active { color:var(--blue); font-weight:600; }
+  .bnav-icon { width:18px; height:18px; border-radius:5px; background:currentColor; opacity:.85; }
+
+  .caption { max-width:1500px; margin:20px auto 0; font-size:12.5px; color:#4A5261; line-height:1.6; }
+  .caption b { color:#171B21; }
+</style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <button onclick="document.documentElement.setAttribute('data-theme','light'); sync()">Light</button>
+    <button onclick="document.documentElement.setAttribute('data-theme','dark'); sync()">Dark</button>
+    <span>Monatsabschluss — auto-derived vs. manual checklist items, tablet and phone side by side</span>
+  </div>
+
+  <div class="frames">
+
+    <!-- ===================== TABLET ===================== -->
+    <div class="tablet" data-theme="light" id="tabletFrame">
+      <div class="sidebar">
+        <div class="brand">Geld</div>
+        <div class="navitem"><span class="dot"></span>Dashboard</div>
+        <div class="navitem"><span class="dot"></span>Konten</div>
+        <div class="navitem"><span class="dot"></span>Verlauf</div>
+        <div class="navitem"><span class="dot"></span>Planung</div>
+        <div class="navdivider"></div>
+        <div class="navitem active"><span class="dot"></span>Monatsabschluss</div>
+        <div class="navitem"><span class="dot"></span>Außenstände</div>
+        <div class="navdivider"></div>
+        <div class="navitem"><span class="dot"></span>Import/Export</div>
+        <div class="navitem"><span class="dot"></span>Einstellungen</div>
+      </div>
+
+      <div class="main">
+        <div class="appbar">
+          <div class="appbar-title">Monatsabschluss</div>
+          <div class="appbar-right">
+            <div class="year-select"><button>‹</button><span class="yr">2026</span><button>›</button></div>
+          </div>
+        </div>
+
+        <div class="status-banner progress">
+          <span>September — 6 von 10 manuellen Punkten offen · 1 automatische Warnung</span>
+          <span>August ✓ abgeschlossen</span>
+        </div>
+
+        <div class="grid-wrap">
+          <table class="abschluss">
+            <thead>
+              <tr>
+                <th class="phasecol"></th>
+                <th class="itemcol">Punkt</th>
+                <th>Jan</th><th>Feb</th><th>Mär</th><th>Apr</th><th>Mai</th><th>Jun</th><th>Jul</th><th>Aug</th>
+                <th class="current-month">Sep</th><th>Okt</th><th>Nov</th><th>Dez</th>
+              </tr>
+            </thead>
+            <tbody>
+
+              <tr class="phase-first">
+                <td class="phasecell" rowspan="5">Daten</td>
+                <td class="itemcol">BNP Giro <span class="type-tag" style="background:var(--surface-sunken); color:var(--text-tertiary);">manuell</span></td>
+                <td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td>
+                <td class="current-month"><span class="chk" onclick="this.classList.toggle('checked')"></span></td>
+                <td><span class="chk future"></span></td><td><span class="chk future"></span></td><td><span class="chk future"></span></td>
+              </tr>
+              <tr>
+                <td class="itemcol">DKB</td>
+                <td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td>
+                <td class="current-month"><span class="chk" onclick="this.classList.toggle('checked')"></span></td>
+                <td><span class="chk future"></span></td><td><span class="chk future"></span></td><td><span class="chk future"></span></td>
+              </tr>
+              <tr>
+                <td class="itemcol">Paypal</td>
+                <td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td>
+                <td class="current-month"><span class="chk checked" onclick="this.classList.toggle('checked')"></span></td>
+                <td><span class="chk future"></span></td><td><span class="chk future"></span></td><td><span class="chk future"></span></td>
+              </tr>
+              <tr>
+                <td class="itemcol">Visa Airbus</td>
+                <td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td>
+                <td class="current-month"><span class="chk" onclick="this.classList.toggle('checked')"></span></td>
+                <td><span class="chk future"></span></td><td><span class="chk future"></span></td><td><span class="chk future"></span></td>
+              </tr>
+              <tr>
+                <td class="itemcol">Bar (Julia, Markus, Haus)</td>
+                <td><span class="chk"></span></td><td><span class="chk"></span></td><td><span class="chk"></span></td><td><span class="chk"></span></td><td><span class="chk"></span></td><td><span class="chk"></span></td><td><span class="chk"></span></td><td><span class="chk"></span></td>
+                <td class="current-month"><span class="chk" onclick="this.classList.toggle('checked')"></span></td>
+                <td><span class="chk future"></span></td><td><span class="chk future"></span></td><td><span class="chk future"></span></td>
+              </tr>
+
+              <tr class="phase-first">
+                <td class="phasecell" rowspan="6">Verfeinerung</td>
+                <td class="itemcol">Alle Kategorien zugewiesen <span class="type-tag" style="background:var(--surface-sunken); color:var(--text-tertiary);">manuell</span></td>
+                <td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td>
+                <td class="current-month"><span class="chk" onclick="this.classList.toggle('checked')"></span></td>
+                <td><span class="chk future"></span></td><td><span class="chk future"></span></td><td><span class="chk future"></span></td>
+              </tr>
+              <tr>
+                <td class="itemcol">AIRBUS Gehalt</td>
+                <td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td>
+                <td class="current-month"><span class="chk" onclick="this.classList.toggle('checked')"></span></td>
+                <td><span class="chk future"></span></td><td><span class="chk future"></span></td><td><span class="chk future"></span></td>
+              </tr>
+              <tr>
+                <td class="itemcol">Amazon</td>
+                <td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td>
+                <td class="current-month"><span class="chk" onclick="this.classList.toggle('checked')"></span></td>
+                <td><span class="chk future"></span></td><td><span class="chk future"></span></td><td><span class="chk future"></span></td>
+              </tr>
+              <tr>
+                <td class="itemcol">AIRBUS Reisekosten <span class="type-tag auto">auto</span></td>
+                <td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td>
+                <td class="current-month"><span class="icon warn" title="2026-05 HAM offen: −336,50 €">⚠</span></td>
+                <td><span class="icon future"></span></td><td><span class="icon future"></span></td><td><span class="icon future"></span></td>
+              </tr>
+              <tr>
+                <td class="itemcol">CPAM <span class="type-tag auto">auto</span> <span style="color:var(--text-tertiary); font-weight:400;">(pausiert)</span></td>
+                <td><span class="icon future"></span></td><td><span class="icon future"></span></td><td><span class="icon future"></span></td><td><span class="icon future"></span></td><td><span class="icon future"></span></td><td><span class="icon future"></span></td><td><span class="icon future"></span></td><td><span class="icon future"></span></td>
+                <td class="current-month"><span class="icon future"></span></td>
+                <td><span class="icon future"></span></td><td><span class="icon future"></span></td><td><span class="icon future"></span></td>
+              </tr>
+              <tr>
+                <td class="itemcol">Außenstände <span class="type-tag auto">auto</span></td>
+                <td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td>
+                <td class="current-month"><span class="icon warn" title="Dirk Sept offen: −50,00 €">⚠</span></td>
+                <td><span class="icon future"></span></td><td><span class="icon future"></span></td><td><span class="icon future"></span></td>
+              </tr>
+
+              <tr class="phase-first">
+                <td class="phasecell" rowspan="6">Abschluss</td>
+                <td class="itemcol">Fehlermeldungen <span class="type-tag auto">auto</span></td>
+                <td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td>
+                <td class="current-month"><span class="icon ok">✓</span></td>
+                <td><span class="icon future"></span></td><td><span class="icon future"></span></td><td><span class="icon future"></span></td>
+              </tr>
+              <tr>
+                <td class="itemcol">Verlauf checken <span class="type-tag auto">auto</span></td>
+                <td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td>
+                <td class="current-month"><span class="icon ok">✓</span></td>
+                <td><span class="icon future"></span></td><td><span class="icon future"></span></td><td><span class="icon future"></span></td>
+              </tr>
+              <tr>
+                <td class="itemcol">Consors Verrechnungskonto ausgeglichen? <span class="type-tag auto">auto</span></td>
+                <td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td>
+                <td><span class="icon warn" title="Differenz 42,00 €">⚠</span></td>
+                <td><span class="icon ok">✓</span></td><td><span class="icon ok">✓</span></td>
+                <td class="current-month"><span class="icon ok">✓</span></td>
+                <td><span class="icon future"></span></td><td><span class="icon future"></span></td><td><span class="icon future"></span></td>
+              </tr>
+              <tr>
+                <td class="itemcol">Tagesgeld kopieren <span class="type-tag" style="background:var(--surface-sunken); color:var(--text-tertiary);">manuell — zu klären</span></td>
+                <td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td>
+                <td class="current-month"><span class="chk" onclick="this.classList.toggle('checked')"></span></td>
+                <td><span class="chk future"></span></td><td><span class="chk future"></span></td><td><span class="chk future"></span></td>
+              </tr>
+              <tr>
+                <td class="itemcol">Rücklagen <span class="type-tag" style="background:var(--surface-sunken); color:var(--text-tertiary);">manuell</span></td>
+                <td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td>
+                <td class="current-month"><span class="chk" onclick="this.classList.toggle('checked')"></span></td>
+                <td><span class="chk future"></span></td><td><span class="chk future"></span></td><td><span class="chk future"></span></td>
+              </tr>
+              <tr>
+                <td class="itemcol">Überweisungen</td>
+                <td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td><td><span class="chk checked"></span></td>
+                <td class="current-month"><span class="chk" onclick="this.classList.toggle('checked')"></span></td>
+                <td><span class="chk future"></span></td><td><span class="chk future"></span></td><td><span class="chk future"></span></td>
+              </tr>
+
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== PHONE ===================== -->
+    <div class="phone" data-theme="light" id="phoneFrame">
+      <div class="appbar">
+        <div class="appbar-title">Monatsabschluss</div>
+      </div>
+      <div class="month-nav">
+        <button>‹</button>
+        <span class="m-label">September 2026</span>
+        <button>›</button>
+      </div>
+      <div class="phone-scroll">
+
+        <div class="p-phase-title">Daten</div>
+        <div class="p-item">BNP Giro <span class="chk" onclick="this.classList.toggle('checked')"></span></div>
+        <div class="p-item">DKB <span class="chk" onclick="this.classList.toggle('checked')"></span></div>
+        <div class="p-item">Paypal <span class="chk checked" onclick="this.classList.toggle('checked')"></span></div>
+        <div class="p-item">Bar (Julia, Markus, Haus) <span class="chk" onclick="this.classList.toggle('checked')"></span></div>
+
+        <div class="p-phase-title">Verfeinerung</div>
+        <div class="p-item">Alle Kategorien zugewiesen <span class="chk" onclick="this.classList.toggle('checked')"></span></div>
+        <div class="p-item">AIRBUS Reisekosten <span class="icon warn">⚠</span></div>
+        <div class="p-item">Außenstände <span class="icon warn">⚠</span></div>
+
+        <div class="p-phase-title">Abschluss</div>
+        <div class="p-item">Fehlermeldungen <span class="icon ok">✓</span></div>
+        <div class="p-item">Verlauf checken <span class="icon ok">✓</span></div>
+        <div class="p-item">Consors ausgeglichen? <span class="icon ok">✓</span></div>
+        <div class="p-item">Überweisungen <span class="chk" onclick="this.classList.toggle('checked')"></span></div>
+
+      </div>
+      <div class="bottomnav">
+        <div class="bnav-item"><div class="bnav-icon"></div>Konten</div>
+        <div class="bnav-item"><div class="bnav-icon"></div>Dashboard</div>
+        <div class="bnav-item"><div class="bnav-icon"></div>Verlauf</div>
+        <div class="bnav-item active"><div class="bnav-icon"></div>Mehr</div>
+        <div class="bnav-item"><div class="bnav-icon"></div>Planung</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="caption">
+    <b>Reading this mockup:</b> two very different cell types, by design. <b>Blue "auto" items</b> show a live ✓/⚠ that you never touch by hand — it's just the app's existing checks (Außenstände net-zero, the Barkonten/Rücklagen reconciliation, Verlauf's ok-switches) surfaced here; hovering/tapping a ⚠ (like September's "AIRBUS Reisekosten," reflecting 2026-05 HAM's real −336,50 € open balance) tells you exactly what's unresolved, and clicking would jump straight to that screen. Plain-labeled items stay real, tappable checkboxes — the genuine manual to-dos, including every per-account Daten item, confirmed still needed since most of those accounts have no CSV export or too few monthly bookings to be worth automating. Past months (Jan–Aug) are shown fully checked/green to illustrate a normal closed history, except one deliberately planted warning back in June (Consors Verrechnungskonto) to show that a past month can still surface a problem if something changes retroactively. The current month (September, highlighted column) is where real interaction happens; future months are visibly disabled. "Tagesgeld kopieren" is flagged as manual-for-now per the spec's open item — its exact binding still needs clarifying once we know precisely what it copies. On phone, the grid becomes a single-month list, navigated with ‹ ›, same auto/manual distinction carried through.
+  </div>
+
+<script>
+  function sync(){
+    var t = document.documentElement.getAttribute('data-theme');
+    document.getElementById('tabletFrame').setAttribute('data-theme', t);
+    document.getElementById('phoneFrame').setAttribute('data-theme', t);
+  }
+</script>
+</body>
+</html>

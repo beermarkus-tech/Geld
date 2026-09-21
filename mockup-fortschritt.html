@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fortschritt — UI Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F5F6F8; --surface: #FFFFFF; --surface-sunken: #EEF0F3; --border: #DFE3E8;
+    --text: #171B21; --text-secondary: #5B6472; --text-tertiary: #8891A0;
+    --blue: #2E5AAC; --blue-bg: #E8EEF9;
+    --green: #2F7D53; --green-bg: #E5F3EB;
+    --amber: #B4740E; --amber-bg: #FBF0DD;
+    --purple: #6E4FA8; --purple-bg: #EFE9F8;
+    --teal: #147D74; --teal-bg: #E1F3F1;
+    --red: #B0271F; --red-bg: #FBEAE9;
+    --radius: 6px; --radius-lg: 10px;
+    --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-num: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  [data-theme="dark"] {
+    --bg: #14171C; --surface: #1B1F26; --surface-sunken: #21262E; --border: #2C323C;
+    --text: #E8EAED; --text-secondary: #A2AAB6; --text-tertiary: #6E7683;
+    --blue: #7FA6E8; --blue-bg: #1E2C42;
+    --green: #6FCB98; --green-bg: #1B3327;
+    --amber: #E3B25C; --amber-bg: #3A2E14;
+    --purple: #B79EE6; --purple-bg: #2E2440;
+    --teal: #5FC4B9; --teal-bg: #123330;
+    --red: #E8746C; --red-bg: #3B1E1C;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: var(--font-ui); background:#DADFE6; color:var(--text); padding:32px; }
+  .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+  .toolbar { max-width:1500px; margin:0 auto 20px; display:flex; gap:12px; align-items:center; }
+  .toolbar button { font-family: var(--font-ui); font-size:13px; font-weight:600; padding:8px 14px; border-radius:var(--radius); border:1px solid #B9C0CC; background:#fff; cursor:pointer; }
+  .toolbar span { font-size:13px; color:#4A5261; }
+  .frames { max-width:1500px; margin:0 auto; display:flex; gap:32px; align-items:flex-start; flex-wrap:wrap; }
+
+  /* ---------- SHELL ---------- */
+  .tablet { width:920px; background:var(--bg); border-radius:18px; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,0.18); display:flex; height:720px; }
+  .sidebar { width:176px; background:var(--surface); border-right:1px solid var(--border); padding:16px 10px; flex-shrink:0; }
+  .sidebar .brand { font-size:13px; font-weight:700; color:var(--text-secondary); padding:4px 10px 16px; }
+  .navitem { display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:var(--radius); font-size:13.5px; font-weight:500; color:var(--text-secondary); margin-bottom:2px; }
+  .navitem.active { background:var(--blue-bg); color:var(--blue); font-weight:600; }
+  .navitem .dot { width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.5; flex-shrink:0; }
+  .navdivider { height:1px; background:var(--border); margin:10px 4px; }
+  .main { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .appbar { height:44px; display:flex; align-items:center; justify-content:space-between; padding:0 16px; border-bottom:1px solid var(--border); background:var(--surface); flex-shrink:0; }
+  .appbar-title { font-size:14px; font-weight:600; }
+
+  /* ---------- SELECTOR + HEADER ---------- */
+  .selector-bar { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--border); background:var(--surface); }
+  .selector-field { flex:1; display:flex; align-items:center; gap:8px; background:var(--surface-sunken); border-radius:var(--radius); padding:7px 12px; }
+  .selector-field .sel-icon { color:var(--text-tertiary); font-size:12px; }
+  .tagpill { font-size:11px; font-weight:700; padding:3px 10px; border-radius:11px; background:var(--teal-bg); color:var(--teal); }
+  .selector-field .sel-caret { margin-left:auto; color:var(--text-tertiary); font-size:10px; }
+  .sel-caret { margin-left:8px; color:var(--text-tertiary); font-size:10px; }
+  .header-stats { display:flex; gap:10px; }
+  .stat-chip { display:flex; flex-direction:column; align-items:flex-end; background:var(--surface-sunken); border-radius:var(--radius); padding:5px 12px; }
+  .stat-chip .stat-lbl { font-size:9px; color:var(--text-tertiary); text-transform:uppercase; letter-spacing:.03em; }
+  .stat-chip .stat-val { font-size:13px; font-weight:700; }
+
+  /* ---------- CATEGORY/SUBCATEGORY SELECTOR (replaces old tag-pill selector) ---------- */
+  .cat-selector-bar { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--border); background:var(--surface); }
+  .cat-dropdown { display:flex; flex-direction:column; gap:2px; background:var(--surface-sunken); border-radius:var(--radius); padding:6px 12px; cursor:pointer; min-width:150px; }
+  .cat-dd-label { font-size:9px; color:var(--text-tertiary); text-transform:uppercase; letter-spacing:.03em; }
+  .cat-dd-value { font-size:13px; font-weight:600; display:flex; align-items:center; justify-content:space-between; }
+  .cat-arrow { color:var(--text-tertiary); font-size:11px; margin:0 2px; }
+
+  /* ---------- PER-TAG CARD (one per auto-discovered tag under the selection) ---------- */
+  .fx-card { border:1px solid var(--border); border-radius:10px; margin-bottom:16px; overflow:hidden; }
+  .fx-card-head { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:var(--surface-sunken); border-bottom:1px solid var(--border); }
+  .fx-card-body { padding:12px 14px 14px; }
+
+  .content-scroll { flex:1; overflow:auto; padding:14px 16px 24px; }
+
+  .fx-section { margin-bottom:18px; }
+  .fx-section-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .fx-section-title { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; }
+  .fx-section-title.gebucht { color:var(--green); }
+  .fx-section-title.geplant { color:var(--text-tertiary); }
+  .fx-section-total { font-size:13px; font-weight:700; }
+  .fx-pivot-note { font-size:10.5px; color:var(--text-tertiary); margin-bottom:8px; padding:6px 10px; background:var(--blue-bg); border-radius:var(--radius); color:var(--blue); display:inline-block; }
+
+  .fx-month-block { margin-bottom:10px; }
+  .fx-month-label { font-size:10.5px; font-weight:700; color:var(--text-secondary); margin-bottom:4px; }
+  .fx-child-group { margin-bottom:6px; margin-left:4px; }
+  .fx-child-label { font-size:10px; font-weight:700; color:var(--teal); display:flex; align-items:center; gap:5px; margin-bottom:2px; }
+  .fx-child-label .sw { width:7px; height:7px; border-radius:2px; background:var(--teal); display:inline-block; }
+  .fx-line { display:flex; justify-content:space-between; align-items:baseline; font-size:12px; padding:3px 0 3px 14px; border-bottom:1px dashed var(--border); }
+  .fx-line:last-child { border-bottom:none; }
+  .fx-line-label { color:var(--text-secondary); }
+  .fx-line-label .fx-date { color:var(--text-tertiary); font-size:10px; margin-left:6px; }
+  .fx-line-amt { font-weight:600; }
+
+  .geplant .fx-line { opacity:.85; }
+  .geplant .fx-line-label::before { content:"◦ "; color:var(--text-tertiary); }
+
+  .fx-empty-months { font-size:11px; color:var(--text-tertiary); font-style:italic; margin-top:4px; }
+
+  /* ---------- PHONE ---------- */
+  .phone { width:320px; background:var(--bg); border-radius:30px; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,.18); height:720px; display:flex; flex-direction:column; border:6px solid #0B0D10; }
+  .phone .appbar { border-radius:0; }
+  .phone .selector-bar { padding:10px 12px; }
+  .phone-scroll { flex:1; overflow:auto; padding:10px 12px; }
+  .bottomnav { height:58px; flex-shrink:0; background:var(--surface); border-top:1px solid var(--border); display:flex; }
+  .bnav-item { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-size:10px; color:var(--text-tertiary); }
+  .bnav-item.active { color:var(--blue); font-weight:600; }
+  .bnav-icon { width:18px; height:18px; border-radius:5px; background:currentColor; opacity:.85; }
+
+  .caption { max-width:1500px; margin:20px auto 0; font-size:12.5px; color:#4A5261; line-height:1.6; }
+  .caption b { color:#171B21; }
+</style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <button onclick="document.documentElement.setAttribute('data-theme','light'); sync()">Light</button>
+    <button onclick="document.documentElement.setAttribute('data-theme','dark'); sync()">Dark</button>
+    <span>Fortschritt (working name) — Bereits gebucht / Noch geplant, split at Verlauf's pivot month, Schottland example</span>
+  </div>
+
+  <div class="frames">
+
+    <!-- ===================== TABLET ===================== -->
+    <div class="tablet" data-theme="light" id="tabletFrame">
+      <div class="sidebar">
+        <div class="brand">Geld</div>
+        <div class="navitem"><span class="dot"></span>Dashboard</div>
+        <div class="navitem"><span class="dot"></span>Konten</div>
+        <div class="navitem"><span class="dot"></span>Verlauf</div>
+        <div class="navitem"><span class="dot"></span>Planung</div>
+        <div class="navitem"><span class="dot"></span>Quickview</div>
+        <div class="navitem active"><span class="dot"></span>Fortschritt</div>
+        <div class="navdivider"></div>
+        <div class="navitem"><span class="dot"></span>Monatsabschluss</div>
+        <div class="navitem"><span class="dot"></span>Außenstände</div>
+        <div class="navdivider"></div>
+        <div class="navitem"><span class="dot"></span>Import/Export</div>
+        <div class="navitem"><span class="dot"></span>Einstellungen</div>
+      </div>
+
+      <div class="main">
+        <div class="appbar">
+          <div class="appbar-title">Fortschritt</div>
+        </div>
+
+        <div class="cat-selector-bar">
+          <div class="cat-dropdown" onclick="alert('→ Kategorie-Dropdown: alle Gruppen aus §2.4')">
+            <span class="cat-dd-label">Kategorie</span>
+            <span class="cat-dd-value">Sonstiges <span class="cat-arrow">▾</span></span>
+          </div>
+          <div class="cat-dropdown" onclick="alert('→ Unterkategorie-Dropdown: gefiltert auf Sonstiges')">
+            <span class="cat-dd-label">Unterkategorie</span>
+            <span class="cat-dd-value">Urlaube <span class="cat-arrow">▾</span></span>
+          </div>
+        </div>
+
+        <div class="content-scroll">
+
+          <div class="fx-card">
+            <div class="fx-card-head">
+              <span class="tagpill">Schottland</span>
+              <div class="header-stats">
+                <div class="stat-chip"><span class="stat-lbl">Budget</span><span class="stat-val num">−6.840 €</span></div>
+                <div class="stat-chip"><span class="stat-lbl">Prognose</span><span class="stat-val num">−6.791 €</span></div>
+              </div>
+            </div>
+            <div class="fx-card-body">
+
+          <span class="fx-pivot-note">Stand: Juli abgeschlossen (letztes "ok" in Verlauf) — Aug–Dez noch offen</span>
+
+          <div class="fx-section">
+            <div class="fx-section-head">
+              <span class="fx-section-title gebucht">Bereits gebucht</span>
+              <span class="fx-section-total num" style="color:var(--green);">−2.705 €</span>
+            </div>
+
+            <div class="fx-month-block">
+              <div class="fx-month-label">Juli</div>
+              <div class="fx-child-group">
+                <div class="fx-child-label"><span class="sw"></span>Unterkünfte · −430 €</div>
+                <div class="fx-line"><span class="fx-line-label">Premier Inn Glasgow<span class="fx-date">09.07.</span></span><span class="fx-line-amt num">−430 €</span></div>
+              </div>
+              <div class="fx-child-group">
+                <div class="fx-child-label"><span class="sw"></span>Flug &amp; Auto · −2.275 €</div>
+                <div class="fx-line"><span class="fx-line-label">Ryanair FR–EDI<span class="fx-date">05.07.</span></span><span class="fx-line-amt num">−1.850 €</span></div>
+                <div class="fx-line"><span class="fx-line-label">Enterprise Autovermietung<span class="fx-date">09.07.</span></span><span class="fx-line-amt num">−425 €</span></div>
+              </div>
+            </div>
+
+            <div class="fx-empty-months">Jan–Jun: keine gebuchten Positionen</div>
+          </div>
+
+          <div class="fx-section geplant">
+            <div class="fx-section-head">
+              <span class="fx-section-title geplant">Noch geplant</span>
+              <span class="fx-section-total num">−4.086 €</span>
+            </div>
+
+            <div class="fx-month-block">
+              <div class="fx-month-label">August</div>
+              <div class="fx-child-group">
+                <div class="fx-child-label"><span class="sw"></span>Unterkünfte · Plan 1</div>
+                <div class="fx-line"><span class="fx-line-label">Rest-Unterkünfte</span><span class="fx-line-amt num">−512 €</span></div>
+              </div>
+              <div class="fx-child-group">
+                <div class="fx-child-label"><span class="sw"></span>Flug &amp; Auto · Plan 1</div>
+                <div class="fx-line"><span class="fx-line-label">Rest-Transport</span><span class="fx-line-amt num">−192 €</span></div>
+              </div>
+            </div>
+
+            <div class="fx-month-block">
+              <div class="fx-month-label">September</div>
+              <div class="fx-child-group">
+                <div class="fx-child-label"><span class="sw"></span>Unterkünfte · Plan 1</div>
+                <div class="fx-line"><span class="fx-line-label">Rest-Unterkünfte</span><span class="fx-line-amt num">−3.283 €</span></div>
+              </div>
+              <div class="fx-child-group">
+                <div class="fx-child-label"><span class="sw"></span>Flug &amp; Auto · Plan 1</div>
+                <div class="fx-line"><span class="fx-line-label">Rest-Transport</span><span class="fx-line-amt num">−99 €</span></div>
+              </div>
+            </div>
+
+            <div class="fx-empty-months">Okt–Dez: nichts mehr geplant</div>
+          </div>
+
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== PHONE ===================== -->
+    <div class="phone" data-theme="light" id="phoneFrame">
+      <div class="appbar">
+        <div class="appbar-title">Fortschritt</div>
+      </div>
+      <div class="cat-selector-bar" style="gap:8px;">
+        <div class="cat-dropdown" style="min-width:0; flex:1;">
+          <span class="cat-dd-label">Kategorie</span>
+          <span class="cat-dd-value">Sonstiges <span class="cat-arrow">▾</span></span>
+        </div>
+        <div class="cat-dropdown" style="min-width:0; flex:1;">
+          <span class="cat-dd-label">Unterkategorie</span>
+          <span class="cat-dd-value">Urlaube <span class="cat-arrow">▾</span></span>
+        </div>
+      </div>
+      <div class="phone-scroll">
+
+        <div class="fx-card">
+          <div class="fx-card-head">
+            <span class="tagpill">Schottland</span>
+            <div class="header-stats">
+              <div class="stat-chip"><span class="stat-lbl">Budget</span><span class="stat-val num">−6.840 €</span></div>
+              <div class="stat-chip"><span class="stat-lbl">Prognose</span><span class="stat-val num">−6.791 €</span></div>
+            </div>
+          </div>
+          <div class="fx-card-body">
+
+        <span class="fx-pivot-note">Juli abgeschlossen</span>
+
+        <div class="fx-section">
+          <div class="fx-section-head">
+            <span class="fx-section-title gebucht">Bereits gebucht</span>
+            <span class="fx-section-total num" style="color:var(--green);">−2.705 €</span>
+          </div>
+          <div class="fx-month-block">
+            <div class="fx-month-label">Juli</div>
+            <div class="fx-child-group">
+              <div class="fx-child-label"><span class="sw"></span>Unterkünfte</div>
+              <div class="fx-line"><span class="fx-line-label">Premier Inn Glasgow</span><span class="fx-line-amt num">−430 €</span></div>
+            </div>
+            <div class="fx-child-group">
+              <div class="fx-child-label"><span class="sw"></span>Flug &amp; Auto</div>
+              <div class="fx-line"><span class="fx-line-label">Ryanair FR–EDI</span><span class="fx-line-amt num">−1.850 €</span></div>
+              <div class="fx-line"><span class="fx-line-label">Enterprise Auto</span><span class="fx-line-amt num">−425 €</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="fx-section geplant">
+          <div class="fx-section-head">
+            <span class="fx-section-title geplant">Noch geplant</span>
+            <span class="fx-section-total num">−4.086 €</span>
+          </div>
+          <div class="fx-month-block">
+            <div class="fx-month-label">August</div>
+            <div class="fx-line"><span class="fx-line-label">Unterkünfte</span><span class="fx-line-amt num">−512 €</span></div>
+            <div class="fx-line"><span class="fx-line-label">Flug &amp; Auto</span><span class="fx-line-amt num">−192 €</span></div>
+          </div>
+          <div class="fx-month-block">
+            <div class="fx-month-label">September</div>
+            <div class="fx-line"><span class="fx-line-label">Unterkünfte</span><span class="fx-line-amt num">−3.283 €</span></div>
+            <div class="fx-line"><span class="fx-line-label">Flug &amp; Auto</span><span class="fx-line-amt num">−99 €</span></div>
+          </div>
+        </div>
+
+          </div>
+        </div>
+
+      </div>
+      <div class="bottomnav">
+        <div class="bnav-item"><div class="bnav-icon"></div>Konten</div>
+        <div class="bnav-item"><div class="bnav-icon"></div>Dashboard</div>
+        <div class="bnav-item"><div class="bnav-icon"></div>Verlauf</div>
+        <div class="bnav-item active"><div class="bnav-icon"></div>Mehr</div>
+        <div class="bnav-item"><div class="bnav-icon"></div>Planung</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="caption">
+    <b>Reading this mockup:</b> the selector at top is now a plain, two-step <b>Kategorie → Unterkategorie</b> picker (here: Sonstiges → Urlaube) — no tag search box, since tags are never chosen directly here anymore (§3j). Whatever tags actually exist underneath the selected subcategory get auto-discovered and each becomes its own card, side by side on tablet / stacked on phone; a subcategory with no tags underneath would instead show one plain flat card with no tag pill at all. This year, Urlaube has exactly one — <b>Schottland</b> (teal, matching Verlauf's project-tag color) — so only one card renders, pulling the same real numbers as the Verlauf mockup's "Schottland (automatisch)" row: Budget −6.840 € is the pure Plan 1 sum of its children, untouched by reality; Prognose −6.791 € blends what's now real with what's still mirrored. Inside the card, the content splits at the <b>pivot</b> — Verlauf's last "ok" month (July here) — into two sections. <b>Bereits gebucht</b> (green) lists real Konten transactions, grouped by whichever child tag each one carries (Unterkünfte / Flug &amp; Auto), individually, never summed away — exactly the three July bookings that make up the real −2.705 €, a small, honest 49 € under what was planned for that month. Jan–Jun show no bookings at all, since nothing happened yet for this trip that early. <b>Noch geplant</b> (grey, dashed markers) lists what's still sitting in Plan 1 for August and September, per child, per month — not yet real, and not merged with the booked section in any way. Nothing here is netted or rebalanced automatically; moving a planned amount to a different month, if a booking came in lighter or heavier than planned, stays a manual edit in Verlauf. Allocation tags (Sparen/Anlage/Steuern/Tagesgeld) never appear here at all — out of scope for this screen, treated like sub-accounts (§3j). On phone, the selector stacks as two compact dropdowns above the same card.
+  </div>
+
+<script>
+  function sync(){
+    var t = document.documentElement.getAttribute('data-theme');
+    document.getElementById('tabletFrame').setAttribute('data-theme', t);
+    document.getElementById('phoneFrame').setAttribute('data-theme', t);
+  }
+</script>
+</body>
+</html>

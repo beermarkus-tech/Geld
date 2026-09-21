@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Konten — UI Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F5F6F8;
+    --surface: #FFFFFF;
+    --surface-sunken: #EEF0F3;
+    --border: #DFE3E8;
+    --text: #171B21;
+    --text-secondary: #5B6472;
+    --text-tertiary: #8891A0;
+
+    --blue: #2E5AAC;      /* computed account totals */
+    --blue-bg: #E8EEF9;
+    --green: #2F7D53;     /* income */
+    --green-bg: #E5F3EB;
+    --amber: #B4740E;     /* expenses */
+    --amber-bg: #FBF0DD;
+    --purple: #6E4FA8;    /* savings / investment transfers */
+    --purple-bg: #EFE9F8;
+    --yellow: #8A6D00;    /* needs attention text */
+    --yellow-bg: #FCEEA6; /* needs attention fill */
+    --red: #B0271F;       /* alerts only */
+    --red-bg: #FBEAE9;
+
+    --teal: #147D74;      /* grouping tag: project/trip */
+    --teal-bg: #E1F3F1;
+    --slate: #5B6472;     /* grouping tag: statement / unspecified */
+    --slate-bg: #E9EBEE;
+    --indigo: #4C51BF;    /* grouping tag: claim */
+    --indigo-bg: #E9EAF9;
+
+    --radius: 6px;
+    --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-num: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  [data-theme="dark"] {
+    --bg: #14171C;
+    --surface: #1B1F26;
+    --surface-sunken: #21262E;
+    --border: #2C323C;
+    --text: #E8EAED;
+    --text-secondary: #A2AAB6;
+    --text-tertiary: #6E7683;
+
+    --blue: #7FA6E8;
+    --blue-bg: #1E2C42;
+    --green: #6FCB98;
+    --green-bg: #1B3327;
+    --amber: #E3B25C;
+    --amber-bg: #3A2E14;
+    --purple: #B79EE6;
+    --purple-bg: #2E2440;
+    --yellow: #E8CE5C;
+    --yellow-bg: #3D3410;
+    --red: #E8746C;
+    --red-bg: #3B1E1C;
+
+    --teal: #5FC4B9;
+    --teal-bg: #123330;
+    --slate: #A2AAB6;
+    --slate-bg: #262B33;
+    --indigo: #9BA2E8;
+    --indigo-bg: #262A4A;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: var(--font-ui);
+    background: #DADFE6;
+    color: var(--text);
+    padding: 32px;
+  }
+  .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+
+  .toolbar {
+    max-width: 1400px;
+    margin: 0 auto 20px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .toolbar button {
+    font-family: var(--font-ui);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 14px;
+    border-radius: var(--radius);
+    border: 1px solid #B9C0CC;
+    background: #fff;
+    cursor: pointer;
+  }
+  .toolbar span { font-size: 13px; color: #4A5261; }
+
+  .frames { max-width: 1400px; margin: 0 auto; display: flex; gap: 32px; align-items: flex-start; flex-wrap: wrap; }
+
+  /* ---------- TABLET FRAME ---------- */
+  .tablet {
+    width: 900px;
+    background: var(--bg);
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.18);
+    display: flex;
+    height: 640px;
+  }
+  .sidebar {
+    width: 176px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 16px 10px;
+    flex-shrink: 0;
+  }
+  .sidebar .brand {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    padding: 4px 10px 16px;
+    letter-spacing: 0.02em;
+  }
+  .navitem {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 10px;
+    border-radius: var(--radius);
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 2px;
+  }
+  .navitem.active { background: var(--blue-bg); color: var(--blue); font-weight: 600; }
+  .navitem .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.5; flex-shrink: 0; }
+  .navdivider { height: 1px; background: var(--border); margin: 10px 4px; }
+
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+  .appbar {
+    height: 44px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  .appbar-title { font-size: 14px; font-weight: 600; }
+  .appbar-right { display: flex; align-items: center; gap: 10px; }
+  .sync-ok { font-size: 11.5px; color: var(--text-tertiary); display:flex; align-items:center; gap:5px;}
+  .sync-ok .led { width:6px;height:6px;border-radius:50%; background: var(--green); }
+  .check-badge {
+    font-size: 11.5px; font-weight: 600;
+    padding: 3px 9px; border-radius: 20px;
+    background: var(--green-bg); color: var(--green);
+    display: flex; align-items: center; gap: 5px;
+  }
+  .check-badge.alert { background: var(--red-bg); color: var(--red); }
+
+  /* pinned balance panel */
+  .balance-panel {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px 14px;
+    flex-shrink: 0;
+  }
+  .balance-groups { display: flex; gap: 26px; }
+  .bgroup { flex: 1; }
+  .bgroup-label { font-size: 10.5px; font-weight: 600; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+  .bgroup-total { font-size: 17px; font-weight: 700; }
+  .bgroup-total.blue { color: var(--blue); }
+  .bgroup-sub { font-size: 11px; color: var(--text-secondary); margin-top: 3px; display:flex; justify-content:space-between; max-width:170px;}
+
+  /* grid */
+  .grid-wrap { flex: 1; overflow: auto; background: var(--surface); }
+
+  /* ---------- FILTER / SEARCH BAR ---------- */
+  .filter-bar { padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; gap: 8px; }
+  .filter-row1 { display: flex; align-items: center; gap: 8px; }
+  .search-field { flex: 1; display: flex; align-items: center; gap: 7px; background: var(--surface-sunken); border-radius: var(--radius); padding: 7px 11px; }
+  .search-field input { border: none; background: none; outline: none; font-family: var(--font-ui); font-size: 12.5px; color: var(--text); flex: 1; }
+  .search-field input::placeholder { color: var(--text-tertiary); }
+  .search-icon { color: var(--text-tertiary); font-size: 12px; }
+  .date-presets { display: flex; gap: 2px; background: var(--surface-sunken); border-radius: var(--radius); padding: 2px; }
+  .date-presets span { font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 4px; color: var(--text-tertiary); cursor: pointer; }
+  .date-presets span.on { background: var(--surface); color: var(--blue); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .savedfilter-wrap { position: relative; }
+  .savedfilter-btn { font-size: 11.5px; font-weight: 600; padding: 7px 12px; border-radius: var(--radius); background: var(--surface-sunken); color: var(--text-secondary); border: none; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .savedfilter-menu { position: absolute; top: 110%; right: 0; width: 220px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 6px 20px rgba(0,0,0,.15); z-index: 20; display: none; overflow: hidden; }
+  .savedfilter-menu.open { display: block; }
+  .savedfilter-item { padding: 9px 12px; font-size: 12px; cursor: pointer; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .savedfilter-item:hover { background: var(--surface-sunken); }
+  .savedfilter-item .sf-count { font-size: 10px; color: var(--text-tertiary); }
+  .savedfilter-save { padding: 9px 12px; font-size: 11.5px; font-weight: 600; color: var(--blue); cursor: pointer; }
+  .filter-row2 { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .filter-chip { display: flex; align-items: center; gap: 6px; background: var(--blue-bg); color: var(--blue); font-size: 11px; font-weight: 600; padding: 4px 6px 4px 10px; border-radius: 12px; }
+  .filter-chip .chip-x { cursor: pointer; opacity: .7; font-size: 10px; width: 15px; height: 15px; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
+  .filter-chip .chip-x:hover { background: rgba(0,0,0,.08); opacity: 1; }
+  .filter-clearall { font-size: 11px; color: var(--text-tertiary); cursor: pointer; text-decoration: underline; }
+  .filter-count { font-size: 10.5px; color: var(--text-tertiary); margin-left: auto; white-space: nowrap; }
+  .deleted-toggle { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-secondary); cursor: pointer; padding: 6px 10px; border-radius: var(--radius); background: var(--surface-sunken); user-select: none; }
+  .deleted-toggle input { accent-color: var(--red); }
+  tr.deleted-row td { opacity: .5; text-decoration: line-through; }
+  tr.deleted-row .restore-btn { text-decoration: none; opacity: 1; font-size: 10.5px; font-weight: 700; color: var(--blue); cursor: pointer; padding: 3px 9px; border-radius: 10px; background: var(--blue-bg); white-space: nowrap; }
+  table.ledger { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.ledger th {
+    position: sticky; top: 0;
+    background: var(--surface-sunken);
+    text-align: left;
+    font-size: 10.5px; font-weight: 600; color: var(--text-tertiary);
+    text-transform: uppercase; letter-spacing: 0.04em;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  table.ledger td {
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+    white-space: nowrap;
+  }
+  .cat-select.missing { background: var(--yellow-bg); color: var(--yellow); font-weight: 600; border-radius: 4px; }
+  .cat-select.blocked { color: var(--text-tertiary); font-style: italic; }
+  table.ledger tr:hover td { background: var(--surface-sunken); }
+  td.amt { text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+  td.amt.neg { color: var(--amber); }
+  td.amt.pos { color: var(--green); }
+  .agg-col { color: var(--text-tertiary); font-family: var(--font-num); }
+  .detail-sub { font-size: 11px; color: var(--text-tertiary); }
+  .tag-pill {
+    display: inline-block; font-size: 10px; font-weight: 600;
+    padding: 1px 7px; border-radius: 10px;
+    background: var(--purple-bg); color: var(--purple);
+    margin-right: 4px;
+  }
+  .tag-pill.project { background: var(--teal-bg); color: var(--teal); }
+  .tag-pill.statement { background: var(--slate-bg); color: var(--slate); }
+  .tag-pill.claim { background: var(--indigo-bg); color: var(--indigo); }
+  .konto-flow { display: flex; align-items: center; gap: 4px; }
+  .flow-arrow { color: var(--text); font-family: var(--font-ui); font-size: 12px; font-weight: 800; margin: 0 3px; }
+  .flow-col { text-align: center; color: var(--text); font-family: var(--font-ui); font-size: 15px; font-weight: 800; }
+  .flow-col.muted { color: var(--border); font-size: 13px; }
+  .cat-picker { position: relative; }
+  select.grid-select {
+    font-family: var(--font-ui); font-size: 12.5px; color: var(--text);
+    background: transparent; border: 1px dashed transparent; border-radius: 4px;
+    padding: 3px 4px; width: 100%; cursor: pointer;
+  }
+  select.grid-select:hover { border-color: var(--border); background: var(--surface-sunken); }
+  select.grid-select:focus { outline: 2px solid var(--blue); border-color: transparent; }
+  select.grid-select.placeholder { color: var(--yellow); font-weight: 600; }
+  select.grid-select:disabled { color: var(--text-tertiary); cursor: not-allowed; }
+  tr.demo-row td { background: var(--blue-bg); }
+  .cell-focused { outline: 2px solid var(--blue); outline-offset: -2px; background: var(--blue-bg); }
+  .muted-cell { color: var(--text-tertiary); }
+  .expand-chevron { display: inline-block; color: var(--text-tertiary); margin-right: 5px; font-size: 10px; }
+  .split-hint { font-size: 10.5px; color: var(--text-tertiary); font-weight: 400; margin-left: 6px; }
+  tr.split-row td { background: var(--surface-sunken); font-size: 12px; }
+  tr.split-row .detail-sub { color: var(--text-secondary); }
+  .status-dot {
+    display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--purple); margin-left: 6px; vertical-align: middle;
+    cursor: pointer;
+  }
+
+  .p-filter-bar { padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; gap: 6px; }
+  .p-search-field { display: flex; align-items: center; gap: 7px; background: var(--surface-sunken); border-radius: var(--radius); padding: 7px 10px; }
+  .p-search-field input { border: none; background: none; outline: none; font-size: 12px; flex: 1; color: var(--text); }
+  .p-filter-toggles { display: flex; align-items: center; gap: 6px; overflow-x: auto; }
+  .p-filter-toggles .p-chip { font-size: 10.5px; font-weight: 600; padding: 4px 9px; border-radius: 11px; background: var(--blue-bg); color: var(--blue); white-space: nowrap; flex-shrink: 0; }
+  .p-filter-toggles .p-addfilter { font-size: 10.5px; font-weight: 600; padding: 4px 9px; border-radius: 11px; background: var(--surface-sunken); color: var(--text-tertiary); white-space: nowrap; flex-shrink: 0; }
+
+  /* ---------- PHONE FRAME ---------- */
+
+  .phone {
+    width: 320px;
+    background: var(--bg);
+    border-radius: 30px;
+    overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.18);
+    height: 640px;
+    display: flex; flex-direction: column;
+    border: 6px solid #0B0D10;
+  }
+  .phone .appbar { border-radius: 0; }
+  .phone .balance-panel { padding: 10px 14px 12px; }
+  .phone .bgroup-total { font-size: 15px; }
+  .phone .balance-groups { gap: 14px; }
+
+  .phone-list { flex: 1; overflow: auto; padding: 6px 10px; }
+  .txn-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    margin-bottom: 6px;
+  }
+  .txn-top { display: flex; justify-content: space-between; align-items: baseline; }
+  .txn-label { font-size: 13px; font-weight: 600; }
+  .txn-amt { font-family: var(--font-num); font-size: 13px; font-weight: 600; }
+  .txn-amt.neg { color: var(--amber); }
+  .txn-amt.pos { color: var(--green); }
+  .txn-meta { font-size: 11px; color: var(--text-secondary); margin-top: 3px; display: flex; justify-content: space-between; }
+  .txn-cat { font-size: 11px; margin-top: 5px; }
+  .txn-cat.missing { background: var(--yellow-bg); color: var(--yellow); font-weight: 600; border-radius: 4px; padding: 1px 6px; display: inline-block; }
+  .txn-split { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border); }
+  .txn-split-line { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary); padding: 2px 0; }
+
+  .bottomnav {
+    height: 58px; flex-shrink: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex;
+  }
+  .bnav-item {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; font-size: 10px; color: var(--text-tertiary);
+  }
+  .bnav-item.active { color: var(--blue); font-weight: 600; }
+  .bnav-icon { width: 18px; height: 18px; border-radius: 5px; background: currentColor; opacity: 0.85; }
+
+  .fab {
+    position: absolute; right: 18px; bottom: 74px;
+    width: 48px; height: 48px; border-radius: 50%;
+    background: var(--blue); color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 400;
+    box-shadow: 0 4px 14px rgba(46,90,172,0.4);
+  }
+  .phone-inner { position: relative; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+  .caption { max-width: 1400px; margin: 20px auto 0; font-size: 12.5px; color: #4A5261; line-height: 1.6; }
+  .caption b { color: #171B21; }
+</style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <button onclick="document.documentElement.setAttribute('data-theme','light'); sync()">Light</button>
+    <button onclick="document.documentElement.setAttribute('data-theme','dark'); sync()">Dark</button>
+    <span>Konten — tablet (sidebar/grid) and phone (bottom nav/cards) side by side</span>
+  </div>
+
+  <div class="frames">
+
+    <!-- ===================== TABLET ===================== -->
+    <div class="tablet" data-theme="light" id="tabletFrame">
+      <div class="sidebar">
+        <div class="brand">Geld</div>
+        <div class="navitem"><span class="dot"></span>Dashboard</div>
+        <div class="navitem active"><span class="dot"></span>Konten</div>
+        <div class="navitem"><span class="dot"></span>Verlauf</div>
+        <div class="navitem"><span class="dot"></span>Planung</div>
+        <div class="navdivider"></div>
+        <div class="navitem"><span class="dot"></span>Reisekosten</div>
+        <div class="navitem"><span class="dot"></span>CPAM</div>
+        <div class="navitem"><span class="dot"></span>Amazon</div>
+        <div class="navdivider"></div>
+        <div class="navitem"><span class="dot"></span>Import/Export</div>
+        <div class="navitem"><span class="dot"></span>Einstellungen</div>
+      </div>
+
+      <div class="main">
+        <div class="appbar">
+          <div class="appbar-title">Konten</div>
+          <div class="appbar-right">
+            <div class="sync-ok"><span class="led"></span>synchronisiert</div>
+            <div class="check-badge alert">⚠ Rücklagen −250 €</div>
+          </div>
+        </div>
+
+        <div class="balance-panel">
+          <div class="balance-groups">
+            <div class="bgroup">
+              <div class="bgroup-label">Barkonten</div>
+              <div class="bgroup-total blue num">52.633,39 €</div>
+              <div class="bgroup-sub"><span>BNP-Konto</span><span class="num">29.299,71 €</span></div>
+              <div class="bgroup-sub"><span>DKB-Konto</span><span class="num">5.583,90 €</span></div>
+            </div>
+            <div class="bgroup">
+              <div class="bgroup-label">Sparkonten</div>
+              <div class="bgroup-total blue num">22.081,00 €</div>
+              <div class="bgroup-sub"><span>Livret A Sparen</span><span class="num">21.607,24 €</span></div>
+              <div class="bgroup-sub"><span>Livret A Tagesgeld</span><span class="num">473,76 €</span></div>
+            </div>
+            <div class="bgroup">
+              <div class="bgroup-label">Geldanlage</div>
+              <div class="bgroup-total blue num">34.254,10 €</div>
+              <div class="bgroup-sub"><span>Aktien + Crypto + ESOP</span><span class="num">…</span></div>
+              <div class="bgroup-sub"><span>Edelmetalle</span><span class="num">8.562,00 €</span></div>
+            </div>
+            <div class="bgroup">
+              <div class="bgroup-label">Gesamt</div>
+              <div class="bgroup-total blue num">106.163,90 €</div>
+              <div class="bgroup-sub"><span>Stand</span><span>06.09.2026</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="filter-bar">
+          <div class="filter-row1">
+            <div class="search-field">
+              <span class="search-icon">🔍</span>
+              <input type="text" placeholder="Suche: Name, Kommentar, Betrag…" value="">
+            </div>
+            <div class="date-presets">
+              <span>Jahr</span><span class="on">Monat</span><span>Tag</span><span>Benutzerdefiniert</span>
+            </div>
+            <div class="savedfilter-wrap">
+              <button class="savedfilter-btn" onclick="document.getElementById('sfMenu').classList.toggle('open')">⭐ Gespeicherte Filter ▾</button>
+              <div class="savedfilter-menu" id="sfMenu">
+                <div class="savedfilter-item"><span>Unkategorisiert</span><span class="sf-count">12</span></div>
+                <div class="savedfilter-item"><span>Schottland 2026</span><span class="sf-count">18</span></div>
+                <div class="savedfilter-item"><span>Offene Außenstände</span><span class="sf-count">4</span></div>
+                <div class="savedfilter-save">+ Aktuellen Filter speichern</div>
+              </div>
+            </div>
+            <label class="deleted-toggle">
+              <input type="checkbox" id="deletedToggle" onchange="document.getElementById('deletedRow').style.display = this.checked ? 'table-row' : 'none';">
+              Kürzlich gelöscht
+            </label>
+          </div>
+          <div class="filter-row2">
+            <div class="filter-chip">Monat: Juli 2026 <span class="chip-x">×</span></div>
+            <div class="filter-chip">Tag: Schottland <span class="chip-x">×</span></div>
+            <div class="filter-chip">Konto: Visa Airbus <span class="chip-x">×</span></div>
+            <span class="filter-clearall">Alle zurücksetzen</span>
+            <span class="filter-count">14 von 213 Buchungen</span>
+          </div>
+        </div>
+
+        <div class="grid-wrap">
+          <table class="ledger">
+            <thead>
+              <tr>
+                <th>Datum</th><th>Konto 1</th><th style="width:28px"></th><th>Konto 2</th><th>Empfänger</th><th style="text-align:right">Betrag</th>
+                <th>Kategorie</th><th>Unterkategorie</th><th>Details</th><th>Tags</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="demo-row">
+                <td class="num">08.07.</td><td>BNP-Konto</td><td class="flow-col muted"></td><td class="muted-cell">—</td><td>Market Magasin</td>
+                <td class="amt neg num">−101,24 €</td>
+                <td>
+                  <select class="grid-select" onchange="onCatChange(this)">
+                    <option value="Lebenshaltung" selected>Lebenshaltung</option>
+                    <option value="Wohnen">Wohnen</option>
+                    <option value="Sonstiges">Sonstiges</option>
+                    <option value="Mobilität">Mobilität</option>
+                  </select>
+                </td>
+                <td>
+                  <select class="grid-select" data-subcat>
+                    <option value="Lebensmittel & Haushalt" selected>Lebensmittel &amp; Haushalt</option>
+                    <option value="Kantine">Kantine</option>
+                    <option value="Ausgehen">Ausgehen</option>
+                    <option value="Klamotten Markus">Klamotten Markus</option>
+                    <option value="Haustiere">Haustiere</option>
+                  </select>
+                </td>
+                <td></td><td></td>
+              </tr>
+              <tr>
+                <td class="num">08.07.</td><td>BNP-Konto</td><td class="flow-col muted"></td><td class="muted-cell">—</td><td>AMAZON PAYMENTS PARIS2441535</td>
+                <td class="amt neg num">−28,50 €</td>
+                <td class="cat-select missing">– wählen –</td><td class="cat-select blocked">– erst Kategorie wählen –</td><td></td><td></td>
+              </tr>
+              <tr>
+                <td class="num">14.07.</td><td>BNP-Konto</td><td class="flow-col muted"></td><td class="muted-cell">—</td><td>AIRBNB HMJKT8</td>
+                <td class="amt neg num">−294,86 €</td>
+                <td>Sonstiges</td><td>Urlaube</td><td>Schottland: Unterkünfte</td>
+                <td><span class="tag-pill project">Schottland</span></td>
+              </tr>
+              <tr>
+                <td class="num">13.07.</td>
+                <td>Livret A Sparen</td><td class="flow-col">→</td><td>Consors-Konto</td><td>Übertrag auf Consors</td>
+                <td class="amt neg num">−600,00 €</td>
+                <td class="muted-cell">—</td><td class="muted-cell">—</td><td>Sparen Sophia → Anlage</td>
+                <td><span class="tag-pill">Sparen Sophia</span></td>
+              </tr>
+              <tr style="border-top:2px solid var(--border)">
+                <td class="num">30.07.</td><td>BNP-Konto</td><td class="flow-col muted"></td><td class="muted-cell">—</td>
+                <td><span class="expand-chevron">▾</span><b>Airbus Gehalt</b> <span class="split-hint">4 Positionen</span></td>
+                <td class="amt pos num">5.035,93 €</td>
+                <td class="muted-cell">—</td><td class="muted-cell">—</td><td></td><td></td>
+              </tr>
+              <tr class="split-row">
+                <td></td><td></td><td></td><td></td><td class="detail-sub">↳ Gehalt Markus</td><td class="amt pos num">8.137,00 €</td>
+                <td>Einnahmen</td><td>Gehalt Markus</td><td></td><td></td>
+              </tr>
+              <tr class="split-row">
+                <td></td><td></td><td></td><td></td><td class="detail-sub">↳ Krankenkasse</td><td class="amt neg num">−1.908,39 €</td>
+                <td>Gesundheit</td><td>Krankenkasse</td><td></td><td></td>
+              </tr>
+              <tr class="split-row">
+                <td></td><td></td><td></td><td></td><td class="detail-sub">↳ Firmenwagen</td><td class="amt neg num">−299,96 €</td>
+                <td>Mobilität</td><td>Firmenwagen</td><td></td><td></td>
+              </tr>
+              <tr>
+                <td class="num">15.07.</td><td>BNP-Konto</td><td class="flow-col muted"></td><td class="muted-cell">—</td>
+                <td>Pharmacie</td>
+                <td class="amt neg num">−59,78 €</td>
+                <td>Sonstiges</td><td>Geld verliehen<span class="status-dot" title="Offen — Teil der Sammelforderung GW1298747"></span></td><td></td>
+                <td><span class="tag-pill claim">GW1298747</span></td>
+              </tr>
+              <tr>
+                <td class="num">17.07.</td><td>Visa AIRBUS</td><td class="flow-col muted"></td><td class="muted-cell">—</td><td>O2SWITCH.FR</td>
+                <td class="amt neg num">−131,58 €</td>
+                <td>Sonstiges</td><td>Sonstige Ausgaben</td><td>Solid Homestead Plan</td>
+                <td><span class="tag-pill statement">2026-08</span></td>
+              </tr>
+              <tr>
+                <td class="num">22.07.</td><td>Bar Markus</td><td class="flow-col muted"></td><td class="muted-cell">—</td><td>Thomas (Geldbeutel vergessen)</td>
+                <td class="amt neg num">−40,00 €</td>
+                <td>Sonstiges</td><td>Geld verliehen<span class="status-dot" title="Offen — schließt sich automatisch, sobald der Tag-Saldo auf Null geht (§3g Außenstände)"></span></td><td></td><td></td>
+              </tr>
+              <tr>
+                <td class="num cell-focused">31.07.</td><td>Paypal</td><td class="flow-col muted"></td><td class="muted-cell">—</td><td>Spotify</td>
+                <td class="amt neg num">−9,99 €</td>
+                <td>Hobbys</td><td>Hobbys Sophia</td><td></td><td></td>
+              </tr>
+              <tr class="deleted-row" id="deletedRow" style="display:none;">
+                <td class="num">24.07.</td><td>Amazon.de</td><td class="flow-col muted"></td><td class="muted-cell">—</td><td>Gartenschlauch</td>
+                <td class="amt neg num">−18,49 €</td>
+                <td>Sonstiges</td><td>Garten</td><td></td><td><span class="restore-btn" onclick="document.getElementById('deletedToggle').checked=false; document.getElementById('deletedRow').style.display='none';">Wiederherstellen</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== PHONE ===================== -->
+    <div class="phone" data-theme="light" id="phoneFrame">
+      <div class="phone-inner">
+        <div class="appbar">
+          <div class="appbar-title">Konten</div>
+          <div class="appbar-right">
+            <div class="check-badge alert">⚠</div>
+          </div>
+        </div>
+
+        <div class="balance-panel">
+          <div class="balance-groups">
+            <div class="bgroup">
+              <div class="bgroup-label">Barkonten</div>
+              <div class="bgroup-total blue num">52.633 €</div>
+            </div>
+            <div class="bgroup">
+              <div class="bgroup-label">Sparkonten</div>
+              <div class="bgroup-total blue num">22.081 €</div>
+            </div>
+            <div class="bgroup">
+              <div class="bgroup-label">Gesamt</div>
+              <div class="bgroup-total blue num">106.164 €</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-filter-bar">
+          <div class="p-search-field">
+            <span class="search-icon">🔍</span>
+            <input type="text" placeholder="Suche…" value="">
+          </div>
+          <div class="p-filter-toggles">
+            <span class="p-chip">Monat: Juli</span>
+            <span class="p-chip">Tag: Schottland</span>
+            <span class="p-addfilter">+ Filter</span>
+          </div>
+        </div>
+
+        <div class="phone-list">
+          <div class="txn-card">
+            <div class="txn-top"><div class="txn-label">Market Magasin</div><div class="txn-amt neg num">−101,24 €</div></div>
+            <div class="txn-meta"><span>08.07. · BNP-Konto</span></div>
+            <div class="txn-cat">Lebenshaltung ▸ Lebensmittel &amp; Haushalt</div>
+          </div>
+
+          <div class="txn-card">
+            <div class="txn-top"><div class="txn-label">AMAZON PAYMENTS PARIS</div><div class="txn-amt neg num">−28,50 €</div></div>
+            <div class="txn-meta"><span>08.07. · BNP-Konto</span></div>
+            <div class="txn-cat missing">– Kategorie wählen –</div>
+          </div>
+
+          <div class="txn-card">
+            <div class="txn-top"><div class="txn-label">AIRBNB HMJKT8</div><div class="txn-amt neg num">−294,86 €</div></div>
+            <div class="txn-meta"><span>14.07. · BNP-Konto</span></div>
+            <div class="txn-cat">Sonstiges ▸ Urlaube <span class="tag-pill project">Schottland</span></div>
+          </div>
+
+          <div class="txn-card">
+            <div class="txn-top"><div class="txn-label">Übertrag auf Consors</div><div class="txn-amt neg num">−600,00 €</div></div>
+            <div class="txn-meta"><span class="konto-flow">13.07. · Livret A Sparen<span class="flow-arrow">→</span>Consors-Konto</span></div>
+            <div class="txn-cat"><span class="tag-pill">Sparen Sophia</span></div>
+          </div>
+
+          <div class="txn-card">
+            <div class="txn-top"><div class="txn-label"><span class="expand-chevron">▾</span>Airbus Gehalt <span class="split-hint">4 Positionen</span></div><div class="txn-amt pos num">5.035,93 €</div></div>
+            <div class="txn-meta"><span>30.07. · BNP-Konto</span></div>
+            <div class="txn-split">
+              <div class="txn-split-line"><span>Gehalt Markus</span><span class="num">8.137,00 €</span></div>
+              <div class="txn-split-line"><span>Krankenkasse</span><span class="num">−1.908,39 €</span></div>
+              <div class="txn-split-line"><span>Firmenwagen</span><span class="num">−299,96 €</span></div>
+            </div>
+          </div>
+
+          <div class="txn-card">
+            <div class="txn-top"><div class="txn-label">Pharmacie</div><div class="txn-amt neg num">−59,78 €</div></div>
+            <div class="txn-meta"><span>15.07. · BNP-Konto</span></div>
+            <div class="txn-cat">Sonstiges ▸ Geld verliehen<span class="status-dot" title="Offen — CPAM ausstehend"></span> <span class="tag-pill claim">GW1298747</span></div>
+          </div>
+
+          <div class="txn-card">
+            <div class="txn-top"><div class="txn-label">O2SWITCH.FR</div><div class="txn-amt neg num">−131,58 €</div></div>
+            <div class="txn-meta"><span>17.07. · Visa AIRBUS</span></div>
+            <div class="txn-cat">Sonstiges ▸ Sonstige Ausgaben <span class="tag-pill statement">2026-08</span></div>
+          </div>
+
+          <div class="txn-card">
+            <div class="txn-top"><div class="txn-label">Spotify</div><div class="txn-amt neg num">−9,99 €</div></div>
+            <div class="txn-meta"><span>31.07. · Paypal</span></div>
+            <div class="txn-cat">Hobbys ▸ Hobbys Sophia</div>
+          </div>
+        </div>
+
+        <div class="fab">+</div>
+
+        <div class="bottomnav">
+          <div class="bnav-item active"><div class="bnav-icon"></div>Konten</div>
+          <div class="bnav-item"><div class="bnav-icon"></div>Dashboard</div>
+          <div class="bnav-item"><div class="bnav-icon"></div>Verlauf</div>
+          <div class="bnav-item"><div class="bnav-icon"></div>Planung</div>
+          <div class="bnav-item"><div class="bnav-icon"></div>Mehr</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="caption">
+    <b>Reading this mockup:</b> amber = expenses, green = income, blue = computed totals, red = alert only (§2.8a). Tag pills carry their own color layer (§2.5): purple = allocation tag, teal = grouping/project, indigo = grouping/claim, slate = grouping/statement, rose = grouping/claim-category. <b>Yellow now marks only the specific missing field</b> — e.g. the "AMAZON PAYMENTS" row's Kategorie cell — never a full-row wash; the dependent Unterkategorie cell shows a plain "blocked/disabled" look until Kategorie is chosen, distinct from an actual missing-data flag. The Kategorie/Unterkategorie pair on the "Market Magasin" row is a <b>live demo</b> — change Kategorie and watch Unterkategorie clear, flag yellow, and refilter. The <b>arrow column</b> between Konto 1/2 is now a plain bold unicode arrow in the interface font, no tint or background — populated only for real transfers (Consors row). Two open-item examples, both now closed the same way: <b>Pharmacie</b> is part of a tagged CPAM claim (indigo "GW1298747" pill), and <b>"Thomas (Geldbeutel vergessen)"</b> is a standalone loan (Außenstände, §3g) — neither needs any manual action anymore; both dots clear themselves automatically the instant their tag's signed total nets to zero. The old manual 🔗 link-picker is retired entirely. The split transaction ("Airbus Gehalt") uses an expand chevron + "N Positionen" hint instead of a dedicated Aggregat column. The focused cell outline (bottom row, "31.07.") illustrates the keyboard-navigable grid state. Figures are set in a monospace/tabular numeral font throughout so columns of amounts always align. <b>New: the filter/search bar</b> above the grid — a live quick-filter search box (matches name, comments, and amount at once), date-range presets (Jahr/Monat/Tag/Benutzerdefiniert — Jahr just reflects the global year selector), and a saved-filters menu (⭐, top right) for recalling or creating named filter combinations. Active filters render as removable chips underneath, with a running "N von M Buchungen" count and a one-tap "Alle zurücksetzen." Every filter shown is single-value-per-field, by design — Konten stays on AG Grid's free Community tier rather than needing Enterprise's multi-select column filters. On phone, the same idea condenses to a search field plus horizontally-scrolling filter chips. <b>New: "Kürzlich gelöscht"</b> toggle (§2.9a) next to the saved-filters button — off by default; switched on, deleted-but-not-yet-purged transactions from roughly the last week reappear, struck through and dimmed, each with its own "Wiederherstellen" button (the Gartenschlauch row is a live demo — toggle it to see the row appear, click restore to remove it again). Not a keyboard shortcut on purpose — deleting a row clears AG Grid's own cell-edit Undo/Redo stack by design, so this toggle is the actual recovery path for a deleted transaction, not `Ctrl+Z`.
+  </div>
+
+<script>
+  function sync(){
+    var t = document.documentElement.getAttribute('data-theme');
+    document.getElementById('tabletFrame').setAttribute('data-theme', t);
+    document.getElementById('phoneFrame').setAttribute('data-theme', t);
+  }
+
+  var SUBCATS = {
+    "Lebenshaltung": ["Lebensmittel & Haushalt","Kantine","Ausgehen","Klamotten Markus","Klamotten Julia","Klamotten Sophia","Haustiere","Versicherungen","Allgemein"],
+    "Wohnen": ["Hauskredit","Nebenkosten","Instandhaltung","Einrichtung","Garten"],
+    "Sonstiges": ["Urlaube","Geschenke","Sonderausgaben","Steuerausgaben","Rente","Sonstige Ausgaben","Geld verliehen"],
+    "Mobilität": ["Firmenwagen","Autoversicherung","Wartung","Tanken","Gebühren"]
+  };
+
+  // Demonstrates the confirmed rule: changing Kategorie clears Unterkategorie
+  // and flags it (yellow, placeholder) until the user picks a new one —
+  // Unterkategorie's option list is always filtered to the chosen Kategorie.
+  function onCatChange(catSelect){
+    var row = catSelect.closest('tr');
+    var subSelect = row.querySelector('[data-subcat]');
+    var options = SUBCATS[catSelect.value] || [];
+    subSelect.innerHTML = '<option value="" selected disabled>– wählen –</option>' +
+      options.map(function(o){ return '<option value="'+o+'">'+o+'</option>'; }).join('');
+    subSelect.classList.add('placeholder');
+  }
+
+  document.querySelectorAll('[data-subcat]').forEach(function(sel){
+    sel.addEventListener('change', function(){ sel.classList.remove('placeholder'); });
+  });
+</script>
+</body>
+</html>
