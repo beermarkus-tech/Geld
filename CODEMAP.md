@@ -2,23 +2,33 @@
 
 A short structural map of the actual codebase — not what the app is (`spec.md`), not the build order (`PLAN.md`), not what happened (`DEVLOG.md`): where things physically live. Updated on real structural change (a new major component, a folder reorganization, a new shared module), not every session — same discipline as `spec.md`, not a diary.
 
-**Currently empty — no code exists yet.** This file starts as a scaffold. The first Claude Code session that creates real project structure (Phase 0, `PLAN.md`) is responsible for filling in the sections below with what actually exists, not what's planned — this file describes reality, always.
-
 Added on external review, Sept 2026: without this, every session re-derives the codebase's shape by reading around it, and across many sessions that's how two components quietly end up doing the same job.
 
 ---
 
 ## Top-level structure
 
-*(To be filled in once Phase 0 scaffolds the project — directory layout, where components/screens/shared logic live.)*
+React + Vite app, plain JavaScript (no TypeScript — not asked for, and Markus never reads the code directly). Built with `npm run build` into `dist/` (gitignored), deployed to GitHub Pages by `.github/workflows/deploy.yml` on every push to `main`.
+
+- `index.html` — Vite entry HTML; loads `src/main.jsx`.
+- `vite.config.js` — React plugin, Tailwind v4 (`@tailwindcss/vite`), and `vite-plugin-pwa` (see below). `base: '/Geld/'` because the app is served from a GitHub Pages project site, not its own domain.
+- `src/main.jsx` — app entry point; registers the service worker (`virtual:pwa-register`) and mounts `<App />`.
+- `src/App.jsx` — currently the *entire* app: sign-in/sign-out and the blank authenticated shell (Phase 0's deliverable). Real screens will replace this as they're built — nothing here yet decomposes into per-screen components.
+- `src/firebase.js` — Firebase `app`/`auth`/`db` initialization. Firestore is initialized with `persistentLocalCache` + `persistentMultipleTabManager` (spec.md §1a's "offline cache is the real data store, not a bolt-on").
+- `src/firebaseConfig.js` — the public Firebase project config object (not secret, safe to commit — see the comment in the file).
+- `src/lib/authReady.js` — `waitForInitialAuthState()`, the bounded (4s) timeout around Firebase Auth's own init calls (spec.md §1a's cold-start-stall mitigation). Any future code that needs "is there a signed-in user yet" at startup should use this rather than reading `auth.currentUser` directly or assuming `onAuthStateChanged` fires promptly.
+- `src/sw.js` — hand-written service worker source, built via `vite-plugin-pwa`'s `injectManifest` strategy (**not** `generateSW`, which is the default and does *not* give network-first navigation — a real footgun already hit once during Phase 0: the option is `strategies` (plural), and a `strategy` typo silently falls back to `generateSW` with no error). Implements: precache-and-route from the real build manifest, and a `NavigationRoute` wrapped in `NetworkFirst` (2.5s timeout, `app-shell` cache) so navigation never serves a stale cached shell while online (spec.md §1a).
+- `src/index.css` — Tailwind import, the semantic color tokens from spec.md §1b.4 (as CSS custom properties, light + `prefers-color-scheme: dark`; manual override switch not built yet — lands with the Settings screen), self-hosted Inter/JetBrains Mono via `@fontsource/*` (not a Google Fonts CDN link — offline-first means no runtime dependency on a third-party host for something as basic as page text), and the `overscroll-behavior: none` / `touch-action: pan-y` fix from spec.md §1.
+- `public/icons/` — placeholder PWA icons (flat-color circle mark, programmatically generated, not a real design) — swap these out whenever real icon design happens; nothing depends on their current appearance.
+- `firebase.json` / `.firebaserc` / `firestore.rules` / `firestore.indexes.json` — Firestore-only Firebase config (no `hosting` key — GitHub Pages serves the app, not Firebase Hosting, per spec.md §1b.1). `firestore.rules` is currently deny-all (`allow read, write: if false`) until Markus's admin UID is known and the single-admin rule replaces it (§1a/§1b.1).
 
 ## Screen-to-component map
 
-*(To be filled in as each screen from spec.md §3 gets built — which file/component owns which screen, so a session working on one screen doesn't accidentally duplicate logic another screen already has.)*
+Not started — `App.jsx` has no screens yet beyond the auth shell. This section gets real entries starting whenever Konten (Phase 1a) is built.
 
 ## Shared/pure calculation functions
 
-*(To be filled in starting Phase 1a — `balance()`, the split-transaction invariant, allocation-tag reconciliation, the `Budget` formula, and their tests. These are the functions §4.1 of the external review specifically flagged as needing test coverage — this section should point to both the implementation and its test file for each.)*
+Not started — `balance()` and the rest arrive in Phase 1a.
 
 ## Known duplication or drift to watch
 

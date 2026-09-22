@@ -1,0 +1,62 @@
+@import 'tailwindcss';
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+
+/* Semantic color tokens (spec.md §1b.4) — red is reserved exclusively for
+   alerts everywhere, never for "this is an expense section." Manual
+   light/dark override switch lands with the Settings screen (§1b.5); for
+   now this follows the system preference only. */
+:root {
+  --color-bg: #f7f8fa;
+  --color-surface: #ffffff;
+  --color-text: #14181f;
+  --color-text-muted: #5b6472;
+  --color-border: #e2e5eb;
+
+  --color-computed: #2563eb; /* blue — computed account totals */
+  --color-income: #16a34a; /* green — income */
+  --color-expense: #d97706; /* amber/orange — expenses */
+  --color-savings: #7c3aed; /* purple — savings/investment transfers */
+  --color-needs-attention: #eab308; /* yellow — incomplete, needs categorization */
+  --color-alert: #dc2626; /* red — alerts only, always */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0b1017;
+    --color-surface: #161c26;
+    --color-text: #e7eaf0;
+    --color-text-muted: #9aa3b2;
+    --color-border: #2a3140;
+
+    --color-computed: #60a5fa;
+    --color-income: #4ade80;
+    --color-expense: #fbbf24;
+    --color-savings: #a78bfa;
+    --color-needs-attention: #fde047;
+    --color-alert: #f87171;
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: 'Inter', system-ui, sans-serif;
+  /* Prevents rubber-band overscroll / accidental pull-to-reload (spec.md §1). */
+  overscroll-behavior: none;
+  touch-action: pan-y;
+}
+
+.tabular-figure {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}

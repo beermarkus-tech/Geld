@@ -1,0 +1,19 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // TODO: replace with Markus's real Google UID once he's signed in once
+    // (visible in the app's blank shell, or Firebase console -> Authentication
+    // -> Users) — then swap the rule below for the single-admin-UID version:
+    //
+    //   match /{document=**} {
+    //     allow read, write: if request.auth != null && request.auth.uid == 'REPLACE_WITH_ADMIN_UID';
+    //   }
+    //
+    // Deny-everything until then — safe default, not a placeholder anyone
+    // (including Markus) can read/write through yet.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
