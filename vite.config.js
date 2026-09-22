@@ -1,3 +1,5 @@
+import { execSync } from 'node:child_process'
+
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -7,8 +9,23 @@ import { defineConfig } from 'vite'
 // asset URL needs this prefix — a plain "/" would 404 everything.
 const base = '/Geld/'
 
+// Build number = total commit count, so it's a free, always-correct,
+// monotonically increasing identifier for exactly what's deployed — no
+// counter file to maintain or forget to bump. Requires full git history
+// (CI's checkout step uses fetch-depth: 0), not a shallow clone.
+function getBuildNumber() {
+  try {
+    return execSync('git rev-list --count HEAD').toString().trim()
+  } catch {
+    return '0'
+  }
+}
+
 export default defineConfig({
   base,
+  define: {
+    __BUILD_NUMBER__: JSON.stringify(getBuildNumber()),
+  },
   plugins: [
     react(),
     tailwindcss(),

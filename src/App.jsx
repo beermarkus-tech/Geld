@@ -84,9 +84,6 @@ export default function App() {
           Angemeldet als {user.email}
           {usingCachedSession && ' (aus zwischengespeicherter Sitzung, noch nicht online bestätigt)'}
         </p>
-        {/* Temporary, for the Phase 0 security-rule setup step — remove once
-            the admin UID is locked into the Firestore rules. */}
-        <p className="tabular-figure text-xs text-[var(--color-text-muted)]">UID: {user.uid}</p>
       </main>
     </div>
   )
