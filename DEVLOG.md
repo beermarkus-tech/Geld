@@ -197,3 +197,11 @@ Added the "Kürzlich gelöscht" toggle (§2.9a) to the filter bar, next to the s
 **Open items:** the tablet PWA/offline check (Phase 0) and Verlauf year-level notes remain open from the entry above; the 2026-migration question there is resolved.
 
 **Next session should probably:** build the one-time import screen (file picker → batch writes to Firestore, removed afterwards) for all generated files of both years, import, then Konten's grid.
+
+## Session 2 — 2026-09-22 — One-time import screen built
+
+**Phase 1a — import screen built** (`src/ImportScreen.jsx`, wired into `App.jsx`'s authenticated shell — see CODEMAP.md). A multi-file picker classifies each selected file by name (`accounts.json`, `categories.json`, `tags-allocation.json`, `tags-breakdown-{year}.json`, `jahresabschluss.json`, `transactions-{year}.json`, `budgets-{year}.json`), merges same-collection files (2025/2026 breakdown tags overlap and are byte-identical where they do), and batch-writes each collection to Firestore in chunks of 400. Deterministic ids throughout mean re-running it is safe. **Explicitly temporary** — it's Phase 1a's stand-in for a real screen, not a permanent Settings/Import feature (§3k is that, much later); remove it once Markus confirms the import worked and Konten's grid takes over `App.jsx`'s main content.
+
+The ten generated files (both years' seed + migration output) were sent to Markus directly in chat, per the standing privacy rule — never committed, since the repo is public.
+
+**Next session should probably:** confirm the import landed correctly in Firestore (spot-check a few real balances against the app once Konten can show them, or the Firebase console meanwhile), delete `ImportScreen.jsx` and its `App.jsx` wiring, then start Konten's grid (AG Grid) per PLAN.md Phase 1a.

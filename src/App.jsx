@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth'
 
 import { auth } from './firebase'
+import ImportScreen from './ImportScreen'
 import { waitForInitialAuthState } from './lib/authReady'
 
 export default function App() {
@@ -79,11 +80,15 @@ export default function App() {
         </button>
       </header>
 
-      <main className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-        <p className="text-[var(--color-text-muted)]">
+      <main className="flex flex-1 flex-col overflow-y-auto">
+        <p className="px-6 pt-4 text-center text-sm text-[var(--color-text-muted)]">
           Angemeldet als {user.email}
           {usingCachedSession && ' (aus zwischengespeicherter Sitzung, noch nicht online bestätigt)'}
         </p>
+        {/* Phase 1a's one-time data import (PLAN.md) — the only real screen
+            until Konten's grid is built; remove once the import is done and
+            confirmed, and Konten replaces this. */}
+        <ImportScreen />
       </main>
     </div>
   )

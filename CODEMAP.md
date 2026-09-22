@@ -35,7 +35,9 @@ To regenerate: export each year's sheet from Markus's Google Drive as `.xlsx` (t
 
 ## Screen-to-component map
 
-Not started — `App.jsx` has no screens yet beyond the auth shell. This section gets real entries starting whenever Konten (Phase 1a) is built.
+- `src/ImportScreen.jsx` — **temporary, Phase 1a only.** Rendered directly inside `App.jsx`'s authenticated shell (not a routed screen — there's no router yet). Lets Markus pick the JSON files `migration/`'s scripts generated (sent to him directly, never bundled into the public app or committed — see `migration/`'s own section above) and batch-writes them into Firestore via `writeBatch`, routing by filename into `accounts`/`categories`/`tags`/`transactions`/`budgets`. Every document id is deterministic, so re-running it is safe (last write of identical data wins). **Remove this once the import is confirmed done and Konten's grid replaces it as `App.jsx`'s main content** — don't let it linger as permanent app surface.
+
+Real screen-to-component entries start once Konten (Phase 1a) is built.
 
 ## Shared/pure calculation functions
 
