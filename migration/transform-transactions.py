@@ -99,7 +99,24 @@ def parse_amount(s):
 def to_cents(f):
     return round(f * 100)
 
+# Data-entry typos in the Gsheet, each confirmed by Markus. Keyed by
+# (date, Konto, Empfänger) -> {field: corrected value}.
+CORRECTIONS = {
+    # Transfer column said Livret A Tagesgeld; counterpart is on Livret A Sparen.
+    ("2025-10-16", "BNP-Konto", "Ausgleich Taxe Fonciere"): {"transfer": "Livret A Sparen"},
+}
+
+
 def load_rows():
+    rows = _load_raw_rows()
+    for r in rows:
+        fix = CORRECTIONS.get((r["datum"], r["konto"], r["empfaenger"]))
+        if fix:
+            r.update(fix)
+    return rows
+
+
+def _load_raw_rows():
     with open(SRC, newline="", encoding="utf-8") as f:
         rows = list(csv.reader(f))
     header = rows[10]
@@ -290,6 +307,42 @@ def verify_account_sums(rows, transactions):
     return ok
 
 
+def allocation_tag_delta(tx, line, targets):
+    """A tagged line's effect on its allocation tag's balance: follows the
+    money into or out of the tag's own account(s), exactly like the
+    account-balance rule (spec.md §2.6/§2.8)."""
+    f, to = tx["fromAccountId"], tx["toAccountId"]
+    if f and to:
+        if to in targets and f not in targets:
+            return line["amountCents"]
+        if f in targets and to not in targets:
+            return -line["amountCents"]
+        raise ValueError(f"tagged transfer with no clear direction for its tag: {tx['id']}")
+    return line["amountCents"]
+
+
+def verify_tag_sums(rows, transactions):
+    with open("/home/user/Geld/migration/seed/tags-allocation.json") as f:
+        targets = {t["id"]: set(t["reconciliationTargetAccountIds"]) for t in json.load(f)}
+    expected = defaultdict(int)
+    for r in rows:
+        if r["gruppe"] == "Unterkonten" and r["teilwert"] and r["konto"] != "Ohne":
+            expected[UNTERKONTEN_TAG_MAP[r["kategorie"]]] += to_cents(parse_amount(r["teilwert"]))
+    actual = defaultdict(int)
+    for t in transactions:
+        for line in t["lines"]:
+            for tag in line["tags"]:
+                if tag in targets:
+                    actual[tag] += allocation_tag_delta(t, line, targets[tag])
+    ok = True
+    for tag in sorted(targets):
+        e, a = expected.get(tag, 0), actual.get(tag, 0)
+        if e != a:
+            ok = False
+        print(f"  {'OK ' if e == a else 'BAD'} {tag:32s} expected {e/100:>11,.2f}  got {a/100:>11,.2f}")
+    return ok
+
+
 def main():
     rows = load_rows()
     opening = [r for r in rows if r["datum"] == "2024-12-31"]
@@ -320,7 +373,24 @@ def main():
 
     # --- transfers ---------------------------------------------------------
     pairs, unpaired = pair_transfers(transfer_rows)
+
+    # A pair on the SAME account (Rücklagen "Für X" / Unterkonten "X") is the
+    # sheet's way of re-tagging money inside one account — used where
+    # interest or an expense hit a savings account directly. In the app that
+    # is just a tag on the real income/expense line itself, so it becomes a
+    # tag on that line instead of a transaction. Keyed by the Unterkonten
+    # row's value, which is the tag's actual change.
+    retags = {}
+    cross_pairs = []
     for a, b in pairs:
+        if a["konto"] != b["konto"]:
+            cross_pairs.append((a, b))
+            continue
+        unter = a if a["gruppe"] == "Unterkonten" else b
+        key = (unter["datum"], unter["empfaenger"], unter["konto"], to_cents(parse_amount(unter["teilwert"])))
+        retags[key] = row_tag(unter)
+
+    for a, b in cross_pairs:
         out, inc = (a, b) if to_cents(parse_amount(a["teilwert"])) < 0 else (b, a)
         amount = abs(to_cents(parse_amount(out["teilwert"])))
         tag = row_tag(out) or row_tag(inc)
@@ -369,6 +439,9 @@ def main():
                 cat, tags = category_id(r["gruppe"], r["kategorie"]), [t for t in (r["tag1"], r["tag2"]) if t]
             else:
                 cat, tags = None, [t for t in (r["tag1"], r["tag2"]) if t]
+            retag = retags.pop((d, payee, konto, v), None)
+            if retag:
+                tags.append(retag)
             lines.append({"amountCents": v, "categoryId": cat, "note": r["details"], "tags": tags})
         total = sum(l["amountCents"] for l in lines)
         acc = ACCOUNT_MAP[konto]
@@ -376,9 +449,14 @@ def main():
                amountCents=total, displayLabel=payee, lines=lines,
                detail=" / ".join(r["details"] for r in grp if r["details"]))
 
+    if retags:
+        raise ValueError(f"same-account re-tag pairs with no matching income/expense line: {retags}")
+
     transactions.sort(key=lambda t: t["date"])
 
-    print(f"transfer rows: {len(transfer_rows)} -> {len(pairs)} paired, {len(unpaired)} without counterpart")
+    print(f"transfer rows: {len(transfer_rows)} -> {len(cross_pairs)} transfers, "
+          f"{len(pairs) - len(cross_pairs)} same-account re-tags folded into their line, "
+          f"{len(unpaired)} without counterpart")
     for r in unpaired:
         print(f"    unpaired: {r['datum']} {r['konto']} -> {r['transfer']} | {r['empfaenger']} | {r['teilwert']}")
     print(f"'Ohne' rows dropped (not a real account): {len(dropped_ohne)}")
@@ -390,9 +468,12 @@ def main():
     print("account totals vs. Gsheet header formula (Σ Teilwert per Konto):")
     ok = verify_account_sums(rows, opening_txs + transactions)
 
+    print("allocation-tag totals vs. Gsheet header formula (Σ Unterkonten Teilwert per tag):")
+    tags_ok = verify_tag_sums(rows, opening_txs + transactions)
+
     with open(OUT, "w") as f:
         json.dump(transactions, f, ensure_ascii=False, indent=2)
-    print("ALL ACCOUNTS MATCH" if ok else "MISMATCH — see BAD rows above")
+    print("ALL ACCOUNTS AND TAGS MATCH" if ok and tags_ok else "MISMATCH — see BAD rows above")
 
 
 if __name__ == "__main__":
