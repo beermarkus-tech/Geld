@@ -1,0 +1,58 @@
+[
+  { "id": "einnahmen", "name": "Einnahmen", "parentCategoryId": null, "isFixkosten": false },
+  { "id": "einnahmen-erstattungen", "name": "Erstattungen", "parentCategoryId": "einnahmen", "isFixkosten": false },
+  { "id": "einnahmen-gehalt-julia", "name": "Gehalt Julia", "parentCategoryId": "einnahmen", "isFixkosten": false },
+  { "id": "einnahmen-gehalt-markus", "name": "Gehalt Markus", "parentCategoryId": "einnahmen", "isFixkosten": false },
+  { "id": "einnahmen-kindergeld", "name": "Kindergeld", "parentCategoryId": "einnahmen", "isFixkosten": false },
+  { "id": "einnahmen-sonderzahlungen", "name": "Sonderzahlungen", "parentCategoryId": "einnahmen", "isFixkosten": false },
+  { "id": "einnahmen-sonstige-einnahmen", "name": "Sonstige Einnahmen", "parentCategoryId": "einnahmen", "isFixkosten": false },
+
+  { "id": "wohnen", "name": "Wohnen", "parentCategoryId": null, "isFixkosten": false },
+  { "id": "wohnen-einrichtung", "name": "Einrichtung", "parentCategoryId": "wohnen", "isFixkosten": false },
+  { "id": "wohnen-garten", "name": "Garten", "parentCategoryId": "wohnen", "isFixkosten": false },
+  { "id": "wohnen-hauskredit", "name": "Hauskredit", "parentCategoryId": "wohnen", "isFixkosten": true },
+  { "id": "wohnen-instandhaltung", "name": "Instandhaltung", "parentCategoryId": "wohnen", "isFixkosten": false },
+  { "id": "wohnen-nebenkosten", "name": "Nebenkosten", "parentCategoryId": "wohnen", "isFixkosten": false },
+
+  { "id": "kommunikation", "name": "Kommunikation", "parentCategoryId": null, "isFixkosten": false },
+  { "id": "kommunikation-fernsehen", "name": "Fernsehen", "parentCategoryId": "kommunikation", "isFixkosten": false },
+  { "id": "kommunikation-internet", "name": "Internet", "parentCategoryId": "kommunikation", "isFixkosten": false },
+  { "id": "kommunikation-telefon", "name": "Telefon", "parentCategoryId": "kommunikation", "isFixkosten": false },
+
+  { "id": "mobilitaet", "name": "Mobilität", "parentCategoryId": null, "isFixkosten": false },
+  { "id": "mobilitaet-autoversicherung", "name": "Autoversicherung", "parentCategoryId": "mobilitaet", "isFixkosten": false },
+  { "id": "mobilitaet-firmenwagen", "name": "Firmenwagen", "parentCategoryId": "mobilitaet", "isFixkosten": false },
+  { "id": "mobilitaet-gebuehren", "name": "Gebühren", "parentCategoryId": "mobilitaet", "isFixkosten": false },
+  { "id": "mobilitaet-tanken", "name": "Tanken", "parentCategoryId": "mobilitaet", "isFixkosten": false },
+  { "id": "mobilitaet-wartung", "name": "Wartung", "parentCategoryId": "mobilitaet", "isFixkosten": false },
+
+  { "id": "lebenshaltung", "name": "Lebenshaltung", "parentCategoryId": null, "isFixkosten": false },
+  { "id": "lebenshaltung-allgemein", "name": "Allgemein", "parentCategoryId": "lebenshaltung", "isFixkosten": false },
+  { "id": "lebenshaltung-ausgehen", "name": "Ausgehen", "parentCategoryId": "lebenshaltung", "isFixkosten": false },
+  { "id": "lebenshaltung-ausstattung-sophia", "name": "Ausstattung Sophia", "parentCategoryId": "lebenshaltung", "isFixkosten": false },
+  { "id": "lebenshaltung-haustiere", "name": "Haustiere", "parentCategoryId": "lebenshaltung", "isFixkosten": false },
+  { "id": "lebenshaltung-kantine", "name": "Kantine", "parentCategoryId": "lebenshaltung", "isFixkosten": false },
+  { "id": "lebenshaltung-klamotten-julia", "name": "Klamotten Julia", "parentCategoryId": "lebenshaltung", "isFixkosten": false },
+  { "id": "lebenshaltung-klamotten-markus", "name": "Klamotten Markus", "parentCategoryId": "lebenshaltung", "isFixkosten": false },
+  { "id": "lebenshaltung-klamotten-sophia", "name": "Klamotten Sophia", "parentCategoryId": "lebenshaltung", "isFixkosten": false },
+  { "id": "lebenshaltung-lebensmittel-haushalt", "name": "Lebensmittel & Haushalt", "parentCategoryId": "lebenshaltung", "isFixkosten": false },
+  { "id": "lebenshaltung-versicherungen", "name": "Versicherungen", "parentCategoryId": "lebenshaltung", "isFixkosten": false },
+
+  { "id": "gesundheit", "name": "Gesundheit", "parentCategoryId": null, "isFixkosten": false },
+  { "id": "gesundheit-arztkosten", "name": "Arztkosten", "parentCategoryId": "gesundheit", "isFixkosten": false },
+  { "id": "gesundheit-krankenkasse", "name": "Krankenkasse", "parentCategoryId": "gesundheit", "isFixkosten": true },
+  { "id": "gesundheit-medizin", "name": "Medizin", "parentCategoryId": "gesundheit", "isFixkosten": false },
+
+  { "id": "hobbys", "name": "Hobbys", "parentCategoryId": null, "isFixkosten": false },
+  { "id": "hobbys-julia", "name": "Hobbys Julia", "parentCategoryId": "hobbys", "isFixkosten": false },
+  { "id": "hobbys-markus", "name": "Hobbys Markus", "parentCategoryId": "hobbys", "isFixkosten": false },
+  { "id": "hobbys-sophia", "name": "Hobbys Sophia", "parentCategoryId": "hobbys", "isFixkosten": false },
+
+  { "id": "sonstiges", "name": "Sonstiges", "parentCategoryId": null, "isFixkosten": false },
+  { "id": "sonstiges-geschenke", "name": "Geschenke", "parentCategoryId": "sonstiges", "isFixkosten": false },
+  { "id": "sonstiges-rente", "name": "Rente", "parentCategoryId": "sonstiges", "isFixkosten": true },
+  { "id": "sonstiges-sonderausgaben", "name": "Sonderausgaben", "parentCategoryId": "sonstiges", "isFixkosten": false },
+  { "id": "sonstiges-sonstige-ausgaben", "name": "Sonstige Ausgaben", "parentCategoryId": "sonstiges", "isFixkosten": false },
+  { "id": "sonstiges-steuerausgaben", "name": "Steuerausgaben", "parentCategoryId": "sonstiges", "isFixkosten": true },
+  { "id": "sonstiges-urlaube", "name": "Urlaube", "parentCategoryId": "sonstiges", "isFixkosten": false }
+]

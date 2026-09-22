@@ -1,0 +1,9 @@
+[
+  { "id": "sparen-familie", "name": "Sparen Familie", "parentTag": null, "class": "allocation", "reconciliationTargetAccountIds": ["livret-a-sparen"], "groupingType": null, "archived": false },
+  { "id": "sparen-sophia", "name": "Sparen Sophia", "parentTag": null, "class": "allocation", "reconciliationTargetAccountIds": ["livret-a-sparen"], "groupingType": null, "archived": false },
+  { "id": "sparen-julia", "name": "Sparen Julia", "parentTag": null, "class": "allocation", "reconciliationTargetAccountIds": ["livret-a-sparen"], "groupingType": null, "archived": false },
+  { "id": "ruecklagen-steuern", "name": "Rücklagen Steuern", "parentTag": null, "class": "allocation", "reconciliationTargetAccountIds": ["livret-a-sparen"], "groupingType": null, "archived": false },
+  { "id": "anlage-familie", "name": "Anlage Familie", "parentTag": null, "class": "allocation", "reconciliationTargetAccountIds": ["aktien", "crypto", "edelmetalle", "esop"], "groupingType": null, "archived": false },
+  { "id": "anlage-sophia", "name": "Anlage Sophia", "parentTag": null, "class": "allocation", "reconciliationTargetAccountIds": ["aktien", "crypto", "edelmetalle", "esop"], "groupingType": null, "archived": false },
+  { "id": "tagesgeld", "name": "Tagesgeld", "parentTag": null, "class": "allocation", "reconciliationTargetAccountIds": ["livret-a-tagesgeld"], "groupingType": null, "archived": false }
+]
