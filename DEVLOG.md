@@ -205,3 +205,21 @@ Added the "Kürzlich gelöscht" toggle (§2.9a) to the filter bar, next to the s
 The ten generated files (both years' seed + migration output) were sent to Markus directly in chat, per the standing privacy rule — never committed, since the repo is public.
 
 **Next session should probably:** confirm the import landed correctly in Firestore (spot-check a few real balances against the app once Konten can show them, or the Firebase console meanwhile), delete `ImportScreen.jsx` and its `App.jsx` wiring, then start Konten's grid (AG Grid) per PLAN.md Phase 1a.
+
+## Session 3 — 2026-09-22 — Import run successfully; Konten's grid + balance() built
+
+**Import confirmed done.** Markus ran `ImportScreen` on his tablet: accounts 27/27, categories 49/49, tags 60/60, transactions 2831/2831, budgets 2065/2065 — every count matched what was sent. **Decision: keep `ImportScreen`'s code rather than delete it**, in case more data ever needs loading the same way; it's no longer the main screen, reachable instead via a "Datenimport" toggle in the header (CODEMAP.md).
+
+**Phase 1a — Konten's grid built** (`src/Konten.jsx`) with a pinned per-`reportingGroup` balance panel and an AG Grid (Community tier) listing the selected year's transactions, both reading live from Firestore. **Confirmed the actual Phase 1a testable deliverable:** every account's Jahresende, computed purely from the imported transactions, matches the real Gsheet closing balance — for both 2025 and 2026 so far. This is the first real use of `balance()`.
+
+**`src/lib/balance.js` + its test suite** (`npm test`, now a required step in the deploy workflow before every build) implement §2.1/§2.3/§2.6/§2.8's all-time balance model. **One deviation from PLAN.md's original wording, logged there and in CODEMAP.md:** the committed test suite uses synthetic fixtures, not Markus's real 2025 figures — a committed test embedding real account balances would break the standing "no real financial data in this repo, ever" rule. This isn't a new open question, just the existing rule's obvious consequence once it came time to actually write the test; real-data validation already exists via the migration scripts' own checks and now doubly via Konten's live panel.
+
+**What's now working vs. still stubbed:** Konten is currently **read-only** — no manual entry yet, no Konto1/Konto2 or Kategorie/Unterkategorie cascading dropdowns, no split-transaction UI (that's deliberately Phase 1b), no keyboard cell-to-cell navigation, no AG Grid cell-edit Undo/Redo. All of that is still ahead within Phase 1a (entry/dropdowns/keyboard nav/undo) and Phase 1b (splitting).
+
+**Found while building, not blocking:** §2.8's "the selected year's transactions are loaded into memory" line and its own `balance()` formula ("over the full loaded history — all-time, not year-scoped") don't quite square with each other — a strict reading of "selected year only" can't compute Jahresanfang, which needs the prior year's closing. Built as: load every transaction ever (not year-filtered) into memory, filter only the *displayed grid rows* to the selected year. At current and foreseeable volume (a few thousand transactions a year, one household) this stays trivial. Flagging in case Markus wants §2.8's wording tightened later — not urgent, doesn't change behavior.
+
+**Known gap to watch:** `ag-grid-community`'s full `AllCommunityModule` bundle pushed the PWA's precached size from ~850 KB to ~2 MB. Still comfortably under the 6 MB cap, but importing only the specific feature modules Konten actually uses would likely cut this a lot — worth doing before the app has many more heavy dependencies stacked on top.
+
+**Open items carried over, still open:** the tablet PWA/offline check (Phase 0); Verlauf year-level side notes (design later, Markus's call).
+
+**Next session should probably:** manual single-line transaction entry in Konten — the Konto1/Konto2 and Kategorie/Unterkategorie cascading dropdowns and the pinned panel updating live off a new row — plus full keyboard cell-to-cell navigation, still within Phase 1a.

@@ -27,7 +27,7 @@ See `CLAUDE.md` for how this fits alongside `spec.md` and `DEVLOG.md`.
 - Konten's grid (AG Grid), single-line manual transaction entry, Konto1/Konto2 and Kategorie/Unterkategorie cascading dropdowns, the pinned balance panel.
 - Full keyboard cell-to-cell navigation working (§1 requirement).
 - AG Grid's built-in cell-edit Undo/Redo enabled (§2.9a) — free, Community tier, `Ctrl+Z`/`Ctrl+Y`.
-- **First test suite entry (§4.1, external review):** `balance()` — including the all-time, single-anchor model (§2.1/§2.3) — tested against 2025's real migrated figures.
+- **First test suite entry (§4.1, external review):** `balance()` — including the all-time, single-anchor model (§2.1/§2.3). **Built with synthetic fixtures, not real figures** (Sept 2026 — the repo is public, so a committed test can't embed real balances; see CODEMAP.md's note on this). Real-data confirmation instead comes from the migration scripts' own checks plus Konten's live pinned balance panel against the real import.
 
 **Testable deliverable:** with 2025 fully migrated, every account's computed balance matches its real closing balance from the Gsheet, for the entire year — the genuine test of §2.1/§2.3's balance model, not a hand-entered sample. Markus can also manually enter a week's worth of real 2026 transactions on tablet, with the pinned balance panel continuing seamlessly from 2025 with no double-counting at the year boundary, and full keyboard navigation working throughout.
 

@@ -3,6 +3,7 @@ import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from
 
 import { auth } from './firebase'
 import ImportScreen from './ImportScreen'
+import Konten from './Konten'
 import { waitForInitialAuthState } from './lib/authReady'
 
 export default function App() {
@@ -10,6 +11,11 @@ export default function App() {
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [usingCachedSession, setUsingCachedSession] = useState(false)
   const [signInError, setSignInError] = useState(null)
+  // No real nav shell yet (§1b.2 — that's a later phase). Konten is the
+  // main screen now that Phase 1a's data is imported; the import screen
+  // stays reachable (kept for later re-use, Markus's call) via this toggle
+  // instead of always occupying the main content.
+  const [view, setView] = useState('konten')
 
   useEffect(() => {
     let active = true
@@ -71,24 +77,35 @@ export default function App() {
     <div className="flex h-full flex-col">
       <header className="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3">
         <h1 className="text-lg font-semibold">Geld</h1>
-        <button
-          type="button"
-          onClick={() => signOut(auth)}
-          className="text-sm text-[var(--color-text-muted)]"
-        >
-          Abmelden
-        </button>
+        <div className="flex items-center gap-4">
+          {/* Stopgap until §1b.2's real nav shell exists. Konten (build 27's
+              actual deliverable) is the default; the import screen is kept
+              reachable rather than deleted, per Markus's call, in case more
+              data ever needs (re-)loading the same way. */}
+          <button
+            type="button"
+            onClick={() => setView(view === 'konten' ? 'import' : 'konten')}
+            className="text-sm text-[var(--color-text-muted)] underline"
+          >
+            {view === 'konten' ? 'Datenimport' : 'Zurück zu Konten'}
+          </button>
+          <button type="button" onClick={() => signOut(auth)} className="text-sm text-[var(--color-text-muted)]">
+            Abmelden
+          </button>
+        </div>
       </header>
 
-      <main className="flex flex-1 flex-col overflow-y-auto">
-        <p className="px-6 pt-4 text-center text-sm text-[var(--color-text-muted)]">
-          Angemeldet als {user.email}
-          {usingCachedSession && ' (aus zwischengespeicherter Sitzung, noch nicht online bestätigt)'}
-        </p>
-        {/* Phase 1a's one-time data import (PLAN.md) — the only real screen
-            until Konten's grid is built; remove once the import is done and
-            confirmed, and Konten replaces this. */}
-        <ImportScreen />
+      <main className="flex flex-1 flex-col overflow-hidden">
+        {view === 'import' && (
+          <div className="flex-1 overflow-y-auto">
+            <p className="px-6 pt-4 text-center text-sm text-[var(--color-text-muted)]">
+              Angemeldet als {user.email}
+              {usingCachedSession && ' (aus zwischengespeicherter Sitzung, noch nicht online bestätigt)'}
+            </p>
+            <ImportScreen />
+          </div>
+        )}
+        {view === 'konten' && <Konten />}
       </main>
     </div>
   )
