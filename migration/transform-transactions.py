@@ -9,6 +9,7 @@ import csv
 import json
 import re
 from collections import defaultdict
+from datetime import date
 
 SRC = "/tmp/claude-0/-home-user-Geld/579a8311-2b64-5844-81b1-64afabfc8004/scratchpad/konten.csv"
 OUT = "/home/user/Geld/migration/seed/transactions-2025.json"
@@ -133,12 +134,19 @@ def build_opening_transactions(opening):
     txs = []
 
     def acc_line(account_id, cents, tags=None):
+        # amountCents is always a positive magnitude for a two-account
+        # transaction (spec.md §2.6 clarification) — a negative opening
+        # balance (e.g. Visa Airbus, a credit card debt) means the account
+        # itself is the 'from' side, jahresabschluss the 'to' side, not the
+        # other way around with a negative amount.
+        from_id, to_id = ("jahresabschluss", account_id) if cents >= 0 else (account_id, "jahresabschluss")
+        abs_cents = abs(cents)
         txs.append({
             "id": f"jahresabschluss-{account_id}", "date": "2025-01-01",
-            "fromAccountId": "jahresabschluss", "toAccountId": account_id,
-            "amountCents": cents, "rawDescription": "Jahresabschluß",
+            "fromAccountId": from_id, "toAccountId": to_id,
+            "amountCents": abs_cents, "rawDescription": "Jahresabschluß",
             "displayLabel": "Jahresabschluß",
-            "lines": [{"amountCents": cents, "categoryId": None, "note": "", "tags": tags or []}] if tags else [],
+            "lines": [{"amountCents": abs_cents, "categoryId": None, "note": "", "tags": tags or []}] if tags else [],
             "detail": "", "createdAt": None,
         })
 
@@ -161,16 +169,15 @@ def build_opening_transactions(opening):
 
     # 2) Livret A Sparen — one transaction, 4 allocation-tagged lines
     sparen_lines = [r for r in opening if r["konto"] == "Livret A Sparen" and r["gruppe"] == "Unterkonten"]
-    lines = []
-    total = 0
-    for r in sparen_lines:
-        cents = to_cents(parse_amount(r["teilwert"]))
-        total += cents
-        lines.append({"amountCents": cents, "categoryId": None, "note": "", "tags": [UNTERKONTEN_TAG_MAP[r["kategorie"]]]})
+    raw_lines = [(to_cents(parse_amount(r["teilwert"])), UNTERKONTEN_TAG_MAP[r["kategorie"]]) for r in sparen_lines]
+    total = sum(c for c, _ in raw_lines)
+    sign = 1 if total >= 0 else -1
+    from_id, to_id = ("jahresabschluss", "livret-a-sparen") if total >= 0 else ("livret-a-sparen", "jahresabschluss")
+    lines = [{"amountCents": c * sign, "categoryId": None, "note": "", "tags": [tag]} for c, tag in raw_lines]
     txs.append({
         "id": "jahresabschluss-livret-a-sparen", "date": "2025-01-01",
-        "fromAccountId": "jahresabschluss", "toAccountId": "livret-a-sparen",
-        "amountCents": total, "rawDescription": "Jahresabschluß", "displayLabel": "Jahresabschluß",
+        "fromAccountId": from_id, "toAccountId": to_id,
+        "amountCents": abs(total), "rawDescription": "Jahresabschluß", "displayLabel": "Jahresabschluß",
         "lines": lines, "detail": "", "createdAt": None,
     })
 
@@ -184,16 +191,15 @@ def build_opening_transactions(opening):
     inv_accounts = {"Aktien": "aktien", "Crypto": "crypto", "Edelmetalle": "edelmetalle", "ESOP": "esop"}
     for konto, acc_id in inv_accounts.items():
         sub = [r for r in opening if r["konto"] == konto and r["gruppe"] == "Unterkonten"]
-        lines = []
-        total = 0
-        for r in sub:
-            cents = to_cents(parse_amount(r["teilwert"]))
-            total += cents
-            lines.append({"amountCents": cents, "categoryId": None, "note": "", "tags": [UNTERKONTEN_TAG_MAP[r["kategorie"]]]})
+        raw_lines = [(to_cents(parse_amount(r["teilwert"])), UNTERKONTEN_TAG_MAP[r["kategorie"]]) for r in sub]
+        total = sum(c for c, _ in raw_lines)
+        sign = 1 if total >= 0 else -1
+        from_id, to_id = ("jahresabschluss", acc_id) if total >= 0 else (acc_id, "jahresabschluss")
+        lines = [{"amountCents": c * sign, "categoryId": None, "note": "", "tags": [tag]} for c, tag in raw_lines]
         txs.append({
             "id": f"jahresabschluss-{acc_id}", "date": "2025-01-01",
-            "fromAccountId": "jahresabschluss", "toAccountId": acc_id,
-            "amountCents": total, "rawDescription": "Jahresabschluß", "displayLabel": "Jahresabschluß",
+            "fromAccountId": from_id, "toAccountId": to_id,
+            "amountCents": abs(total), "rawDescription": "Jahresabschluß", "displayLabel": "Jahresabschluß",
             "lines": lines, "detail": "", "createdAt": None,
         })
 
@@ -273,17 +279,37 @@ def main():
         if not r["transfer"]:
             return None
         r_amt = parse_amount(r["wert"]) if r["wert"] else parse_amount(r["teilwert"])
+        r_date = date.fromisoformat(r["datum"])
+        best, best_gap = None, None
         for other in real:
             if other is r:
                 continue
-            if other["datum"] != r["datum"] or other["konto"] != r["transfer"] or other["transfer"] != r["konto"]:
+            if other["konto"] != r["transfer"] or other["transfer"] != r["konto"]:
                 continue
             o_amt = parse_amount(other["wert"]) if other["wert"] else parse_amount(other["teilwert"])
-            if o_amt is None or r_amt is None:
+            if o_amt is None or r_amt is None or abs(o_amt + r_amt) >= 0.02:
                 continue
-            if abs(o_amt + r_amt) < 0.02:  # opposite sign, same magnitude
-                return other
-        return None
+            gap = abs((date.fromisoformat(other["datum"]) - r_date).days)
+            same_payee = other["empfaenger"] == r["empfaenger"]
+            # Two observed patterns: (a) same payee label on both legs (e.g.
+            # 'Ausgleich 3'), recorded up to ~2 weeks apart — matched with a
+            # wide window since the shared label makes it safe; (b)
+            # different labels per leg (e.g. 'Sparen Sophia' / 'Aktien und
+            # ETFs' — each account's own name for the same event), always
+            # recorded same-day in every case seen — matched only within a
+            # tight window since there's no label to disambiguate against a
+            # coincidental same-amount transfer weeks apart.
+            if same_payee:
+                if gap > 45:
+                    continue
+            else:
+                if gap > 1:
+                    continue
+            # prefer a same-payee match over a same-day-only one if both exist
+            candidate_rank = (0 if same_payee else 1, gap)
+            if best is None or candidate_rank < best_gap:
+                best, best_gap = other, candidate_rank
+        return best
 
     skipped_unterkonten_mirrors = 0
     already_dropped = set()
@@ -324,19 +350,27 @@ def main():
             continue
 
         if r["gruppe"] == "Rücklagen" and r["transfer"]:
-            # allocation transfer: one row is enough, no separate mirror needed
-            from_id = ACCOUNT_MAP.get(r["konto"])
-            to_id = ACCOUNT_MAP.get(r["transfer"])
+            # allocation transfer: one row is enough, no separate mirror needed.
+            # Direction comes from the row's own sign (like the income/expense
+            # branch below) -- NOT always "Konto=from" (that was the actual
+            # bug: Konto's own recorded value can be positive, meaning Konto
+            # itself gained that entry, e.g. an investment-cash settlement
+            # account receiving proceeds — verified against the raw per-
+            # account sum from the sheet, which only makes sense this way).
+            konto_id = ACCOUNT_MAP.get(r["konto"])
+            transfer_id = ACCOUNT_MAP.get(r["transfer"])
             tag = ALLOCATION_TAG_MAP.get(r["kategorie"])
-            if not (from_id and to_id and tag):
+            if not (konto_id and transfer_id and tag):
                 errors.append(("unmapped allocation transfer", r))
                 continue
+            from_id, to_id = (transfer_id, konto_id) if cents >= 0 else (konto_id, transfer_id)
+            abs_cents = abs(cents)
             transactions.append({
                 "id": next_id(), "date": r["datum"],
                 "fromAccountId": from_id, "toAccountId": to_id,
-                "amountCents": cents,
+                "amountCents": abs_cents,
                 "rawDescription": r["empfaenger"], "displayLabel": r["empfaenger"],
-                "lines": [{"amountCents": cents, "categoryId": None, "note": r["details"], "tags": [tag]}],
+                "lines": [{"amountCents": abs_cents, "categoryId": None, "note": r["details"], "tags": [tag]}],
                 "detail": r["details"], "createdAt": None,
             })
             allocation_transfers += 1
@@ -353,27 +387,29 @@ def main():
                 from_id, to_id = real_acc_id, recv_id
             else:
                 from_id, to_id = recv_id, real_acc_id
+            abs_cents = abs(cents)
             transactions.append({
                 "id": next_id(), "date": r["datum"],
                 "fromAccountId": from_id, "toAccountId": to_id,
-                "amountCents": cents,
+                "amountCents": abs_cents,
                 "rawDescription": r["empfaenger"], "displayLabel": r["empfaenger"],
-                "lines": [{"amountCents": cents, "categoryId": None, "note": r["details"], "tags": [claim_tag]}],
+                "lines": [{"amountCents": abs_cents, "categoryId": None, "note": r["details"], "tags": [claim_tag]}],
                 "detail": r["details"], "createdAt": None,
             })
             receivable_transactions += 1
             continue
 
         if r["transfer"] and not r["gruppe"]:
-            from_id = ACCOUNT_MAP.get(r["konto"])
-            to_id = ACCOUNT_MAP.get(r["transfer"])
-            if not (from_id and to_id):
+            konto_id = ACCOUNT_MAP.get(r["konto"])
+            transfer_id = ACCOUNT_MAP.get(r["transfer"])
+            if not (konto_id and transfer_id):
                 errors.append(("unmapped plain transfer", r))
                 continue
+            from_id, to_id = (transfer_id, konto_id) if cents >= 0 else (konto_id, transfer_id)
             transactions.append({
                 "id": next_id(), "date": r["datum"],
                 "fromAccountId": from_id, "toAccountId": to_id,
-                "amountCents": cents,
+                "amountCents": abs(cents),
                 "rawDescription": r["empfaenger"], "displayLabel": r["empfaenger"],
                 "lines": [],
                 "detail": r["details"], "createdAt": None,
@@ -429,16 +465,19 @@ def main():
         if r["gruppe"] == "Unterkonten":
             # standalone allocation transfer (no paired 'Rücklagen' row —
             # a plain savings<->checking reallocation, not an investment buy)
-            from_id = ACCOUNT_MAP.get(r["konto"])
-            # No Transfer target at all: an internal reallocation within the
-            # same tracked account (e.g. swapping one crypto holding for
-            # another) — model as a same-account transaction so it nets to
-            # zero rather than forcing a fake second account.
-            to_id = ACCOUNT_MAP.get(r["transfer"]) if r["transfer"] else from_id
+            konto_id = ACCOUNT_MAP.get(r["konto"])
             tag = UNTERKONTEN_TAG_MAP.get(r["kategorie"])
+            if r["transfer"]:
+                transfer_id = ACCOUNT_MAP.get(r["transfer"])
+                from_id, to_id = (transfer_id, konto_id) if cents >= 0 else (konto_id, transfer_id)
+            else:
+                # No Transfer target at all: an internal reallocation within
+                # the same tracked account — self-transaction, nets to zero.
+                from_id = to_id = konto_id
             if not (from_id and to_id and tag):
                 errors.append(("unmapped standalone Unterkonten transfer", r))
                 continue
+            cents = abs(cents)
             transactions.append({
                 "id": next_id(), "date": r["datum"],
                 "fromAccountId": from_id, "toAccountId": to_id,
