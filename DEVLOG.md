@@ -183,3 +183,17 @@ Added the "Kürzlich gelöscht" toggle (§2.9a) to the filter bar, next to the s
 - 2026 transactions: spec.md §2.3 speaks of the migration covering 2025 *and* 2026, while PLAN.md Phase 1a only imports 2025 and has Markus enter a week of 2026 by hand. The "Geld 2026" sheet is in active use (Jan–Sep 2026). Needs a decision on whether/when to migrate it.
 
 **Next session should probably:** build the one-time import screen (file picker → batch writes to Firestore, removed afterwards), import, then start Konten's grid (AG Grid) per PLAN.md Phase 1a.
+
+## Session 1, continued — 2026-09-22 — 2026 so far migrated
+
+**Phase 1a — 2026 migration built and validated, not yet imported.** Markus decided to migrate the "Geld 2026" sheet too (Jan to end of Aug 2026: ~1090 transactions, ~1060 budget rows); PLAN.md updated. Both `migration/` scripts now take the year as an argument (CODEMAP.md). The 2026 sheet's own opening rows are not imported — per spec.md §2.3 there is only the one 2025 Jahresabschluß — so the check is that the 2026 sheet's header comes out of 2025 + 2026 combined. It does: every account, every allocation tag, every claim, the receivables total, Plan0/Plan1 group totals per month, and the savings actuals Jan–Aug. 2025's output is unchanged apart from one budget row pair (below).
+
+**Findings and Markus's decisions:**
+- Carry-over differences between the 2025 closing and the 2026 sheet's opening: PayPal (a few cents) — booked as a "Korrektur Übertrag" transaction on 2026-01-01; Bar Markus — the app is right, the sheet still carries the cash payment that session 1 moved onto Bar Markus, so the app stays below the sheet by that amount (shown by the check as an explained difference).
+- A 2026 Airbus refund entered without its claim tag gets the tag of the one open claim it exactly settles (Markus confirmed).
+- The 2026 sheet names the health-insurance debtor both "CPAM" and "MSH" (sometimes for the same claim); both go to the `cpam` receivable.
+- 2026 Plan1 values are partly formula-spread (remaining yearly total over the remaining months), giving sub-cent months. Budget months are now rounded so each row's yearly total stays exactly what Markus typed (this also moved a few cents between months in one 2025 row, whose yearly total is now exact). One 2026 Plan1 block (Ausstattung Sophia) had stale breakdown lines that no longer feed its top line; only the top line is imported, matching what the sheet shows.
+
+**Open items:** the tablet PWA/offline check (Phase 0) and Verlauf year-level notes remain open from the entry above; the 2026-migration question there is resolved.
+
+**Next session should probably:** build the one-time import screen (file picker → batch writes to Firestore, removed afterwards) for all generated files of both years, import, then Konten's grid.

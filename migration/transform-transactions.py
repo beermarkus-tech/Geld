@@ -121,7 +121,15 @@ CORRECTIONS = {
     ("2025-10-16", "BNP-Konto", "Ausgleich Taxe Fonciere"): {"transfer": "Livret A Sparen"},
     # Booked on the 'Ohne' placeholder; actually paid cash, claimable from Airbus.
     ("2025-12-31", "Ohne", "Kantine Hamburg"): {"konto": "Bar Markus"},
+    # A refund entered without its claim tag; it exactly settles one open
+    # claim, whose tag it gets (resolved in load_rows).
+    ("2026-07-03", "BNP-Konto", "Airbus Reisekosten"): {"tag2": "MATCH_OPEN_CLAIM"},
 }
+
+# Accounts where a later year's sheet opened with a different balance than
+# the earlier year closed at, and Markus decided the later sheet is right:
+# the difference is booked as a correction on Jan 1 of that year.
+CARRYOVER_CORRECTIONS = {2026: {"paypal"}}
 
 
 def load_rows(year=FIRST_YEAR):
@@ -129,8 +137,25 @@ def load_rows(year=FIRST_YEAR):
     for r in rows:
         fix = CORRECTIONS.get((r["datum"], r["konto"], r["empfaenger"]))
         if fix:
+            if "konto" in fix:
+                r["kontoInSheet"] = r["konto"]
             r.update(fix)
+    for r in rows:
+        if r["tag2"] == "MATCH_OPEN_CLAIM":
+            r["tag2"] = _open_claim_matching(r, rows)
     return rows
+
+
+def _open_claim_matching(row, rows):
+    open_by_tag = defaultdict(int)
+    for r in rows:
+        if r is not row and r["verliehen"] == row["verliehen"] and r["teilwert"] and r["datum"] <= row["datum"]:
+            open_by_tag[claim_tag_for(r["verliehen"], r["tag2"])] -= to_cents(parse_amount(r["teilwert"]))
+    v = to_cents(parse_amount(row["teilwert"]))
+    matches = [tag for tag, bal in open_by_tag.items() if bal == v]
+    if len(matches) != 1:
+        raise ValueError(f"expected exactly one open claim matching {row}, got {matches}")
+    return matches[0]
 
 
 def _load_raw_rows(src):
@@ -314,14 +339,32 @@ def pair_transfers(rows):
     return pairs, unpaired
 
 
-def verify_account_sums(rows, transactions):
-    """Hard check: every real account must end the year exactly at
-    Σ Teilwert over its own rows — the sheet's own header formula."""
-    expected = defaultdict(int)
+def sheet_sums(rows):
+    sums = defaultdict(int)
     for r in rows:
         acc = ACCOUNT_MAP.get(r["konto"])
         if acc and r["teilwert"]:
-            expected[acc] += to_cents(parse_amount(r["teilwert"]))
+            sums[acc] += to_cents(parse_amount(r["teilwert"]))
+    return sums
+
+
+def earlier_konto_corrections(year):
+    """Rows of earlier years that CORRECTIONS moved to another account: the
+    later sheets carried the uncorrected balance over, so the app's balance
+    legitimately differs from theirs by exactly these amounts."""
+    adjust = defaultdict(int)
+    for y in range(FIRST_YEAR, year):
+        for r in load_rows(y):
+            if "kontoInSheet" in r and r["teilwert"]:
+                v = to_cents(parse_amount(r["teilwert"]))
+                if r["konto"] in ACCOUNT_MAP:
+                    adjust[ACCOUNT_MAP[r["konto"]]] += v
+                if r["kontoInSheet"] in ACCOUNT_MAP:
+                    adjust[ACCOUNT_MAP[r["kontoInSheet"]]] -= v
+    return adjust
+
+
+def account_balances(transactions):
     actual = defaultdict(int)
     for t in transactions:
         f, to, a = t["fromAccountId"], t["toAccountId"], t["amountCents"]
@@ -332,13 +375,22 @@ def verify_account_sums(rows, transactions):
             actual[f] += a
         elif to:
             actual[to] += a
+    return actual
+
+
+def verify_account_sums(rows, transactions, adjust=None):
+    """Hard check: every real account must end the year exactly at
+    Σ Teilwert over its own rows — the sheet's own header formula — apart
+    from earlier-year corrections the sheet never carried over (adjust)."""
+    expected, actual, adjust = sheet_sums(rows), account_balances(transactions), adjust or {}
     ok = True
     for acc in sorted(set(expected) | set(ACCOUNT_MAP.values())):
-        e, a = expected.get(acc, 0), actual.get(acc, 0)
+        e, a = expected.get(acc, 0) + adjust.get(acc, 0), actual.get(acc, 0)
         flag = "OK " if e == a else "BAD"
         if e != a:
             ok = False
-        print(f"  {flag} {acc:32s} expected {e/100:>11,.2f}  got {a/100:>11,.2f}")
+        note = f"  (sheet {expected.get(acc, 0)/100:,.2f}; differs by an earlier-year correction)" if adjust.get(acc) else ""
+        print(f"  {flag} {acc:32s} expected {e/100:>11,.2f}  got {a/100:>11,.2f}{note}")
     return ok
 
 
@@ -606,9 +658,35 @@ def main():
               f"starting from {len(prior_txs)} transactions of {FIRST_YEAR}..{year - 1}")
 
     transactions = build_year_transactions(year, in_year)
+    adjust = {}
+
+    if year > FIRST_YEAR:
+        # The sheet's own opening rows must equal the app's closing of the
+        # year before, up to known corrections — or be booked as a
+        # correction where Markus decided the later sheet is right.
+        adjust = earlier_konto_corrections(year)
+        closing, sheet_open = account_balances(prior_txs), sheet_sums(opening)
+        print(f"carry-over: {year} sheet opening vs. app closing {year - 1}:")
+        fixes = []
+        for acc in sorted(set(ACCOUNT_MAP.values())):
+            diff = sheet_open.get(acc, 0) + adjust.get(acc, 0) - closing.get(acc, 0)
+            if acc in CARRYOVER_CORRECTIONS.get(year, set()):
+                if not diff:
+                    raise ValueError(f"carry-over correction configured for {acc}, but there is no difference")
+                fixes.append({
+                    "id": f"korrektur-uebertrag-{year}-{acc}", "date": f"{year}-01-01",
+                    "fromAccountId": acc if diff < 0 else None, "toAccountId": acc if diff >= 0 else None,
+                    "amountCents": diff, "rawDescription": "Korrektur Übertrag", "displayLabel": "Korrektur Übertrag",
+                    "lines": [], "detail": f"Differenz zwischen Abschluss {year - 1} und Übertrag im Gsheet {year}",
+                    "createdAt": None,
+                })
+                print(f"  FIX {acc:32s} {diff/100:+,.2f} booked as correction on {year}-01-01")
+            elif diff:
+                print(f"  BAD {acc:32s} sheet opening differs by {diff/100:+,.2f}")
+        transactions = fixes + transactions
 
     print("account totals vs. Gsheet header formula (Σ Teilwert per Konto):")
-    ok = verify_account_sums(rows, prior_txs + transactions)
+    ok = verify_account_sums(rows, prior_txs + transactions, adjust)
 
     print("allocation-tag totals vs. Gsheet header formula (Σ Unterkonten Teilwert per tag):")
     tags_ok = verify_tag_sums(rows, prior_txs + transactions)
