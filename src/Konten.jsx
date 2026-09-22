@@ -26,6 +26,12 @@ export default function Konten() {
   const [transactions, setTransactions] = useState([])
   const [loaded, setLoaded] = useState({ accounts: false, categories: false, transactions: false })
   const [year, setYear] = useState(null)
+  // Account filter: a distinct mechanism from a plain column filter (spec.md
+  // §3a's filtering section) — Konto's own display is derived per row, so
+  // the same account can show up on either side depending on that
+  // transaction's direction. Picking an account here instead re-displays
+  // every matching row from *that* account's own perspective.
+  const [accountFilter, setAccountFilter] = useState(null)
 
   useEffect(() => {
     const unsubs = [
@@ -81,46 +87,42 @@ export default function Konten() {
     if (!year) return []
     return transactions
       .filter((t) => t.date.startsWith(year))
+      .filter((t) => !accountFilter || t.fromAccountId === accountFilter || t.toAccountId === accountFilter)
       .slice()
       .sort((a, b) => (a.date === b.date ? a.id.localeCompare(b.id) : a.date.localeCompare(b.date)))
-  }, [transactions, year])
+  }, [transactions, year, accountFilter])
 
-  // Confirmed column order (spec.md §3a): Datum → Konto 1 → Konto 2 →
-  // Empfänger → Betrag → Kategorie → Unterkategorie → Details → Tags.
-  // Konto1 is always the transaction's primary account (fromAccountId when
-  // present, else toAccountId); Konto2 is the second account, only for an
-  // actual transfer. The narrow arrow column between them shows direction —
-  // this is what lets a single-document transfer (no second row on the
-  // other account, unlike the old Gsheet) still read unambiguously either
-  // way. Only Unterkategorie is stored; Kategorie is its derived parent.
+  // Confirmed column order (spec.md §3a): Datum → Konto → Empfänger →
+  // Betrag → Kategorie → Unterkategorie → Details → Tags. Konto is one
+  // merged column (not Konto1/Konto2 — revised Sept 2026): the primary
+  // account with an arrow to the second one for a transfer, unless an
+  // account filter is active, in which case it shows the *other* side only
+  // (a single-account register view) and Betrag is re-signed relative to
+  // the filtered account instead of the row's own primary side. Only
+  // Unterkategorie is stored; Kategorie is its derived parent.
   const columnDefs = useMemo(
     () => [
       { field: 'date', headerName: 'Datum', width: 110, sort: 'asc' },
       {
-        headerName: 'Konto 1',
-        valueGetter: (p) => accountName(p.data.fromAccountId ?? p.data.toAccountId),
-        flex: 1.2,
-      },
-      {
-        headerName: '',
-        width: 40,
-        cellClass: 'text-center',
+        headerName: accountFilter ? `Gegenkonto (${accountName(accountFilter)})` : 'Konto',
         valueGetter: (p) => {
           const t = p.data
-          if (!(t.fromAccountId && t.toAccountId)) return ''
-          return signedFor(t, t.fromAccountId) < 0 ? '→' : '←'
+          if (accountFilter) {
+            const other = t.fromAccountId === accountFilter ? t.toAccountId : t.fromAccountId
+            return other ? accountName(other) : '—'
+          }
+          if (t.fromAccountId && t.toAccountId) {
+            return `${accountName(t.fromAccountId)} → ${accountName(t.toAccountId)}`
+          }
+          return accountName(t.fromAccountId ?? t.toAccountId)
         },
-      },
-      {
-        headerName: 'Konto 2',
-        valueGetter: (p) => (p.data.fromAccountId && p.data.toAccountId ? accountName(p.data.toAccountId) : '—'),
         cellClass: (p) => (p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined),
-        flex: 1.2,
+        flex: 1.6,
       },
       { field: 'displayLabel', headerName: 'Empfänger', flex: 1.4 },
       {
         headerName: 'Betrag',
-        valueGetter: (p) => signedFor(p.data, p.data.fromAccountId ?? p.data.toAccountId),
+        valueGetter: (p) => signedFor(p.data, accountFilter ?? (p.data.fromAccountId ?? p.data.toAccountId)),
         valueFormatter: (p) => centsToEuro(p.value),
         cellClass: 'text-right tabular-figure',
         width: 130,
@@ -154,7 +156,7 @@ export default function Konten() {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps -- accountName/categoryName/groupName close over these
-    [accountById, categoryById],
+    [accountById, categoryById, accountFilter],
   )
 
   const panel = useMemo(() => {
@@ -186,30 +188,57 @@ export default function Konten() {
 
   return (
     <div className="flex h-full flex-col gap-3 px-4 py-3">
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-[var(--color-text-muted)]">Jahr:</span>
-        {years.map((y) => (
-          <button
-            key={y}
-            type="button"
-            onClick={() => setYear(y)}
-            className={
-              'rounded-md px-3 py-1 text-sm ' +
-              (y === year
-                ? 'bg-[var(--color-computed)] text-white'
-                : 'bg-[var(--color-surface)] text-[var(--color-text-muted)]')
-            }
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-[var(--color-text-muted)]">Jahr:</span>
+          {years.map((y) => (
+            <button
+              key={y}
+              type="button"
+              onClick={() => setYear(y)}
+              className={
+                'rounded-md px-3 py-1 text-sm ' +
+                (y === year
+                  ? 'bg-[var(--color-computed)] text-white'
+                  : 'bg-[var(--color-surface)] text-[var(--color-text-muted)]')
+              }
+            >
+              {y}
+            </button>
+          ))}
+        </div>
+
+        {/* The account filter from spec.md §3a's filtering section — not the
+            same as a column filter on Konto (see the note there): this shows
+            every transaction touching the chosen account, either side, from
+            that account's own perspective. Clicking an account in the panel
+            below is a shortcut for picking it here. */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-[var(--color-text-muted)]">Konto:</span>
+          <select
+            value={accountFilter ?? ''}
+            onChange={(e) => setAccountFilter(e.target.value || null)}
+            className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-sm"
           >
-            {y}
-          </button>
-        ))}
+            <option value="">Alle Konten</option>
+            {accounts
+              .filter((a) => a.tracked !== false && a.group !== 'system')
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+          </select>
+        </div>
       </div>
 
       {/* Pinned balance panel — Jahresende(selected year) per account,
           grouped by reportingGroup (spec.md §2.2/§1b.3's "pinned balance
           panel" pattern). This is the direct testable check from PLAN.md
           Phase 1a: every figure here should match the real Gsheet closing
-          balance for that account/year. */}
+          balance for that account/year. Each account is also a shortcut
+          into the account filter above. */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {panel.map(({ group, items, total }) => (
           <div key={group} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
@@ -219,9 +248,18 @@ export default function Konten() {
             </div>
             <ul className="flex flex-col gap-0.5 text-xs text-[var(--color-text-muted)]">
               {items.map((i) => (
-                <li key={i.id} className="flex justify-between gap-2">
-                  <span>{i.name}</span>
-                  <span className="tabular-figure">{centsToEuro(i.cents)} €</span>
+                <li key={i.id}>
+                  <button
+                    type="button"
+                    onClick={() => setAccountFilter(i.id)}
+                    className={
+                      'flex w-full justify-between gap-2 rounded px-1 text-left hover:bg-[var(--color-bg)] ' +
+                      (i.id === accountFilter ? 'text-[var(--color-computed)]' : 'text-[var(--color-text-muted)]')
+                    }
+                  >
+                    <span>{i.name}</span>
+                    <span className="tabular-figure">{centsToEuro(i.cents)} €</span>
+                  </button>
                 </li>
               ))}
             </ul>
