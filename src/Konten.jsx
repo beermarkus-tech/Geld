@@ -49,6 +49,22 @@ export default function Konten() {
   const categoryById = useMemo(() => Object.fromEntries(categories.map((c) => [c.id, c])), [categories])
   const accountName = (id) => accountById[id]?.name ?? id
   const categoryName = (id) => categoryById[id]?.name ?? id
+  // Kategorie (the parent group, e.g. "Lebenshaltung") is derived/display
+  // only — only the leaf Unterkategorie is ever stored (spec.md §2.6/§3a).
+  const groupName = (id) => {
+    const parentId = categoryById[id]?.parentCategoryId
+    return parentId ? categoryName(parentId) : categoryName(id)
+  }
+
+  // The transaction's amount, signed relative to one specific account's own
+  // position — the same magnitude-by-position rule balance() uses (§2.6),
+  // applied here per row instead of summed over all rows.
+  const signedFor = (tx, accountId) => {
+    const magnitude = Math.abs(tx.amountCents)
+    if (tx.fromAccountId === accountId) return -magnitude
+    if (tx.toAccountId === accountId) return magnitude
+    return null
+  }
 
   const years = useMemo(() => {
     const set = new Set(transactions.map((t) => t.date.slice(0, 4)))
@@ -69,49 +85,75 @@ export default function Konten() {
       .sort((a, b) => (a.date === b.date ? a.id.localeCompare(b.id) : a.date.localeCompare(b.date)))
   }, [transactions, year])
 
+  // Confirmed column order (spec.md §3a): Datum → Konto 1 → Konto 2 →
+  // Empfänger → Betrag → Kategorie → Unterkategorie → Details → Tags.
+  // Konto1 is always the transaction's primary account (fromAccountId when
+  // present, else toAccountId); Konto2 is the second account, only for an
+  // actual transfer. The narrow arrow column between them shows direction —
+  // this is what lets a single-document transfer (no second row on the
+  // other account, unlike the old Gsheet) still read unambiguously either
+  // way. Only Unterkategorie is stored; Kategorie is its derived parent.
   const columnDefs = useMemo(
     () => [
       { field: 'date', headerName: 'Datum', width: 110, sort: 'asc' },
       {
-        headerName: 'Konto',
-        valueGetter: (p) => {
-          const t = p.data
-          if (t.fromAccountId && t.toAccountId) {
-            return `${accountName(t.fromAccountId)} → ${accountName(t.toAccountId)}`
-          }
-          return accountName(t.fromAccountId ?? t.toAccountId)
-        },
-        flex: 1.4,
-      },
-      { field: 'displayLabel', headerName: 'Empfänger', flex: 1.4 },
-      {
-        headerName: 'Kategorie',
-        valueGetter: (p) => {
-          const lines = p.data.lines ?? []
-          const cats = [...new Set(lines.map((l) => (l.categoryId ? categoryName(l.categoryId) : null)).filter(Boolean))]
-          if (cats.length === 0) return ''
-          if (cats.length === 1) return cats[0]
-          return '(mehrere)'
-        },
+        headerName: 'Konto 1',
+        valueGetter: (p) => accountName(p.data.fromAccountId ?? p.data.toAccountId),
         flex: 1.2,
       },
       {
+        headerName: '',
+        width: 40,
+        cellClass: 'text-center',
+        valueGetter: (p) => {
+          const t = p.data
+          if (!(t.fromAccountId && t.toAccountId)) return ''
+          return signedFor(t, t.fromAccountId) < 0 ? '→' : '←'
+        },
+      },
+      {
+        headerName: 'Konto 2',
+        valueGetter: (p) => (p.data.fromAccountId && p.data.toAccountId ? accountName(p.data.toAccountId) : '—'),
+        cellClass: (p) => (p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined),
+        flex: 1.2,
+      },
+      { field: 'displayLabel', headerName: 'Empfänger', flex: 1.4 },
+      {
         headerName: 'Betrag',
-        valueGetter: (p) => p.data.amountCents,
+        valueGetter: (p) => signedFor(p.data, p.data.fromAccountId ?? p.data.toAccountId),
         valueFormatter: (p) => centsToEuro(p.value),
         cellClass: 'text-right tabular-figure',
         width: 130,
       },
       {
-        headerName: 'Tags',
+        headerName: 'Kategorie',
         valueGetter: (p) => {
-          const lines = p.data.lines ?? []
-          return [...new Set(lines.flatMap((l) => l.tags ?? []))].join(', ')
+          const ids = [...new Set((p.data.lines ?? []).map((l) => l.categoryId).filter(Boolean))]
+          if (ids.length === 0) return '—'
+          const groups = [...new Set(ids.map(groupName))]
+          return groups.length === 1 ? groups[0] : '(mehrere)'
         },
+        cellClass: (p) => (p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined),
+        flex: 1.1,
+      },
+      {
+        headerName: 'Unterkategorie',
+        valueGetter: (p) => {
+          const ids = [...new Set((p.data.lines ?? []).map((l) => l.categoryId).filter(Boolean))]
+          if (ids.length === 0) return '—'
+          return ids.length === 1 ? categoryName(ids[0]) : '(mehrere)'
+        },
+        cellClass: (p) => (p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined),
+        flex: 1.3,
+      },
+      { field: 'detail', headerName: 'Details', flex: 1.3 },
+      {
+        headerName: 'Tags',
+        valueGetter: (p) => [...new Set((p.data.lines ?? []).flatMap((l) => l.tags ?? []))].join(', '),
         flex: 1,
       },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- accountName/categoryName close over these
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- accountName/categoryName/groupName close over these
     [accountById, categoryById],
   )
 
