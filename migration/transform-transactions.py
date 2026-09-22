@@ -217,297 +217,183 @@ def build_opening_transactions(opening):
     return txs
 
 
+TAGGED_GROUPS = ("Rücklagen", "Unterkonten")
+PAIR_WINDOW_DAYS = 45
+
+
+def row_tag(r):
+    if r["gruppe"] == "Rücklagen":
+        return ALLOCATION_TAG_MAP.get(r["kategorie"])
+    if r["gruppe"] == "Unterkonten":
+        return UNTERKONTEN_TAG_MAP.get(r["kategorie"])
+    return None
+
+
+def pair_transfers(rows):
+    """Pairs each transfer row (Konto=A, Transfer=B, value v) with its
+    counterpart row on the other account (Konto=B, Transfer=A, value -v).
+
+    The old sheet books every row only against its own Konto (the header
+    totals are plain SUMIF(Konto, Teilwert)), so a transfer normally appears
+    twice — once per account. The two legs can be days apart and carry
+    different payee labels. Greedy global matching: same payee first, then
+    closest date. Rows left over have no counterpart and must stay
+    single-sided, or they'd invent money on the other account."""
+    candidates = []
+    for i, a in enumerate(rows):
+        for j in range(i + 1, len(rows)):
+            b = rows[j]
+            if a["konto"] != b["transfer"] or a["transfer"] != b["konto"]:
+                continue
+            if to_cents(parse_amount(a["teilwert"])) != -to_cents(parse_amount(b["teilwert"])):
+                continue
+            gap = abs((date.fromisoformat(a["datum"]) - date.fromisoformat(b["datum"])).days)
+            if gap > PAIR_WINDOW_DAYS:
+                continue
+            candidates.append((a["empfaenger"] != b["empfaenger"], gap, i, j))
+    candidates.sort()
+    used, pairs = set(), []
+    for _, _, i, j in candidates:
+        if i in used or j in used:
+            continue
+        used.update((i, j))
+        pairs.append((rows[i], rows[j]))
+    unpaired = [r for k, r in enumerate(rows) if k not in used]
+    return pairs, unpaired
+
+
+def verify_account_sums(rows, transactions):
+    """Hard check: every real account must end the year exactly at
+    Σ Teilwert over its own rows — the sheet's own header formula."""
+    expected = defaultdict(int)
+    for r in rows:
+        acc = ACCOUNT_MAP.get(r["konto"])
+        if acc and r["teilwert"]:
+            expected[acc] += to_cents(parse_amount(r["teilwert"]))
+    actual = defaultdict(int)
+    for t in transactions:
+        f, to, a = t["fromAccountId"], t["toAccountId"], t["amountCents"]
+        if f and to:
+            actual[f] -= a
+            actual[to] += a
+        elif f:
+            actual[f] += a
+        elif to:
+            actual[to] += a
+    ok = True
+    for acc in sorted(set(expected) | set(ACCOUNT_MAP.values())):
+        e, a = expected.get(acc, 0), actual.get(acc, 0)
+        flag = "OK " if e == a else "BAD"
+        if e != a:
+            ok = False
+        print(f"  {flag} {acc:32s} expected {e/100:>11,.2f}  got {a/100:>11,.2f}")
+    return ok
+
+
 def main():
     rows = load_rows()
-
     opening = [r for r in rows if r["datum"] == "2024-12-31"]
-    real = [r for r in rows if r["datum"] != "2024-12-31"]
 
     opening_txs = build_opening_transactions(opening)
     with open(OPENING_OUT, "w") as f:
         json.dump(opening_txs, f, ensure_ascii=False, indent=2)
-    print(f"wrote {len(opening_txs)} opening-balance transactions to {OPENING_OUT}")
-    print(f"  total opening balance across all accounts: {sum(t['amountCents'] for t in opening_txs)/100:.2f} EUR")
+    print(f"wrote {len(opening_txs)} opening-balance transactions")
+
+    # Only Teilwert rows ever count toward a balance; 'Wert' is the sheet's
+    # own reference total and is never summed (verified against the header).
+    real = [r for r in rows if r["datum"] != "2024-12-31" and r["teilwert"]]
+    dropped_ohne = [r for r in real if r["konto"] == "Ohne"]
+    real = [r for r in real if r["konto"] != "Ohne"]
 
     transactions = []
-    tx_id = 0
-    def next_id():
-        nonlocal tx_id
-        tx_id += 1
-        return f"tx-2025-{tx_id:05d}"
+    counter = 0
+    def new_tx(**kw):
+        nonlocal counter
+        counter += 1
+        t = {"id": f"tx-2025-{counter:05d}", "rawDescription": kw.get("displayLabel", ""),
+             "detail": "", "createdAt": None}
+        t.update(kw)
+        transactions.append(t)
 
-    # index for locating a row's mirror ('Unterkonten' rows are the other
-    # half of an allocation-transfer already captured via its 'Rücklagen' pair)
-    unhandled = list(real)
-    skipped_scratch_totals = 0
-    skipped_unterkonten_mirrors = 0
-    plain_transfers = 0
-    allocation_transfers = 0
-    receivable_transactions = 0
-    split_groups = 0
-    single_line = 0
-    errors = []
-    dropped_ohne_rows = []
+    transfer_rows = [r for r in real if r["transfer"]]
+    other_rows = [r for r in real if not r["transfer"]]
 
-    # Pass 1: drop blank-total scratch rows (no Gruppe/Kategorie/Transfer,
-    # and real categorized lines exist for the same date+payee elsewhere)
-    groups_by_date_payee = defaultdict(list)
-    for r in real:
-        groups_by_date_payee[(r["datum"], r["empfaenger"])].append(r)
+    # --- transfers ---------------------------------------------------------
+    pairs, unpaired = pair_transfers(transfer_rows)
+    for a, b in pairs:
+        out, inc = (a, b) if to_cents(parse_amount(a["teilwert"])) < 0 else (b, a)
+        amount = abs(to_cents(parse_amount(out["teilwert"])))
+        tag = row_tag(out) or row_tag(inc)
+        details = " / ".join(d for d in (out["details"], inc["details"]) if d)
+        new_tx(date=out["datum"],
+               fromAccountId=ACCOUNT_MAP[out["konto"]], toAccountId=ACCOUNT_MAP[inc["konto"]],
+               amountCents=amount, displayLabel=out["empfaenger"],
+               lines=[{"amountCents": amount, "categoryId": None, "note": "", "tags": [tag]}] if tag else [],
+               detail=details)
 
-    def is_scratch_total(r):
-        if r["gruppe"] or r["kategorie"] or r["transfer"]:
-            return False
-        grp = groups_by_date_payee[(r["datum"], r["empfaenger"])]
-        return any(x["gruppe"] for x in grp if x is not r)
+    for r in unpaired:
+        v = to_cents(parse_amount(r["teilwert"]))
+        acc = ACCOUNT_MAP[r["konto"]]
+        tag = row_tag(r)
+        new_tx(date=r["datum"],
+               fromAccountId=acc if v < 0 else None, toAccountId=acc if v >= 0 else None,
+               amountCents=v, displayLabel=r["empfaenger"],
+               lines=[{"amountCents": v, "categoryId": None, "note": "", "tags": [tag]}] if tag else [],
+               detail=(r["details"] + " — " if r["details"] else "")
+                      + f"Gegenbuchung auf {r['transfer']} fehlt im Gsheet")
 
-    real = [r for r in real if not is_scratch_total(r)]
-    skipped_scratch_totals = len(rows) - len(opening) - len(real)
+    # --- receivables (Außenstände) ---------------------------------------
+    for r in [x for x in other_rows if x["gruppe"] == "Außenstände"]:
+        v = to_cents(parse_amount(r["teilwert"]))
+        real_acc = ACCOUNT_MAP[r["konto"]]
+        recv = receivable_account_for(r["empfaenger"], r["verliehen"])
+        f, to = (real_acc, recv) if v < 0 else (recv, real_acc)
+        tag = claim_tag_for(r["verliehen"], r["tag2"])
+        new_tx(date=r["datum"], fromAccountId=f, toAccountId=to, amountCents=abs(v),
+               displayLabel=r["empfaenger"], detail=r["details"],
+               lines=[{"amountCents": abs(v), "categoryId": None, "note": r["details"], "tags": [tag]}])
 
-    # Pass 2: any transfer-flagged row can be recorded TWICE in the old
-    # sheet — once from each account's own perspective (same date, Konto and
-    # Transfer swapped, same magnitude, opposite sign; often even a
-    # different Empfänger label per side, e.g. "Markus Beer" vs "Übertrag" —
-    # confirmed by tracing a real deep-negative Consors-Konto balance back
-    # to exactly this: a genuine replenishment transfer's two mirror rows
-    # were being built as two separate transactions, netting to zero
-    # instead of registering once). Keep exactly one row per real transfer;
-    # prefer the categorized side (Rücklagen over its Unterkonten mirror)
-    # when only one side carries a category, otherwise prefer the
-    # negative-signed side (the 'outflow from fromAccountId' framing).
-    def mirror_of(r):
-        if not r["transfer"]:
-            return None
-        r_amt = parse_amount(r["wert"]) if r["wert"] else parse_amount(r["teilwert"])
-        r_date = date.fromisoformat(r["datum"])
-        best, best_gap = None, None
-        for other in real:
-            if other is r:
-                continue
-            if other["konto"] != r["transfer"] or other["transfer"] != r["konto"]:
-                continue
-            o_amt = parse_amount(other["wert"]) if other["wert"] else parse_amount(other["teilwert"])
-            if o_amt is None or r_amt is None or abs(o_amt + r_amt) >= 0.02:
-                continue
-            gap = abs((date.fromisoformat(other["datum"]) - r_date).days)
-            same_payee = other["empfaenger"] == r["empfaenger"]
-            # Two observed patterns: (a) same payee label on both legs (e.g.
-            # 'Ausgleich 3'), recorded up to ~2 weeks apart — matched with a
-            # wide window since the shared label makes it safe; (b)
-            # different labels per leg (e.g. 'Sparen Sophia' / 'Aktien und
-            # ETFs' — each account's own name for the same event), always
-            # recorded same-day in every case seen — matched only within a
-            # tight window since there's no label to disambiguate against a
-            # coincidental same-amount transfer weeks apart.
-            if same_payee:
-                if gap > 45:
-                    continue
-            else:
-                if gap > 1:
-                    continue
-            # prefer a same-payee match over a same-day-only one if both exist
-            candidate_rank = (0 if same_payee else 1, gap)
-            if best is None or candidate_rank < best_gap:
-                best, best_gap = other, candidate_rank
-        return best
-
-    skipped_unterkonten_mirrors = 0
-    already_dropped = set()
-    for r in list(real):
-        if id(r) in already_dropped:
-            continue
-        m = mirror_of(r)
-        if m is None or id(m) in already_dropped:
-            continue
-        # prefer the row carrying a real category (Rücklagen over its
-        # blank/Unterkonten mirror); otherwise prefer the negative side
-        keep, drop = r, m
-        if not keep["gruppe"] and drop["gruppe"]:
-            keep, drop = drop, keep
-        elif keep["gruppe"] == drop["gruppe"]:
-            r_amt = parse_amount(keep["wert"]) if keep["wert"] else parse_amount(keep["teilwert"])
-            if r_amt is not None and r_amt > 0:
-                keep, drop = drop, keep
-        already_dropped.add(id(drop))
-
-    before = len(real)
-    real = [r for r in real if id(r) not in already_dropped]
-    skipped_unterkonten_mirrors = before - len(real)
-
-    # Pass 3: classify and build transactions
-    handled_ids = set()
-    for i, r in enumerate(real):
-        if id(r) in handled_ids:
-            continue
-        amt = parse_amount(r["wert"]) if r["wert"] else parse_amount(r["teilwert"])
-        if amt is None:
-            errors.append(("no amount", r))
-            continue
-        cents = to_cents(amt)
-
-        if r["konto"] == "Ohne" and not r["transfer"]:
-            dropped_ohne_rows.append(r)
-            continue
-
-        if r["gruppe"] == "Rücklagen" and r["transfer"]:
-            # allocation transfer: one row is enough, no separate mirror needed.
-            # Direction comes from the row's own sign (like the income/expense
-            # branch below) -- NOT always "Konto=from" (that was the actual
-            # bug: Konto's own recorded value can be positive, meaning Konto
-            # itself gained that entry, e.g. an investment-cash settlement
-            # account receiving proceeds — verified against the raw per-
-            # account sum from the sheet, which only makes sense this way).
-            konto_id = ACCOUNT_MAP.get(r["konto"])
-            transfer_id = ACCOUNT_MAP.get(r["transfer"])
-            tag = ALLOCATION_TAG_MAP.get(r["kategorie"])
-            if not (konto_id and transfer_id and tag):
-                errors.append(("unmapped allocation transfer", r))
-                continue
-            from_id, to_id = (transfer_id, konto_id) if cents >= 0 else (konto_id, transfer_id)
-            abs_cents = abs(cents)
-            transactions.append({
-                "id": next_id(), "date": r["datum"],
-                "fromAccountId": from_id, "toAccountId": to_id,
-                "amountCents": abs_cents,
-                "rawDescription": r["empfaenger"], "displayLabel": r["empfaenger"],
-                "lines": [{"amountCents": abs_cents, "categoryId": None, "note": r["details"], "tags": [tag]}],
-                "detail": r["details"], "createdAt": None,
-            })
-            allocation_transfers += 1
-            continue
-
+    # --- everything else: income/expense, split by (date, payee, account) --
+    groups = defaultdict(list)
+    for r in other_rows:
         if r["gruppe"] == "Außenstände":
-            recv_id = receivable_account_for(r["empfaenger"], r["verliehen"])
-            real_acc_id = ACCOUNT_MAP.get(r["konto"])
-            if not real_acc_id:
-                errors.append(("unmapped receivable-side real account", r))
-                continue
-            claim_tag = claim_tag_for(r["verliehen"], r["tag2"])
-            if cents < 0:
-                from_id, to_id = real_acc_id, recv_id
-            else:
-                from_id, to_id = recv_id, real_acc_id
-            abs_cents = abs(cents)
-            transactions.append({
-                "id": next_id(), "date": r["datum"],
-                "fromAccountId": from_id, "toAccountId": to_id,
-                "amountCents": abs_cents,
-                "rawDescription": r["empfaenger"], "displayLabel": r["empfaenger"],
-                "lines": [{"amountCents": abs_cents, "categoryId": None, "note": r["details"], "tags": [claim_tag]}],
-                "detail": r["details"], "createdAt": None,
-            })
-            receivable_transactions += 1
             continue
-
-        if r["transfer"] and not r["gruppe"]:
-            konto_id = ACCOUNT_MAP.get(r["konto"])
-            transfer_id = ACCOUNT_MAP.get(r["transfer"])
-            if not (konto_id and transfer_id):
-                errors.append(("unmapped plain transfer", r))
-                continue
-            from_id, to_id = (transfer_id, konto_id) if cents >= 0 else (konto_id, transfer_id)
-            transactions.append({
-                "id": next_id(), "date": r["datum"],
-                "fromAccountId": from_id, "toAccountId": to_id,
-                "amountCents": abs(cents),
-                "rawDescription": r["empfaenger"], "displayLabel": r["empfaenger"],
-                "lines": [],
-                "detail": r["details"], "createdAt": None,
-            })
-            plain_transfers += 1
-            continue
-
-        if r["gruppe"] and r["gruppe"] not in ("Rücklagen", "Außenstände", "Unterkonten"):
-            # normal categorized row — group with siblings sharing date+payee
-            key = (r["datum"], r["empfaenger"])
-            siblings = [x for x in groups_by_date_payee[key]
-                        if x in real and id(x) not in handled_ids
-                        and x["gruppe"] and x["gruppe"] not in ("Rücklagen", "Außenstände", "Unterkonten")]
-            if len(siblings) > 1:
-                split_groups += 1
+        groups[(r["datum"], r["empfaenger"], r["konto"])].append(r)
+    for (d, payee, konto), grp in groups.items():
+        lines = []
+        for r in grp:
+            v = to_cents(parse_amount(r["teilwert"]))
+            if r["gruppe"] in TAGGED_GROUPS:
+                cat, tags = None, [row_tag(r)]
+            elif r["gruppe"]:
+                cat, tags = category_id(r["gruppe"], r["kategorie"]), [t for t in (r["tag1"], r["tag2"]) if t]
             else:
-                single_line += 1
-            lines = []
-            total_cents = 0
-            for s in siblings:
-                samt = parse_amount(s["wert"]) if s["wert"] else parse_amount(s["teilwert"])
-                scents = to_cents(samt)
-                total_cents += scents
-                tags = []
-                if s["tag1"]:
-                    tags.append(s["tag1"])
-                if s["tag2"]:
-                    tags.append(s["tag2"])
-                lines.append({
-                    "amountCents": scents,
-                    "categoryId": category_id(s["gruppe"], s["kategorie"]),
-                    "note": s["details"], "tags": tags,
-                })
-                handled_ids.add(id(s))
-            acc_id = ACCOUNT_MAP.get(r["konto"])
-            if not acc_id:
-                errors.append(("unmapped account", r))
-                continue
-            if total_cents >= 0:
-                from_id, to_id = None, acc_id
-            else:
-                from_id, to_id = acc_id, None
-            transactions.append({
-                "id": next_id(), "date": r["datum"],
-                "fromAccountId": from_id, "toAccountId": to_id,
-                "amountCents": total_cents,
-                "rawDescription": r["empfaenger"], "displayLabel": r["empfaenger"],
-                "lines": lines,
-                "detail": r["details"], "createdAt": None,
-            })
-            continue
+                cat, tags = None, [t for t in (r["tag1"], r["tag2"]) if t]
+            lines.append({"amountCents": v, "categoryId": cat, "note": r["details"], "tags": tags})
+        total = sum(l["amountCents"] for l in lines)
+        acc = ACCOUNT_MAP[konto]
+        new_tx(date=d, fromAccountId=acc if total < 0 else None, toAccountId=acc if total >= 0 else None,
+               amountCents=total, displayLabel=payee, lines=lines,
+               detail=" / ".join(r["details"] for r in grp if r["details"]))
 
-        if r["gruppe"] == "Unterkonten":
-            # standalone allocation transfer (no paired 'Rücklagen' row —
-            # a plain savings<->checking reallocation, not an investment buy)
-            konto_id = ACCOUNT_MAP.get(r["konto"])
-            tag = UNTERKONTEN_TAG_MAP.get(r["kategorie"])
-            if r["transfer"]:
-                transfer_id = ACCOUNT_MAP.get(r["transfer"])
-                from_id, to_id = (transfer_id, konto_id) if cents >= 0 else (konto_id, transfer_id)
-            else:
-                # No Transfer target at all: an internal reallocation within
-                # the same tracked account — self-transaction, nets to zero.
-                from_id = to_id = konto_id
-            if not (from_id and to_id and tag):
-                errors.append(("unmapped standalone Unterkonten transfer", r))
-                continue
-            cents = abs(cents)
-            transactions.append({
-                "id": next_id(), "date": r["datum"],
-                "fromAccountId": from_id, "toAccountId": to_id,
-                "amountCents": cents,
-                "rawDescription": r["empfaenger"], "displayLabel": r["empfaenger"],
-                "lines": [{"amountCents": cents, "categoryId": None, "note": r["details"], "tags": [tag]}],
-                "detail": r["details"], "createdAt": None,
-            })
-            allocation_transfers += 1
-            continue
+    transactions.sort(key=lambda t: t["date"])
 
-        errors.append(("unclassified row", r))
+    print(f"transfer rows: {len(transfer_rows)} -> {len(pairs)} paired, {len(unpaired)} without counterpart")
+    for r in unpaired:
+        print(f"    unpaired: {r['datum']} {r['konto']} -> {r['transfer']} | {r['empfaenger']} | {r['teilwert']}")
+    print(f"'Ohne' rows dropped (not a real account): {len(dropped_ohne)}")
+    print(f"total transactions: {len(transactions)}")
 
-    print(f"scratch totals dropped: {skipped_scratch_totals}")
-    print(f"unterkonten mirrors dropped: {skipped_unterkonten_mirrors}")
-    print(f"plain transfers: {plain_transfers}")
-    print(f"allocation transfers: {allocation_transfers}")
-    print(f"receivable transactions: {receivable_transactions}")
-    print(f"split groups: {split_groups}, single-line: {single_line}")
-    print(f"total transactions built: {len(transactions)}")
-    print(f"'Ohne' virtual-placeholder rows dropped (net {sum(to_cents(parse_amount(r['wert']) if r['wert'] else parse_amount(r['teilwert'])) for r in dropped_ohne_rows)/100:.2f} EUR, touched no real account either way):")
-    for r in dropped_ohne_rows:
-        print("  ", r["datum"], r["empfaenger"], r["gruppe"], r["kategorie"], r["wert"] or r["teilwert"])
-    print(f"errors: {len(errors)}")
-    for kind, r in errors[:30]:
-        print(" ", kind, "|", r["datum"], r["konto"], r["transfer"], r["empfaenger"], r["gruppe"], r["kategorie"], r["wert"], r["teilwert"])
+    bad = [t for t in transactions if t["lines"] and sum(l["amountCents"] for l in t["lines"]) != t["amountCents"]]
+    print(f"split-invariant violations: {len(bad)}")
+
+    print("account totals vs. Gsheet header formula (Σ Teilwert per Konto):")
+    ok = verify_account_sums(rows, opening_txs + transactions)
 
     with open(OUT, "w") as f:
         json.dump(transactions, f, ensure_ascii=False, indent=2)
-    print(f"wrote {OUT}")
+    print("ALL ACCOUNTS MATCH" if ok else "MISMATCH — see BAD rows above")
+
 
 if __name__ == "__main__":
     main()
