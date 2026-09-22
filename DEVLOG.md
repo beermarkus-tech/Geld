@@ -163,3 +163,23 @@ PLAN.md updated throughout to wire each layer into the phase where it belongs; P
 ### Addendum — same day, mockup-konten.html updated for soft-delete recovery
 
 Added the "Kürzlich gelöscht" toggle (§2.9a) to the filter bar, next to the saved-filters button — off by default. A hidden demo row (a deleted Gartenschlauch/Amazon transaction, struck through and dimmed) appears when toggled on, with a working "Wiederherstellen" button that removes it again — a real interactive demo, not just a static screenshot. Minor polish item from the earlier open-items check; no design change, just brings the mockup in line with what §2.9a already specified.
+
+---
+
+## Session 1 — 2026-09-21/22 — Phase 0 done; Phase 1a migration built and validated
+
+**Phase 0 (PLAN.md) — complete except the tablet check.** Firebase project (Blaze), Google sign-in, Firestore in `eur3` with PITR (verified in the console), single-admin-UID security rule published. React/Vite/Tailwind scaffold with the §1a offline architecture: persistent multi-tab Firestore cache, bounded Auth-init timeout, hand-written network-first service worker (`injectManifest`). **Hosting changed to GitHub Pages** (spec.md §1b.1 updated; Markus's decision). Deployed via GitHub Actions on every push to `main`; a small "Build N" badge (N = commit count) is shown in every app state, and every deploy is reported to Markus by build number. Themed PWA icon. Installed as a PWA on Markus's phone; offline reload verified there. **Still open: the same install/offline check on the tablet.**
+
+**Phase 1a — 2025 migration built, not yet imported.** Seed data (accounts, categories, allocation tags) from spec.md, plus two scripts in `migration/` (see CODEMAP.md) that transform the "Geld 2025" sheet. Every figure is checked against the sheet's own totals, and all match: all account balances, all allocation-tag totals, all claims (open/settled, per receivable account), per-category monthly actuals vs. Verlauf's Prog rows, and Plan0/Plan1 group totals per month. The key modelling finding: the sheet books every row only against its own account and records each transfer twice (once per account, sometimes days apart and with different payee labels), so the migration pairs transfer rows globally and never lets an unpaired row invent money on another account. Several heuristic approaches before that produced plausible-but-wrong balances; the per-account check against the sheet's header formula is what made it reliable.
+
+**Spec clarifications made this session (all driven by the migration):** §2.6 how a two-account transfer's amount applies to each side; §2.8 allocation-tag balances and claim status are signed by the money's direction relative to the tag's target account(s), and claims are routed by who owes the money, not where it was spent; §2.7 budget sign convention (savings-transfer: negative = set aside) and that a budget line's `note` explains that month's booking.
+
+**Data corrections confirmed by Markus** are recorded in `CORRECTIONS` in `transform-transactions.py` (a transfer typo, a claim booked on the placeholder account). One reimbursed expense marked as claimable is now a claim rather than holiday spending (so one category-month differs from the sheet by design). One small investment-loss row in the sheet has no category; it will import as an uncategorized line for Markus to categorize in the app.
+
+**Privacy incident, resolved:** the repo is public (needed for free GitHub Pages). Generated migration output with real personal financial data was committed for a few hours before this was noticed. With Markus's approval, `main`'s history was rewritten and force-pushed so no commit contains it; generated output now lives only in the gitignored `migration/out/`. **Standing rule: no real financial data in this repo, ever.** Consequence for the design: the import screen must not bundle the data into the (public) app — Markus picks the generated files from his device/Google Drive while signed in.
+
+**Open items (awaiting Markus, non-blocking):**
+- Year-level side notes in the sheet's Verlauf (why Prog deviates from the plans) have no home in the data model. Not migrated; Markus wants to design something later.
+- 2026 transactions: spec.md §2.3 speaks of the migration covering 2025 *and* 2026, while PLAN.md Phase 1a only imports 2025 and has Markus enter a week of 2026 by hand. The "Geld 2026" sheet is in active use (Jan–Sep 2026). Needs a decision on whether/when to migrate it.
+
+**Next session should probably:** build the one-time import screen (file picker → batch writes to Firestore, removed afterwards), import, then start Konten's grid (AG Grid) per PLAN.md Phase 1a.

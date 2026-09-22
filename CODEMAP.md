@@ -22,6 +22,17 @@ React + Vite app, plain JavaScript (no TypeScript — not asked for, and Markus 
 - `public/icons/` — placeholder PWA icons (flat-color circle mark, programmatically generated, not a real design) — swap these out whenever real icon design happens; nothing depends on their current appearance.
 - `firebase.json` / `.firebaserc` / `firestore.rules` / `firestore.indexes.json` — Firestore-only Firebase config (no `hosting` key — GitHub Pages serves the app, not Firebase Hosting, per spec.md §1b.1). `firestore.rules` is currently deny-all (`allow read, write: if false`) until Markus's admin UID is known and the single-admin rule replaces it (§1a/§1b.1).
 
+### `migration/` — one-off 2025 import from the Gsheet (PLAN.md Phase 1a)
+
+Not part of the app bundle. Python scripts that turn Markus's "Geld 2025" Google Sheet into Firestore-shaped JSON, each with built-in checks against the sheet's own totals that fail loudly on any mismatch.
+
+- `migration/seed/` — **committed**, non-personal static data transcribed from spec.md: `accounts.json` (§2.2), `categories.json` (§2.4), `tags-allocation.json` (the 7 allocation tags, §2.5).
+- `migration/transform-transactions.py` — `Konten` tab → 2025 transactions + one-time Jahresabschluß opening balances. Core rule, verified against the sheet: every row changes only its own Konto (`Σ Teilwert per Konto` is the sheet's header formula; `Wert` never counts); transfers appear as two rows and are paired globally, unpaired rows stay single-sided. Confirmed data-entry typos live in its `CORRECTIONS` table. Checks: all 18 account balances, all 7 allocation-tag totals, all 59 claims (open/settled, per receivable account) against the sheet.
+- `migration/transform-budgets.py` — `Verlauf` tab → Plan0 + Plan1 budgets and their breakdown-line grouping tags (Prog is not imported — computed live). Checks: group totals per month against the Verlauf summary rows, savings actuals per month against the Prog rows.
+- `migration/out/` — **gitignored**, generated output (real personal data). **This repo is public (GitHub Pages) — nothing personal may ever be committed.** The generated files will reach Firestore via the app's one-time import screen (file picker, not bundled into the public app).
+
+To regenerate: export the "Geld 2025" sheet from Markus's Google Drive as `.xlsx` (the Drive connector's download with the xlsx export type keeps every tab — CSV export only gives the first tab), save it at the path in each script's `SRC` constant, run `transform-transactions.py` first, then `transform-budgets.py` (it reads the transactions output for its savings check). Needs `openpyxl`.
+
 ## Screen-to-component map
 
 Not started — `App.jsx` has no screens yet beyond the auth shell. This section gets real entries starting whenever Konten (Phase 1a) is built.

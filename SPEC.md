@@ -293,8 +293,8 @@ type: "expense" | "savings-transfer"  // savings-transfer targets an allocation 
 categoryId: null | <id>               // required when type == "expense"
 allocationTagId: null | <id>          // required when type == "savings-transfer" — e.g. Sparen Sophia, Anlage Familie
 breakdownTagId: null | <id>           // optional — present when this row is a detail/breakdown line under categoryId (grouping-class tag)
-plannedAmountCents: integer
-note: string                          // free-text commentary on this specific line, independent of tags — always available regardless of breakdown structure
+plannedAmountCents: integer           // SIGNED, same sign as the actuals it's compared with: income +, expense −. savings-transfer: − = money set aside into the tag (it reduces what's left to spend, like an expense), + = taken back out — so its actual is −(the tag's change that month) (clarified Sept 2026, matches the Gsheet's Rücklagen rows)
+note: string                          // explains the booking in this specific month — confirmed by Markus (Sept 2026) as per-month commentary, not an explanation of a plan-vs-actual deviation
 ```
 `regularSharePercent` and `pacingMode` are no longer here — see §2.7c, a fix from external review (Sept 2026): both are genuinely single values per category-year, with no one month among the 12 `budgets` documents that's naturally "the" place to store them.
 

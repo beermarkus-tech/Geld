@@ -5,15 +5,16 @@ spec.md §2.6's schema. See DEVLOG.md / this session's chat for the full
 reasoning behind each rule below — this is not meant to be self-explanatory
 without that context.
 """
-import csv
 import json
 import re
 from collections import defaultdict
 from datetime import date
 
-SRC = "/tmp/claude-0/-home-user-Geld/579a8311-2b64-5844-81b1-64afabfc8004/scratchpad/konten.csv"
-OUT = "/home/user/Geld/migration/seed/transactions-2025.json"
-OPENING_OUT = "/home/user/Geld/migration/seed/jahresabschluss.json"
+# The "Geld 2025" Google Sheet exported as .xlsx (Drive export keeps every tab;
+# CSV export would only give the first one). See CODEMAP.md for how to get it.
+SRC = "/tmp/claude-0/-home-user-Geld/579a8311-2b64-5844-81b1-64afabfc8004/scratchpad/geld2025.xlsx"
+OUT = "/home/user/Geld/migration/out/transactions-2025.json"
+OPENING_OUT = "/home/user/Geld/migration/out/jahresabschluss.json"
 
 # --- account name mapping: old sheet 'Konto' string -> new account id ---
 ACCOUNT_MAP = {
@@ -75,7 +76,7 @@ UNTERKONTEN_TAG_MAP = {
 # --- receivable-account routing for Außenstände / Verliehen-tagged rows ---
 def receivable_account_for(empfaenger, verliehen):
     # Route by who owes the money (Verliehen), not by where it was spent: a
-    # loan to Muschs for something bought on Amazon is not an Amazon return.
+    # loan to a relative for something bought on Amazon is not an Amazon return.
     if verliehen == "Amazon":
         m = re.match(r"Amazon (FR|DE) (Julia|Markus)", empfaenger)
         if not m:
@@ -123,8 +124,9 @@ def load_rows():
 
 
 def _load_raw_rows():
-    with open(SRC, newline="", encoding="utf-8") as f:
-        rows = list(csv.reader(f))
+    import openpyxl
+    ws = openpyxl.load_workbook(SRC, data_only=True)["Konten"]
+    rows = [["" if v is None else str(v) for v in r] for r in ws.iter_rows(values_only=True)]
     header = rows[10]
     def col(r, name):
         idx = header.index(name)

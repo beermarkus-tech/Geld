@@ -22,7 +22,7 @@ See `CLAUDE.md` for how this fits alongside `spec.md` and `DEVLOG.md`.
 ## Phase 1a — Konten core: grid & manual entry
 
 - Firestore collections created per §2: `accounts`, `categories`, `tags`, `transactions`, `budgets`, `categoryYearSettings`, `settings` — seeded with real category/account/tag data (one-off migration from the Gsheet, not the full Settings UI yet).
-- **Historical migration:** 2025's full transaction history *and* its Plan0 budget rows imported (§2.3/§4/§3c) — 2025 gets the single `Jahresabschluß` opening-balance anchor transaction (the one and only one, ever, per account); 2026 gets none, since its Jahresanfang is a computed lookup against 2025's Dec 31 balance. Deliberate: a full closed year of real data is the actual validation target for the whole computation engine, not just a means to unblock a formula.
+- **Historical migration:** 2025's full transaction history *and* its Plan0 and Plan1 budget rows imported (§2.3/§4/§3c; Plan1 added Sept 2026 so 2025's Verlauf shows every line the Gsheet does) — 2025 gets the single `Jahresabschluß` opening-balance anchor transaction (the one and only one, ever, per account); 2026 gets none, since its Jahresanfang is a computed lookup against 2025's Dec 31 balance. Deliberate: a full closed year of real data is the actual validation target for the whole computation engine, not just a means to unblock a formula.
 - Konten's grid (AG Grid), single-line manual transaction entry, Konto1/Konto2 and Kategorie/Unterkategorie cascading dropdowns, the pinned balance panel.
 - Full keyboard cell-to-cell navigation working (§1 requirement).
 - AG Grid's built-in cell-edit Undo/Redo enabled (§2.9a) — free, Community tier, `Ctrl+Z`/`Ctrl+Y`.
