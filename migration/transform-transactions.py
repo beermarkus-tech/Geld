@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
 """
-Transforms the 2025 'Konten' ledger export into transactions.json matching
-spec.md §2.6's schema. See DEVLOG.md / this session's chat for the full
+Transforms a year's 'Konten' ledger (Geld 2025, Geld 2026, ...) into
+transactions matching spec.md §2.6's schema. Usage: transform-transactions.py
+[year] (default 2025; run the years in order — each later year is checked
+against the earlier years' output). See DEVLOG.md / this session's chat for the full
 reasoning behind each rule below — this is not meant to be self-explanatory
 without that context.
 """
 import json
 import re
+import sys
 from collections import defaultdict
 from datetime import date
 
-# The "Geld 2025" Google Sheet exported as .xlsx (Drive export keeps every tab;
-# CSV export would only give the first one). See CODEMAP.md for how to get it.
-SRC = "/tmp/claude-0/-home-user-Geld/579a8311-2b64-5844-81b1-64afabfc8004/scratchpad/geld2025.xlsx"
-OUT = "/home/user/Geld/migration/out/transactions-2025.json"
+# The "Geld {year}" Google Sheet exported as .xlsx (Drive export keeps every
+# tab; CSV export would only give the first one). See CODEMAP.md for how to get it.
+SRC = "/tmp/claude-0/-home-user-Geld/579a8311-2b64-5844-81b1-64afabfc8004/scratchpad/geld{year}.xlsx"
+OUT = "/home/user/Geld/migration/out/transactions-{year}.json"
+FIRST_YEAR = 2025
 OPENING_OUT = "/home/user/Geld/migration/out/jahresabschluss.json"
 
 # --- account name mapping: old sheet 'Konto' string -> new account id ---
@@ -83,7 +87,9 @@ def receivable_account_for(empfaenger, verliehen):
             raise ValueError(f"Amazon claim without an 'Amazon FR/DE Julia/Markus' payee: {empfaenger!r}")
         country, person = m.groups()
         return f"amazon-{person.lower()}-{country.lower()}"
-    if verliehen == "MSH":
+    if verliehen in ("MSH", "CPAM"):
+        # Both health insurers' refunds land on the same receivable; the
+        # 2026 sheet uses both names, sometimes for the same claim.
         return "cpam"
     if verliehen == "Airbus":
         return "reisekosten-airbus"
@@ -102,7 +108,11 @@ def parse_amount(s):
     return float(s)
 
 def to_cents(f):
-    return round(f * 100)
+    # Foreign-currency rows can carry sub-cent euro values. Half a cent is
+    # rounded toward zero, which is what makes the account totals match the
+    # sheet header (it rounds only the displayed sum, never the rows).
+    from decimal import Decimal, ROUND_HALF_DOWN
+    return int(Decimal(repr(f)).scaleb(2).quantize(Decimal(1), rounding=ROUND_HALF_DOWN))
 
 # Data-entry typos in the Gsheet, each confirmed by Markus. Keyed by
 # (date, Konto, Empfänger) -> {field: corrected value}.
@@ -114,8 +124,8 @@ CORRECTIONS = {
 }
 
 
-def load_rows():
-    rows = _load_raw_rows()
+def load_rows(year=FIRST_YEAR):
+    rows = _load_raw_rows(SRC.format(year=year))
     for r in rows:
         fix = CORRECTIONS.get((r["datum"], r["konto"], r["empfaenger"]))
         if fix:
@@ -123,9 +133,9 @@ def load_rows():
     return rows
 
 
-def _load_raw_rows():
+def _load_raw_rows(src):
     import openpyxl
-    ws = openpyxl.load_workbook(SRC, data_only=True)["Konten"]
+    ws = openpyxl.load_workbook(src, data_only=True)["Konten"]
     rows = [["" if v is None else str(v) for v in r] for r in ws.iter_rows(values_only=True)]
     header = rows[10]
     def col(r, name):
@@ -422,18 +432,11 @@ def verify_claims(rows, transactions):
     return ok
 
 
-def main():
-    rows = load_rows()
-    opening = [r for r in rows if r["datum"] == "2024-12-31"]
-
-    opening_txs = build_opening_transactions(opening)
-    with open(OPENING_OUT, "w") as f:
-        json.dump(opening_txs, f, ensure_ascii=False, indent=2)
-    print(f"wrote {len(opening_txs)} opening-balance transactions")
-
+def build_year_transactions(year, in_year_rows):
+    """Every in-year sheet row -> app transactions (no opening balances)."""
     # Only Teilwert rows ever count toward a balance; 'Wert' is the sheet's
     # own reference total and is never summed (verified against the header).
-    real = [r for r in rows if r["datum"] != "2024-12-31" and r["teilwert"]]
+    real = [r for r in in_year_rows if r["teilwert"]]
     ohne_rows = [r for r in real if r["konto"] == "Ohne"]
     real = [r for r in real if r["konto"] != "Ohne"]
 
@@ -442,7 +445,7 @@ def main():
     def new_tx(**kw):
         nonlocal counter
         counter += 1
-        t = {"id": f"tx-2025-{counter:05d}", "rawDescription": kw.get("displayLabel", ""),
+        t = {"id": f"tx-{year}-{counter:05d}", "rawDescription": kw.get("displayLabel", ""),
              "detail": "", "createdAt": None}
         t.update(kw)
         transactions.append(t)
@@ -573,16 +576,46 @@ def main():
 
     bad = [t for t in transactions if t["lines"] and sum(l["amountCents"] for l in t["lines"]) != t["amountCents"]]
     print(f"split-invariant violations: {len(bad)}")
+    return transactions
+
+
+def main():
+    year = int(sys.argv[1]) if len(sys.argv) > 1 else FIRST_YEAR
+    rows = load_rows(year)
+    # Rows dated before Jan 1 are the sheet's own carried-over opening
+    # balances. Only the first year turns them into the one Jahresabschluß
+    # (spec.md §2.3); later years never import them — their starting point
+    # is the previous years' transactions. The checks below still sum
+    # every row of this year's sheet, so this year's header totals must come
+    # out of the full history: Jahresabschluß + every year up to this one.
+    opening = [r for r in rows if r["datum"] < f"{year}-01-01"]
+    in_year = [r for r in rows if r["datum"] >= f"{year}-01-01"]
+
+    if year == FIRST_YEAR:
+        prior_txs = build_opening_transactions(opening)
+        with open(OPENING_OUT, "w") as f:
+            json.dump(prior_txs, f, ensure_ascii=False, indent=2)
+        print(f"wrote {len(prior_txs)} opening-balance transactions")
+    else:
+        with open(OPENING_OUT) as f:
+            prior_txs = json.load(f)
+        for y in range(FIRST_YEAR, year):
+            with open(OUT.format(year=y)) as f:
+                prior_txs += json.load(f)
+        print(f"{len(opening)} opening rows in the {year} sheet not imported — "
+              f"starting from {len(prior_txs)} transactions of {FIRST_YEAR}..{year - 1}")
+
+    transactions = build_year_transactions(year, in_year)
 
     print("account totals vs. Gsheet header formula (Σ Teilwert per Konto):")
-    ok = verify_account_sums(rows, opening_txs + transactions)
+    ok = verify_account_sums(rows, prior_txs + transactions)
 
     print("allocation-tag totals vs. Gsheet header formula (Σ Unterkonten Teilwert per tag):")
-    tags_ok = verify_tag_sums(rows, opening_txs + transactions)
+    tags_ok = verify_tag_sums(rows, prior_txs + transactions)
     print("claims & loans vs. Gsheet open-items formula (Σ Teilwert where Verliehen is set):")
-    tags_ok = verify_claims(rows, opening_txs + transactions) and tags_ok
+    tags_ok = verify_claims(rows, prior_txs + transactions) and tags_ok
 
-    with open(OUT, "w") as f:
+    with open(OUT.format(year=year), "w") as f:
         json.dump(transactions, f, ensure_ascii=False, indent=2)
     print("ALL ACCOUNTS AND TAGS MATCH" if ok and tags_ok else "MISMATCH — see BAD rows above")
 
