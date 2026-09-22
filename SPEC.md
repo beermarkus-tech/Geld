@@ -148,14 +148,16 @@ Two families: **Inter** for interface text (labels, categories, navigation), **a
 id, name
 group: "cash" | "payment" | "savings" | "investment-cash" | "investment-tracking"
        | "physical-cash" | "receivable" | "system"
-reportingGroup: "Barkonten" | "Sparkonten" | "Geldanlage" | null   // null for Jahresabschluß only
+reportingGroup: "Barkonten" | "Sparkonten" | "Geldanlage" | "Außenstände" | null   // null for Jahresabschluß only
 parentAccountId: null | <id>
 isVirtual: boolean       // true for Aktien, Crypto, Edelmetalle, ESOP — tracks cost basis only, not market value
 tracked: boolean         // false = account exists conceptually but isn't actively used yet (e.g. Giro Sophia)
 ```
 (The `envelope` group is retired — see §2.1 and §2.5 for the allocation-tag replacement.)
 
-`reportingGroup` is the user's own top-level mental model, distinct from the technical `group` field: **Barkonten** = anything freely/easily movable to cash, including the investment-cash settlement accounts and receivables (money not yet arrived is still "cash," liquidity-wise); **Sparkonten** = the two Livrets; **Geldanlage** = the four investment-tracking accounts only (Aktien, Crypto, Edelmetalle, ESOP) — not their settlement accounts.
+`reportingGroup` is the user's own top-level mental model, distinct from the technical `group` field: **Barkonten** = real, freely/easily movable-to-cash accounts, including the investment-cash settlement accounts; **Sparkonten** = the two Livrets; **Geldanlage** = the four investment-tracking accounts only (Aktien, Crypto, Edelmetalle, ESOP) — not their settlement accounts; **Außenstände** = the seven `receivable` accounts (Amazon ×4, CPAM, Reisekosten Airbus, Geld verliehen/geliehen).
+
+**Revised Sept 2026 — receivables get their own reportingGroup, not folded into Barkonten:** the original reasoning ("money not yet arrived is still cash, liquidity-wise") was sound as a *liquidity* argument, but Markus's actual pinned-panel mental model treats open claims/loans as a genuinely different kind of thing from a real bank/cash balance — they're not "real accounts" the same way BNP or Bar Markus are. Nothing about the `receivable` `group` or the accounts themselves changes, only which reportingGroup block they show up under. (This also now matches the Gsheet's own header, which already shows "Barkonten" and "Verliehen" as separate figures — see the flag on §3c's Jahresanfang/Budget formula below, since that formula's already-checked worked numbers were never re-verified against this narrower definition.)
 
 **Populated accounts:**
 
@@ -179,13 +181,13 @@ tracked: boolean         // false = account exists conceptually but isn't active
 | Crypto | investment-tracking | Geldanlage | – | isVirtual: true; part of the same Anlage Familie/Sophia pool |
 | Edelmetalle | investment-tracking | Geldanlage | – | isVirtual: true; part of the same Anlage Familie/Sophia pool |
 | ESOP | investment-tracking | Geldanlage | – | isVirtual: true; Airbus shares; part of the same Anlage Familie/Sophia pool |
-| Amazon Julia (FR) | receivable | Barkonten | – | |
-| Amazon Julia (DE) | receivable | Barkonten | – | |
-| Amazon Markus (FR) | receivable | Barkonten | – | |
-| Amazon Markus (DE) | receivable | Barkonten | – | |
-| CPAM | receivable | Barkonten | – | money to claim back; consists of individual bookings (see §2.4) |
-| Reisekosten Airbus | receivable | Barkonten | – | travel expenses to be reimbursed; individual bookings roll up to a claim |
-| Geld verliehen/geliehen | receivable | Barkonten | – | loans given/received; excluded entirely from yearly budget/expensable-income planning (§2.7); expected to net to zero over time, even across year boundaries |
+| Amazon Julia (FR) | receivable | Außenstände | – | |
+| Amazon Julia (DE) | receivable | Außenstände | – | |
+| Amazon Markus (FR) | receivable | Außenstände | – | |
+| Amazon Markus (DE) | receivable | Außenstände | – | |
+| CPAM | receivable | Außenstände | – | money to claim back; consists of individual bookings (see §2.4) |
+| Reisekosten Airbus | receivable | Außenstände | – | travel expenses to be reimbursed; individual bookings roll up to a claim |
+| Geld verliehen/geliehen | receivable | Außenstände | – | loans given/received; excluded entirely from yearly budget/expensable-income planning (§2.7); expected to net to zero over time, even across year boundaries |
 | Giro Sophia | cash | Barkonten | – | tracked: false — exists but not yet active |
 | Jahresabschluß | system | null | – | bookkeeping plug for year-end rollover (see §2.3) |
 
@@ -538,7 +540,7 @@ Two independent global controls sit in the header: **"Plan0 anzeigen/ausblenden"
 **Two year columns, driven by the global year selector (§1b.2a):** a **reference year** (always `selectedYear − 1`, always shown as that year's own Plan0 — closed years never change, so this column is permanently frozen once the year has passed) and the **planning year** (`selectedYear` itself), whose column defaults to **Plan0** but can be switched, per-view only, to show **Plan1** or **Prog** instead — a quick lens on how the plan has drifted through the year, not a different planning target. Switching that lens never changes what "the plan" actually is; comments and the split always attach to the year's **Plan0** row regardless of which version is currently displayed in the column.
 
 **Structure — sections, top to bottom, matching the Gsheet:**
-1. **Jahresanfang** — starting cash: `Alle Barkonten` at year start, minus the year's `minCashBufferCents` (§2.7a) — "the visible planning-start figure is real starting cash minus a hidden minimum buffer target," so planning always happens against "zero plus X," never accidentally into the buffer.
+1. **Jahresanfang** — starting cash: `Alle Barkonten` at year start, minus the year's `minCashBufferCents` (§2.7a) — "the visible planning-start figure is real starting cash minus a hidden minimum buffer target," so planning always happens against "zero plus X," never accidentally into the buffer. **Flagged, not yet re-checked (Sept 2026):** `Barkonten` here means the reportingGroup, which as of this session's revision (§2.2) no longer includes the seven receivable accounts. The worked numbers below were computed before that revision — this section hasn't been re-validated against the narrower definition, and Planung/Prognose (§3c/§3d, Phase 3/6) aren't built yet, so this doesn't block anything today. Re-check before either screen gets built.
 2. **Einnahmen** — income categories (Gehalt Markus/Julia, Sonderzahlungen, Kindergeld, Sonstige Einnahmen, etc.) — these are ordinary `categoryId`-linked budget rows (§2.7's `type: "expense"` covers any category-linked row regardless of sign, income included — no schema change needed, just noting the naming is a little misleading for this case).
 3. **Fixkosten** — categories flagged `isFixkosten: true` (§2.4): Steuern, Krankenkasse, Hauskredit, Rente — fixed/uninfluenceable, not part of the discretionary planning loop.
 4. **Budget summary band** — `Budget` (disposable income after Fixkosten), `Ausgaben vs. Budget` (the delta — "should be near zero, including Rücklagen"), and `... gebildete Rücklagen` (the savings-transfer portion of that delta, broken out) — all pure arithmetic over the sections above/below, nothing separately entered.

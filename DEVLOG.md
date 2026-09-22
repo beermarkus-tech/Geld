@@ -241,3 +241,15 @@ The ten generated files (both years' seed + migration output) were sent to Marku
 **Note for whenever manual entry is built:** Konto is still two real fields underneath (`fromAccountId`/`toAccountId`) — merging the *display* doesn't merge the data. How the edit interaction for one merged cell should work (tap to reveal two pickers, or something else) isn't decided; flagged in spec.md itself, not just here, since it's a genuine open point for that later work, not a decision this session made.
 
 **Next session should probably:** continue toward manual entry + cascading dropdowns + keyboard nav — now with the Konto editor's UX still to be decided along the way, per the note above.
+
+## Session 6 — 2026-09-22 — Außenstände split out of Barkonten into its own reportingGroup
+
+**Markus's request:** move the seven `receivable` accounts (Amazon ×4, CPAM, Reisekosten Airbus, Geld verliehen/geliehen) into their own pinned-panel block instead of being folded into Barkonten — they're open claims/loans, not "real accounts" the way a bank or cash balance is. spec.md §2.2 revised: `reportingGroup` gains a fourth value, `"Außenstände"`; the seven accounts' table rows and `migration/seed/accounts.json` updated to match; `Konten.jsx`'s pinned panel now shows four blocks instead of three.
+
+**Noticed while doing this, worth recording:** the Gsheet's own header already shows "Barkonten" and "Verliehen" (Außenstände) as two separate figures (visible in the screenshot Markus shared earlier this session) — so this change arguably brings the reportingGroup grouping *closer* to the Gsheet's own convention, not further from it. The original "fold receivables into Barkonten" decision was a liquidity argument made when the accounts collection was first specced, and was apparently never checked against how the Gsheet itself actually groups these.
+
+**Flagged in spec.md itself, not resolved here (non-blocking — Planung/Prognose aren't built, Phase 3/6):** §3c's Jahresanfang/Budget formula reads `Alle Barkonten`, and its worked "✓" example numbers (5.687 / 14.240 for the two years' Jahresanfang-minus-Puffer) were computed before this revision. Whether "Barkonten" in that formula should now exclude receivables too (probably yes, matching the Gsheet) needs an explicit re-check against real numbers before Planung ever gets built — flagged inline in §3c itself so it isn't missed later.
+
+**Action needed from Markus, not yet done:** `accounts.json` already lives in Firestore from the earlier import — editing the seed file alone doesn't change what's already there. He needs to re-run `ImportScreen` (kept for exactly this) with the updated `accounts.json`, sent again this session. Re-importing just that one file is enough; every other collection is untouched.
+
+**Next session should probably:** confirm the re-import landed (Außenstände block should show real data, and the Barkonten total should drop by the open-claims amount), then continue toward manual entry + cascading dropdowns + keyboard nav — still the standing next step.

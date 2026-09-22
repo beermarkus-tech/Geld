@@ -8,9 +8,12 @@ import { jahresende } from './lib/balance'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 
-// Barkonten/Sparkonten/Geldanlage — Markus's own top-level mental model
-// (spec.md §2.2's reportingGroup), not the technical account `group`.
-const REPORTING_GROUPS = ['Barkonten', 'Sparkonten', 'Geldanlage']
+// Barkonten/Sparkonten/Geldanlage/Außenstände — Markus's own top-level
+// mental model (spec.md §2.2's reportingGroup), not the technical account
+// `group`. Außenstände (the seven receivable accounts) got its own block
+// Sept 2026 — they're open claims/loans, not "real accounts" the same way
+// a bank or cash balance is (spec.md §2.2's revision note).
+const REPORTING_GROUPS = ['Barkonten', 'Sparkonten', 'Geldanlage', 'Außenstände']
 
 function centsToEuro(cents) {
   return (cents / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -239,7 +242,7 @@ export default function Konten() {
           Phase 1a: every figure here should match the real Gsheet closing
           balance for that account/year. Each account is also a shortcut
           into the account filter above. */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {panel.map(({ group, items, total }) => (
           <div key={group} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
             <div className="mb-1 flex items-baseline justify-between">
