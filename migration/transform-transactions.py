@@ -108,6 +108,8 @@ def to_cents(f):
 CORRECTIONS = {
     # Transfer column said Livret A Tagesgeld; counterpart is on Livret A Sparen.
     ("2025-10-16", "BNP-Konto", "Ausgleich Taxe Fonciere"): {"transfer": "Livret A Sparen"},
+    # Booked on the 'Ohne' placeholder; actually paid cash, claimable from Airbus.
+    ("2025-12-31", "Ohne", "Kantine Hamburg"): {"konto": "Bar Markus"},
 }
 
 
