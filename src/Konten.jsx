@@ -168,6 +168,26 @@ function centsToEuro(cents) {
   return (cents / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+// Keeps a split transaction's line rows glued to their parent under
+// *any* column's sort, not just Datum (Markus: sorting by a different
+// column scattered them back to the top). AG Grid's default comparator
+// sorts by whatever a column's own valueGetter returns, which is blank
+// or a line's own distinct value for a line row — either way, not tied
+// to the parent, so lines float away from it under most sorts. Given a
+// function that computes a column's "parent-level" comparable value,
+// this compares every row by *its own parent's* value — a line row and
+// its parent always tie under this rule, and JS's stable sort (ES2019+)
+// then preserves displayRows' own [parent, line0, line1, ...] build
+// order for that tie, keeping them adjacent regardless of which column
+// is actually driving the sort.
+function glueToParent(getValue) {
+  return (_valueA, _valueB, nodeA, nodeB) => {
+    const a = getValue(nodeA.data.__isLine ? nodeA.data.__parent : nodeA.data)
+    const b = getValue(nodeB.data.__isLine ? nodeB.data.__parent : nodeB.data)
+    return a < b ? -1 : a > b ? 1 : 0
+  }
+}
+
 export default function Konten() {
   const [accounts, setAccounts] = useState([])
   const [categories, setCategories] = useState([])
@@ -269,6 +289,36 @@ export default function Konten() {
     if (tx.toAccountId === accountId) return magnitude
     return null
   }
+
+  // Each column's "parent-level" comparable/display value, extracted so
+  // both its valueGetter (parent-row display) and its comparator (every
+  // row, via glueToParent above) compute it exactly the same way — never
+  // two parallel implementations that could quietly drift apart.
+  const kontoValue = (t) => {
+    if (accountFilter) {
+      const outgoing = t.fromAccountId === accountFilter
+      const other = outgoing ? t.toAccountId : t.fromAccountId
+      if (!other) return '—'
+      return (outgoing ? '→ ' : '← ') + accountName(other)
+    }
+    if (t.fromAccountId && t.toAccountId) {
+      return `${accountName(t.fromAccountId)} → ${accountName(t.toAccountId)}`
+    }
+    return accountName(t.fromAccountId ?? t.toAccountId)
+  }
+  const betragValue = (t) => signedFor(t, accountFilter ?? (t.fromAccountId ?? t.toAccountId))
+  const kategorieValue = (t) => {
+    const ids = [...new Set((t.lines ?? []).map((l) => l.categoryId).filter(Boolean))]
+    if (ids.length === 0) return '—'
+    const groups = [...new Set(ids.map(groupName))]
+    return groups.length === 1 ? groups[0] : '(mehrere)'
+  }
+  const unterkategorieValue = (t) => {
+    const ids = [...new Set((t.lines ?? []).map((l) => l.categoryId).filter(Boolean))]
+    if (ids.length === 0) return '—'
+    return ids.length === 1 ? categoryName(ids[0]) : '(mehrere)'
+  }
+  const tagsValue = (t) => [...new Set((t.lines ?? []).flatMap((l) => l.tags ?? []))].join(', ')
 
   // Persists, then defers to the same pendingFocusIdRef/rows effect addRow
   // uses (see its declaration above) to re-locate both the selection tint
@@ -716,45 +766,19 @@ export default function Konten() {
           p.data.date = parsed
           return true
         },
-        // A custom comparator, not just the default value-based sort — the
-        // Datum sort is always active (initialState below), and the
-        // default comparator sorts by whatever valueGetter returns, which
-        // is '' for every line row. An empty string sorts before any real
-        // date, so every expanded transaction's line rows were floating to
-        // the very top of the whole grid instead of staying directly under
-        // their own parent (Markus, screenshot). Comparing by the *parent's*
-        // date instead — for both the parent row and its own lines — makes
-        // them tie under Datum sort, and JS's sort is stable (ES2019+), so
-        // ties preserve displayRows' own [parent, line0, line1, ...] order.
-        comparator: (_valueA, _valueB, nodeA, nodeB) => {
-          const dateA = nodeA.data.__isLine ? nodeA.data.__parent.date : nodeA.data.date
-          const dateB = nodeB.data.__isLine ? nodeB.data.__parent.date : nodeB.data.date
-          return dateA < dateB ? -1 : dateA > dateB ? 1 : 0
-        },
+        // glueToParent, not the default value-based sort — every column
+        // needs this, not just Datum (Markus: sorting by a different
+        // column scattered line rows back to the top too) — see
+        // glueToParent's own comment for why.
+        comparator: glueToParent((t) => t.date),
         colId: 'date',
       },
       {
         headerName: accountFilter ? `Gegenkonto (${accountName(accountFilter)})` : 'Konto',
         // Blank and non-editable for a line row, same reasoning as Datum —
         // Konto is fixed at the parent level for a split transaction.
-        valueGetter: (p) => {
-          const t = p.data
-          if (t.__isLine) return ''
-          if (accountFilter) {
-            const outgoing = t.fromAccountId === accountFilter
-            const other = outgoing ? t.toAccountId : t.fromAccountId
-            if (!other) return '—'
-            // → for money leaving the filtered account (Betrag negative),
-            // ← for money arriving into it (Betrag positive) — same
-            // direction the unfiltered Konto column's arrow already uses,
-            // just read from the filtered account's own side.
-            return (outgoing ? '→ ' : '← ') + accountName(other)
-          }
-          if (t.fromAccountId && t.toAccountId) {
-            return `${accountName(t.fromAccountId)} → ${accountName(t.toAccountId)}`
-          }
-          return accountName(t.fromAccountId ?? t.toAccountId)
-        },
+        valueGetter: (p) => (p.data.__isLine ? '' : kontoValue(p.data)),
+        comparator: glueToParent(kontoValue),
         // A cellRenderer, not just the plain valueGetter string, so the
         // arrow is always the exact same glyph mirrored via CSS rather than
         // the → and ← Unicode characters — which, in the grid's font,
@@ -823,6 +847,7 @@ export default function Konten() {
         // editing doesn't start from "↳ " as literal text).
         valueGetter: (p) => (p.data.__isLine ? (p.data.__parent.lines[p.data.__lineIndex]?.note ?? '') : p.data.displayLabel),
         cellRenderer: (p) => (p.data.__isLine ? `↳ ${p.value || '(kein Vermerk)'}` : p.value),
+        comparator: glueToParent((t) => t.displayLabel),
         valueSetter: (p) => {
           if (p.data.__isLine) {
             const { __parent: parent, __lineIndex: idx } = p.data
@@ -841,11 +866,13 @@ export default function Konten() {
         // account-relative sign logic needed here, unlike the parent
         // (§2.6: "a line can be positive or negative independent of the
         // parent's own sign").
-        valueGetter: (p) =>
-          p.data.__isLine
-            ? (p.data.__parent.lines[p.data.__lineIndex]?.amountCents ?? 0)
-            : signedFor(p.data, accountFilter ?? (p.data.fromAccountId ?? p.data.toAccountId)),
+        valueGetter: (p) => (p.data.__isLine ? (p.data.__parent.lines[p.data.__lineIndex]?.amountCents ?? 0) : betragValue(p.data)),
         valueFormatter: (p) => centsToEuro(p.value),
+        // Sorting the whole grid by every individual split line's own
+        // amount wouldn't be that meaningful anyway — glued to its
+        // already-amount-sorted parent (like every other column) is the
+        // sensible behavior here too.
+        comparator: glueToParent(betragValue),
         // Typed relative to the same "reference account" the display uses
         // (the filtered account if any, else Konto1). Two real accounts
         // always store a positive magnitude regardless of the typed sign
@@ -884,11 +911,9 @@ export default function Konten() {
             const catId = p.data.__parent.lines[p.data.__lineIndex]?.categoryId
             return catId ? groupName(catId) : '—'
           }
-          const ids = [...new Set((p.data.lines ?? []).map((l) => l.categoryId).filter(Boolean))]
-          if (ids.length === 0) return '—'
-          const groups = [...new Set(ids.map(groupName))]
-          return groups.length === 1 ? groups[0] : '(mehrere)'
+          return kategorieValue(p.data)
         },
+        comparator: glueToParent(kategorieValue),
         // Same cascading Kategorie→Unterkategorie picker as the
         // Unterkategorie column below — Kategorie has no stored value of
         // its own, so editing it here writes the same categoryId. A
@@ -947,10 +972,9 @@ export default function Konten() {
             const catId = p.data.__parent.lines[p.data.__lineIndex]?.categoryId
             return catId ? categoryName(catId) : '—'
           }
-          const ids = [...new Set((p.data.lines ?? []).map((l) => l.categoryId).filter(Boolean))]
-          if (ids.length === 0) return '—'
-          return ids.length === 1 ? categoryName(ids[0]) : '(mehrere)'
+          return unterkategorieValue(p.data)
         },
+        comparator: glueToParent(unterkategorieValue),
         // Same fallback-path reasoning as Kategorie's valueSetter above.
         valueSetter: (p) => {
           if (p.data.__isLine) {
@@ -995,6 +1019,7 @@ export default function Konten() {
         // `note`, shown in Empfänger) — blank and non-editable on a line
         // row rather than repeating/splitting the same field.
         valueGetter: (p) => (p.data.__isLine ? '' : p.data.detail),
+        comparator: glueToParent((t) => t.detail),
         valueSetter: (p) => {
           if (p.data.__isLine) return false
           p.data.detail = p.newValue ?? ''
@@ -1005,10 +1030,8 @@ export default function Konten() {
       },
       {
         headerName: 'Tags',
-        valueGetter: (p) =>
-          p.data.__isLine
-            ? (p.data.__parent.lines[p.data.__lineIndex]?.tags ?? []).join(', ')
-            : [...new Set((p.data.lines ?? []).flatMap((l) => l.tags ?? []))].join(', '),
+        valueGetter: (p) => (p.data.__isLine ? (p.data.__parent.lines[p.data.__lineIndex]?.tags ?? []).join(', ') : tagsValue(p.data)),
+        comparator: glueToParent(tagsValue),
         // Placeholder editor (comma-separated text) — the real inline
         // tag-autocomplete/creation mechanism (spec.md §2.5) is its own
         // separate feature, not built yet.
