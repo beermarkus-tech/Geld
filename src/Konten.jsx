@@ -208,6 +208,30 @@ export default function Konten() {
     }
   }
 
+  // Escape discharges an armed delete (Markus) regardless of where focus
+  // currently is — arming can start from either the trashcan click or the
+  // keyboard Delete key on a focused cell, so this listens globally rather
+  // than only within the grid's own key handling.
+  useEffect(() => {
+    if (!confirmDeleteId) return
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        clearTimeout(confirmTimeoutRef.current)
+        setConfirmDeleteId(null)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [confirmDeleteId])
+
+  // getRowClass alone doesn't get re-evaluated for already-rendered rows
+  // just because confirmDeleteId changed elsewhere in React state — force
+  // AG Grid to re-ask for it whenever the armed row changes, so the
+  // grayed-out warning (Markus) actually appears/disappears live.
+  useEffect(() => {
+    gridRef.current?.api?.redrawRows()
+  }, [confirmDeleteId])
+
   const years = useMemo(() => {
     const set = new Set(transactions.map((t) => t.date.slice(0, 4)))
     return [...set].sort()
@@ -246,9 +270,10 @@ export default function Konten() {
 
   // Once addRow's new row actually lands (via Firestore round-trip through
   // onSnapshot into `rows`, not synchronously available right after the
-  // write), scroll it into view and drop straight into editing its Datum
-  // cell — Markus's request, so "+ Neue Buchung" doesn't leave you hunting
-  // for an off-screen blank row before you can even start typing.
+  // write), scroll it into view and put the cell cursor on its Datum cell
+  // — but don't start editing it (Markus: he wants the focus rectangle
+  // there, ready for a single tap/Enter to open the picker per §1's
+  // singleClickEdit, not editing already forced open on arrival).
   useEffect(() => {
     const id = pendingFocusIdRef.current
     if (!id || !rows.some((r) => r.id === id)) return
@@ -264,7 +289,6 @@ export default function Konten() {
       // this new row too, chaining correctly when adding several in a row.
       node.setSelected(true, true)
       api.setFocusedCell(node.rowIndex, 'date')
-      api.startEditingCell({ rowIndex: node.rowIndex, colKey: 'date' })
     }, 0)
   }, [rows])
 
@@ -472,7 +496,7 @@ export default function Konten() {
       {
         headerName: '',
         colId: 'delete',
-        width: 44,
+        width: 52,
         sortable: false,
         filter: false,
         suppressMovable: true,
@@ -614,7 +638,7 @@ export default function Konten() {
           into the account filter above. */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {panel.map(({ group, items, total }) => (
-          <div key={group} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
+          <div key={group} data-group={group} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
             <div className="mb-1 flex items-baseline justify-between">
               {/* The group heading itself is a shortcut back to "Alle
                   Konten" — there's no group-level filter (only single
@@ -635,23 +659,32 @@ export default function Konten() {
                 <li key={i.id}>
                   <button
                     type="button"
+                    data-account-id={i.id}
                     onClick={() => setAccountFilter(i.id)}
-                    // Arrow keys move focus between sibling accounts within
-                    // this one group, listbox-style — plain <button>s have
-                    // no built-in arrow-key behavior on their own (Markus:
-                    // after clicking an account here, arrow keys just left
-                    // the browser's default focus outline sitting there,
-                    // not moving between accounts the way it does in the
-                    // Konto <select> above). Stays within one <ul> per
-                    // reportingGroup, same "don't cross group boundaries"
-                    // fix as that dropdown's <optgroup>s.
+                    // Up/Down: move within this group's <ul>, listbox-style
+                    // (plain <button>s have no built-in arrow-key behavior
+                    // the way a <select> does), and *apply the filter as
+                    // you move* — Markus: arrow keys should act like the
+                    // dropdown's, not just move a focus rectangle. Left/
+                    // Right: jump to the first account of the adjacent
+                    // reportingGroup box (Barkonten/Sparkonten/Geldanlage/
+                    // Außenstände, in that fixed order) via the panel's own
+                    // data-group wrapper and DOM sibling order.
                     onKeyDown={(e) => {
-                      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+                      if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return
                       e.preventDefault()
-                      const list = e.currentTarget.closest('ul')
-                      const buttons = [...list.querySelectorAll('button')]
-                      const idx = buttons.indexOf(e.currentTarget)
-                      buttons[idx + (e.key === 'ArrowDown' ? 1 : -1)]?.focus()
+                      let target
+                      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                        const buttons = [...e.currentTarget.closest('ul').querySelectorAll('button')]
+                        target = buttons[buttons.indexOf(e.currentTarget) + (e.key === 'ArrowDown' ? 1 : -1)]
+                      } else {
+                        const panel = e.currentTarget.closest('[data-group]')
+                        const sibling = e.key === 'ArrowRight' ? panel.nextElementSibling : panel.previousElementSibling
+                        target = sibling?.querySelector('ul button')
+                      }
+                      if (!target) return
+                      target.focus()
+                      setAccountFilter(target.dataset.accountId)
                     }}
                     className={
                       'flex w-full justify-between gap-2 rounded px-1 text-left hover:bg-[var(--color-bg)] ' +
@@ -696,6 +729,21 @@ export default function Konten() {
           getRowId={(p) => p.data.id}
           onCellValueChanged={handleCellValueChanged}
           undoRedoCellEditingLimit={20}
+          // Grays out a row while its delete is armed, waiting for the
+          // confirming second click/Delete/trashcan tap (Markus) — paired
+          // with the redrawRows() effect above, since getRowClass alone
+          // isn't re-evaluated for existing rows just because React state
+          // changed elsewhere.
+          getRowClass={(p) => (confirmDeleteId === p.data.id ? 'opacity-40 grayscale' : undefined)}
+          // Keyboard cell navigation moves the row selection (the blue
+          // tint) along with it, not just the mouse click (Markus: "it
+          // will be clearer to know which row is selected"). This also
+          // means "+ Neue Buchung"'s insert-below-selected-row now follows
+          // wherever arrow keys left the cursor, not only the last click.
+          onCellFocused={(p) => {
+            if (p.rowIndex == null) return
+            p.api.getDisplayedRowAtIndex(p.rowIndex)?.setSelected(true, true)
+          }}
           // The keyboard Delete key does the same thing as clicking the
           // trashcan (Markus's request) — same two-click-style arm/confirm
           // via handleDeleteClick, not an instant delete. Ignored while a

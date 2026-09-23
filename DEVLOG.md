@@ -345,3 +345,17 @@ Markus reported four more issues after Session 12's fixes deployed. One (Überne
 ## Session 14 — 2026-09-23 — New row wasn't marked selected
 
 **Fix:** "+ Neue Buchung" focused and started editing the new row's Datum cell, but never actually selected it (the blue row-selection tint), only cell-focused it. Added `node.setSelected(true, true)` alongside the existing focus/edit-start calls — also means a second "+ Neue Buchung" right after correctly chains below the row that was just added, since selection is what "insert below" reads.
+
+## Session 15 — 2026-09-23 — Five more fixes: new-row focus, delete gray-out, panel arrow behavior, row-follows-focus
+
+**1. New row was starting edit mode immediately (opening the calendar) instead of just landing cell-focused.** Removed `startEditingCell` from the "+ Neue Buchung" focus effect — it now only scrolls to, selects, and cell-focuses the new row's Datum cell, ready for a single tap/Enter (per `singleClickEdit`) to actually open the picker.
+
+**2. Delete now grays out the whole row while armed, and Escape discharges it.** `getRowClass` applies `opacity-40 grayscale` when `confirmDeleteId` matches the row, paired with a `redrawRows()` effect on `confirmDeleteId` changes (`getRowClass` alone isn't re-evaluated for already-rendered rows just because unrelated React state changed elsewhere). A global `keydown` listener clears the armed state on Escape, active only while something is actually armed.
+
+**3 & 4. Panel arrow-key navigation now applies the filter as you move, and Left/Right jump between the four group boxes.** Session 13's roving-focus fix only moved the focus rectangle, matching what was literally reported at the time ("arrow navigation broken") but not actually what was wanted, which turned out to be closer to the `<select>`'s own behavior: arrow keys should change the selection live, not just move a cursor. ArrowUp/Down now calls `setAccountFilter` directly as focus moves within one reportingGroup's `<ul>`; ArrowLeft/Right jumps to the first account of the adjacent group (Barkonten → Sparkonten → Geldanlage → Außenstände, fixed order) via each panel `<div>`'s new `data-group` attribute and plain DOM sibling traversal.
+
+**5. Row selection (the blue tint) now follows keyboard cell focus, not just clicks.** `onCellFocused` selects whichever row the cell cursor lands on. Markus's stated reasoning — "it will be clearer to know which row is selected" — is also functionally useful: "+ Neue Buchung"'s insert-below-selected-row now correctly follows arrow-key navigation, not only the last mouse click.
+
+**Trashcan/scrollbar — still reported (screenshot showed the delete column present but didn't clearly resolve whether it's still visually cut off).** No further scrollbar-overlap theory beyond Session 12's `pinned: 'right'` fix, which is architecturally correct per AG Grid's own docs; widened the column from 44px to 52px as a safety margin against any icon/padding-level clipping, distinct from the scrollbar-overlap question. Needs a tight, zoomed-in screenshot of just that corner to diagnose further if it's still wrong — a full-screen screenshot makes a few-pixel clipping issue hard to see either way.
+
+**Next session should probably:** get a close-up look at the trashcan corner specifically if it's still off, otherwise keep gathering real usage feedback — five sessions running now purely on real issues found by using the app for real.
