@@ -259,6 +259,10 @@ export default function Konten() {
       const node = api.getRowNode(id)
       if (!node) return
       api.ensureNodeVisible(node, 'middle')
+      // Selected (the blue tint), not just cell-focused (Markus) — this
+      // also means the *next* "+ Neue Buchung" naturally inserts below
+      // this new row too, chaining correctly when adding several in a row.
+      node.setSelected(true, true)
       api.setFocusedCell(node.rowIndex, 'date')
       api.startEditingCell({ rowIndex: node.rowIndex, colKey: 'date' })
     }, 0)

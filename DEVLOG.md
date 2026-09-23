@@ -341,3 +341,7 @@ Markus reported four more issues after Session 12's fixes deployed. One (Überne
 **New regression: arrow-key navigation in the pinned panel.** After Session 12's `<optgroup>` fix (which fixed the `<select>` itself), Markus's screenshot showed a focus outline sitting on the "Bar Markus" panel button with arrow keys doing nothing useful. Real cause: the pinned panel's account rows are plain `<button>`s (added as click-shortcuts to the account filter, an earlier session) — clicking one focuses it, but plain buttons have no built-in arrow-key behavior the way a `<select>` does. Added roving ArrowUp/ArrowDown navigation between sibling buttons within one reportingGroup's `<ul>`, matching the same "stay within one block" behavior the dropdown already has.
 
 **Next session should probably:** get Markus's confirmation on the trashcan/scrollbar specifically (the one item without a fresh screenshot this round), then keep gathering real usage feedback — this is now four sessions running purely on real bugs Markus found by actually using it, which is exactly working as intended.
+
+## Session 14 — 2026-09-23 — New row wasn't marked selected
+
+**Fix:** "+ Neue Buchung" focused and started editing the new row's Datum cell, but never actually selected it (the blue row-selection tint), only cell-focused it. Added `node.setSelected(true, true)` alongside the existing focus/edit-start calls — also means a second "+ Neue Buchung" right after correctly chains below the row that was just added, since selection is what "insert below" reads.
