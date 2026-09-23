@@ -495,3 +495,13 @@ Root cause: `themeQuartz` ships light/dark color params out of the box (its `col
 `npm run build`, `npm test` (still 14 passing), `npm run lint` all clean before pushing.
 
 **Next session should probably:** get Markus's confirmation this actually reads well on his real device — the standalone harness confirms the mechanism works, but AG Grid's own dark palette is its own generated colors, not tied to this app's specific CSS tokens, so it's worth a real look rather than assuming the harness's approximation is the final word on how it feels next to the rest of the app.
+
+## Session 26 — 2026-09-23 — Two more split-transaction reports: a real row-identity bug, and a focus request
+
+**1. A stale leftover line row after deleting a non-last split line** — real bug, root-caused properly this time rather than guessed at. A line has no stable id of its own in the schema (§2.6); `displayRows`'s synthetic line-row ids were built from array index alone (`${tx.id}::line::${i}`). Removing a non-last line shifts every later line's index, so a *surviving* line ends up with the *removed* line's old id — AG Grid's id-based row reconciliation can't tell "this row moved to a new index" from "this id now holds different content," and was left with an inconsistent, stale extra row. Fixed by baking the parent's current line *count* into every line row's id too (`${tx.id}::line::${i}::${tx.lines.length}`) — any add/remove changes the count, forcing AG Grid to fully rebuild that transaction's line rows instead of attempting an ambiguous partial match, while a pure value edit (which doesn't change the count) still keeps ids — and smooth updates — stable.
+
+**2. Editing a split line's own field jumped the cursor back to the parent row instead of staying put.** This was a disclosed simplification from Session 23, not a bug fix skipped — the code comment at the time said as much. Fixed now that Markus asked for it directly: `handleCellValueChanged` carries the edited line's own index through a new `pendingFocusLineIndexRef`, and the existing settle-then-focus effect looks that specific line back up by `__parent` + `__lineIndex` (not by reconstructing its now count-dependent synthetic id) once the Firestore round-trip lands, falling back to the parent's row if that exact line no longer exists by then.
+
+`npm run build`, `npm test` (still 14 passing), `npm run lint` all clean before pushing.
+
+**Next session should probably:** get Markus to re-verify both against real data — the row-identity fix in particular is exactly the kind of thing that's easy to reason through on paper but only really confirmed by a live multi-line split, add, and delete sequence on his actual device.

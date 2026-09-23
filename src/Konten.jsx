@@ -212,6 +212,11 @@ export default function Konten() {
   // one point both agree on.
   const pendingFocusIdRef = useRef(null)
   const pendingFocusColRef = useRef('date')
+  // null = focus the parent row once it settles (the normal case); a
+  // number = focus that specific line index of the parent instead
+  // (editing a split line's own field, per Markus — the cursor should
+  // stay on the line just edited, not jump back to the parent row).
+  const pendingFocusLineIndexRef = useRef(null)
   // Which split transactions currently show their line rows expanded
   // (§3a: "parent row with an expand chevron... plus its detail rows
   // revealed on expand"). Keyed by the real transaction id, not the
@@ -270,17 +275,19 @@ export default function Konten() {
   // and the focus rectangle together, once `rows` has actually settled —
   // not right away, which was one resort too early. A line row edits its
   // __parent (a real transaction) rather than itself — that's what
-  // actually gets persisted and refocused; a line's own synthetic id only
-  // exists while its transaction is expanded, and can shift position on
-  // its next recompute anyway (removing an earlier line reindexes the
-  // ones after it), so refocusing lands back on the parent row rather
-  // than chasing the exact line — simple and always correct, if slightly
-  // less precise than tracking one specific line across edits.
+  // actually gets persisted — but the *cursor* should stay on the exact
+  // line just edited, not jump back to the parent row (Markus). A pure
+  // value edit (amount/category/note/tags) doesn't add or remove lines,
+  // so the edited line's own index stays valid across the round-trip;
+  // pendingFocusLineIndexRef carries it through to the effect below,
+  // which looks the line back up by parent + index rather than by a
+  // synthetic id (those now change on any add/remove — see displayRows).
   const handleCellValueChanged = (params) => {
     const tx = params.data.__isLine ? params.data.__parent : params.data
     persistTx(tx)
     pendingFocusIdRef.current = tx.id
     pendingFocusColRef.current = params.column.getColId()
+    pendingFocusLineIndexRef.current = params.data.__isLine ? params.data.__lineIndex : null
   }
 
   // Adds a blank row right below whatever's currently selected in the
@@ -300,6 +307,7 @@ export default function Konten() {
     const id = `tx-manual-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`
     pendingFocusIdRef.current = id
     pendingFocusColRef.current = 'date'
+    pendingFocusLineIndexRef.current = null
     await setDoc(doc(db, 'transactions', id), {
       id,
       date,
@@ -479,10 +487,26 @@ export default function Konten() {
     if (!id || !rows.some((r) => r.id === id)) return
     pendingFocusIdRef.current = null
     const colId = pendingFocusColRef.current
+    const lineIndex = pendingFocusLineIndexRef.current
+    pendingFocusLineIndexRef.current = null
     const api = gridRef.current?.api
     if (!api) return
     setTimeout(() => {
-      const node = api.getRowNode(id)
+      let node = api.getRowNode(id)
+      // A pending line index means the edit was on a specific split line
+      // (Markus: stay there, don't jump to the parent) — find its row by
+      // parent + index rather than reconstructing its synthetic id, which
+      // now depends on the current line count too (see displayRows) and
+      // isn't worth duplicating here. Falls back to the parent's own row
+      // if that line somehow no longer exists (e.g. removed elsewhere in
+      // the meantime).
+      if (lineIndex != null) {
+        let lineNode = null
+        api.forEachNode((n) => {
+          if (n.data?.__isLine && n.data.__parent.id === id && n.data.__lineIndex === lineIndex) lineNode = n
+        })
+        if (lineNode) node = lineNode
+      }
       if (!node) return
       api.ensureNodeVisible(node, 'middle')
       // Selected (the blue tint), not just cell-focused (Markus) — this
@@ -509,8 +533,22 @@ export default function Konten() {
     for (const tx of rows) {
       out.push(tx)
       if ((tx.lines?.length ?? 0) > 1 && expandedIds.has(tx.id)) {
+        // The line count is baked into every line's own id here, not just
+        // its index — a line has no stable id of its own in the schema
+        // (§2.6), so removing/adding a line shifts every later line's
+        // *index*, which otherwise means whatever row previously held
+        // that index's id (e.g. the old last/remainder line) inherits a
+        // *different* line's identity under AG Grid's own id-based row
+        // reconciliation — it can't tell "this row moved" from "this id
+        // now holds different content" (Markus: a stale leftover row after
+        // deleting a non-last line). Baking the count in forces every line
+        // row for this transaction to get a genuinely new id whenever the
+        // split structure itself changes, so AG Grid fully rebuilds them
+        // instead of trying to partially reconcile an ambiguous match —
+        // ids stay stable (and updates stay smooth) across a pure value
+        // edit, which doesn't change the count.
         tx.lines.forEach((_, i) => {
-          out.push({ id: `${tx.id}::line::${i}`, __isLine: true, __parent: tx, __lineIndex: i })
+          out.push({ id: `${tx.id}::line::${i}::${tx.lines.length}`, __isLine: true, __parent: tx, __lineIndex: i })
         })
       }
     }
@@ -584,6 +622,7 @@ export default function Konten() {
                     removeLine(row.__parent, row.__lineIndex)
                     pendingFocusIdRef.current = row.__parent.id
                     pendingFocusColRef.current = 'split'
+                    pendingFocusLineIndexRef.current = null
                   }}
                   title="Position entfernen"
                   className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-alert)]"
@@ -598,6 +637,7 @@ export default function Konten() {
                       addSplitLine(row.__parent)
                       pendingFocusIdRef.current = row.__parent.id
                       pendingFocusColRef.current = 'split'
+                      pendingFocusLineIndexRef.current = null
                     }}
                     title="Weiter aufteilen"
                     className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-computed)]"
@@ -634,6 +674,7 @@ export default function Konten() {
                 setExpandedIds((prev) => new Set(prev).add(row.id))
                 pendingFocusIdRef.current = row.id
                 pendingFocusColRef.current = 'split'
+                pendingFocusLineIndexRef.current = null
               }}
               title="Aufteilen"
               className="flex h-full w-full items-center justify-center text-xs text-[var(--color-text-muted)] hover:text-[var(--color-computed)]"
