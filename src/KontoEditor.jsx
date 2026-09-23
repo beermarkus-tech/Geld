@@ -29,6 +29,14 @@ const KontoEditor = forwardRef(function KontoEditor(props, ref) {
 
   return (
     <div
+      // Stops the click/mousedown from ever reaching AG Grid's own
+      // document-level "click outside the popup, cancel the edit"
+      // listener, which fires on mousedown — before a button's onClick
+      // would — and was racing Übernehmen, cancelling the edit before its
+      // own click handler ran (the selection never applied, caught by
+      // Markus). One guard on the whole popup covers the selects too, not
+      // just the buttons.
+      onMouseDown={(e) => e.stopPropagation()}
       className="flex flex-col gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-2 shadow-lg"
       style={{ minWidth: 260 }}
     >

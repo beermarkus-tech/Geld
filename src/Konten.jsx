@@ -4,6 +4,7 @@ import { AgGridReact } from 'ag-grid-react'
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community'
 
 import CategoryEditor from './CategoryEditor'
+import DateEditor from './DateEditor'
 import { db } from './firebase'
 import KontoEditor from './KontoEditor'
 import { jahresende } from './lib/balance'
@@ -64,6 +65,11 @@ export default function Konten() {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
   const confirmTimeoutRef = useRef(null)
   const gridRef = useRef(null)
+  // The id of a just-created row waiting to be scrolled into view and put
+  // into edit mode once it actually arrives back from Firestore (addRow
+  // writes, then onSnapshot brings it into `rows` asynchronously — there's
+  // no row to focus synchronously right after the write resolves).
+  const pendingFocusIdRef = useRef(null)
 
   useEffect(() => {
     const unsubs = [
@@ -138,6 +144,7 @@ export default function Konten() {
     const today = new Date().toISOString().slice(0, 10)
     const date = selected?.date ?? (year && today.startsWith(year) ? today : `${year}-01-01`)
     const id = `tx-manual-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`
+    pendingFocusIdRef.current = id
     await setDoc(doc(db, 'transactions', id), {
       id,
       date,
@@ -209,6 +216,26 @@ export default function Konten() {
       .sort((a, b) => (a.date === b.date ? a.id.localeCompare(b.id) : a.date.localeCompare(b.date)))
   }, [transactions, year, accountFilter])
 
+  // Once addRow's new row actually lands (via Firestore round-trip through
+  // onSnapshot into `rows`, not synchronously available right after the
+  // write), scroll it into view and drop straight into editing its Datum
+  // cell — Markus's request, so "+ Neue Buchung" doesn't leave you hunting
+  // for an off-screen blank row before you can even start typing.
+  useEffect(() => {
+    const id = pendingFocusIdRef.current
+    if (!id || !rows.some((r) => r.id === id)) return
+    pendingFocusIdRef.current = null
+    const api = gridRef.current?.api
+    if (!api) return
+    setTimeout(() => {
+      const node = api.getRowNode(id)
+      if (!node) return
+      api.ensureNodeVisible(node, 'middle')
+      api.setFocusedCell(node.rowIndex, 'date')
+      api.startEditingCell({ rowIndex: node.rowIndex, colKey: 'date' })
+    }, 0)
+  }, [rows])
+
   // Confirmed column order (spec.md §3a): Datum → Konto → Empfänger →
   // Betrag → Kategorie → Unterkategorie → Details → Tags (plus a narrow,
   // unlabeled delete column at the end — not part of the spec'd order,
@@ -244,6 +271,8 @@ export default function Konten() {
           p.data.date = p.newValue
           return true
         },
+        cellEditor: DateEditor,
+        colId: 'date',
       },
       {
         headerName: accountFilter ? `Gegenkonto (${accountName(accountFilter)})` : 'Konto',
@@ -261,6 +290,42 @@ export default function Konten() {
           }
           if (t.fromAccountId && t.toAccountId) {
             return `${accountName(t.fromAccountId)} → ${accountName(t.toAccountId)}`
+          }
+          return accountName(t.fromAccountId ?? t.toAccountId)
+        },
+        // A cellRenderer, not just the plain valueGetter string, so the
+        // arrow is always the exact same glyph mirrored via CSS rather than
+        // the → and ← Unicode characters — which, in the grid's font,
+        // render at visibly different sizes (caught by Markus). Reads
+        // p.data directly rather than re-parsing the value string.
+        cellRenderer: (p) => {
+          const t = p.data
+          let other, pointsLeft
+          if (accountFilter) {
+            const outgoing = t.fromAccountId === accountFilter
+            other = outgoing ? t.toAccountId : t.fromAccountId
+            pointsLeft = !outgoing
+          } else if (t.fromAccountId && t.toAccountId) {
+            other = null // both names are shown as plain text below, no single "other"
+            pointsLeft = false
+          }
+          if (accountFilter) {
+            if (!other) return '—'
+            return (
+              <span className="inline-flex items-center gap-1">
+                <span style={{ display: 'inline-block', transform: pointsLeft ? 'scaleX(-1)' : undefined }}>→</span>
+                {accountName(other)}
+              </span>
+            )
+          }
+          if (t.fromAccountId && t.toAccountId) {
+            return (
+              <span className="inline-flex items-center gap-1">
+                {accountName(t.fromAccountId)}
+                <span style={{ display: 'inline-block' }}>→</span>
+                {accountName(t.toAccountId)}
+              </span>
+            )
           }
           return accountName(t.fromAccountId ?? t.toAccountId)
         },
@@ -378,7 +443,12 @@ export default function Konten() {
         sortable: false,
         filter: false,
         suppressMovable: true,
-        lockPosition: 'right',
+        // A genuinely pinned column, not just lockPosition (which only
+        // stops drag-reordering *within* the scrollable area) — pinned
+        // columns render outside the scrollable body, to the left of
+        // where the vertical scrollbar reserves its space, so the
+        // trashcan is never half-covered by it (caught by Markus).
+        pinned: 'right',
         resizable: false,
         cellRenderer: (p) => {
           const armed = confirmDeleteId === p.data.id
@@ -469,14 +539,27 @@ export default function Konten() {
             className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-sm"
           >
             <option value="">Alle Konten</option>
-            {accounts
-              .filter((a) => a.tracked !== false && a.group !== 'system')
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
+            {/* Grouped by reportingGroup, via <optgroup> — a flat
+                alphabetical list across every account made arrow-key
+                navigation jump between unrelated groups (e.g. Consors
+                straight to CPAM, caught by Markus); this keeps arrow-key
+                movement inside one block at a time, same as the pinned
+                panel above reads. */}
+            {REPORTING_GROUPS.map((group) => {
+              const groupAccounts = accounts
+                .filter((a) => a.reportingGroup === group && a.tracked !== false && a.group !== 'system')
+                .sort((a, b) => a.name.localeCompare(b.name))
+              if (groupAccounts.length === 0) return null
+              return (
+                <optgroup key={group} label={group}>
+                  {groupAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )
+            })}
           </select>
         </div>
 
@@ -557,6 +640,17 @@ export default function Konten() {
           getRowId={(p) => p.data.id}
           onCellValueChanged={handleCellValueChanged}
           undoRedoCellEditingLimit={20}
+          // The keyboard Delete key does the same thing as clicking the
+          // trashcan (Markus's request) — same two-click-style arm/confirm
+          // via handleDeleteClick, not an instant delete. Ignored while a
+          // cell is actively being edited, so Delete still just edits text
+          // like normal (clearing a character/selection) rather than also
+          // arming row deletion underneath it.
+          onCellKeyDown={(p) => {
+            const key = p.event?.key
+            if (key !== 'Delete' || p.api.getEditingCells().length > 0) return
+            handleDeleteClick(p.data.id)
+          }}
           // Datum sorted ascending on first load only (the underlying rows
           // are already date-sorted anyway — this is just the header
           // arrow). Previously this was hard-set on the Datum colDef

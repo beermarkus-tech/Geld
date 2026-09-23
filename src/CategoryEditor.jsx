@@ -26,6 +26,10 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
 
   return (
     <div
+      // Same fix as KontoEditor.jsx: stops mousedown reaching AG Grid's
+      // own outside-click popup-cancel listener before Übernehmen's click
+      // handler gets a chance to run.
+      onMouseDown={(e) => e.stopPropagation()}
       className="flex flex-col gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-2 shadow-lg"
       style={{ minWidth: 260 }}
     >
