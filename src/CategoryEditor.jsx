@@ -7,7 +7,7 @@ import { forwardRef, useImperativeHandle, useMemo, useState } from 'react'
 // nothing for a separate Kategorie cell to actually edit — picking the
 // group here only exists to filter which Unterkategorie options show.
 const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
-  const { data, categories } = props
+  const { data, categories, stopEditing, api } = props
   const currentCategoryId = (data.lines ?? [])[0]?.categoryId ?? null
   const currentGroupId = currentCategoryId
     ? (categories.find((c) => c.id === currentCategoryId)?.parentCategoryId ?? currentCategoryId)
@@ -66,6 +66,25 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
           ))}
         </select>
       </label>
+      {/* Explicit Übernehmen/Abbrechen (Markus's request) — same reasoning
+          as KontoEditor.jsx. */}
+      <div className="mt-1 flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => api.stopEditing(true)}
+          className="rounded px-2 py-1 text-xs text-[var(--color-text-muted)]"
+        >
+          Abbrechen
+        </button>
+        <button
+          type="button"
+          onClick={() => stopEditing()}
+          disabled={!categoryId}
+          className="rounded bg-[var(--color-computed)] px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+        >
+          Übernehmen
+        </button>
+      </div>
     </div>
   )
 })

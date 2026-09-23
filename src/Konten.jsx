@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { collection, doc, onSnapshot, setDoc } from 'firebase/firestore'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { collection, deleteDoc, doc, onSnapshot, setDoc } from 'firebase/firestore'
 import { AgGridReact } from 'ag-grid-react'
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community'
 
@@ -59,6 +59,11 @@ export default function Konten() {
   // transaction's direction. Picking an account here instead re-displays
   // every matching row from *that* account's own perspective.
   const [accountFilter, setAccountFilter] = useState(null)
+  // Two-click delete: which row (if any) is currently armed, waiting for a
+  // second click to actually confirm. See handleDeleteClick below.
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null)
+  const confirmTimeoutRef = useRef(null)
+  const gridRef = useRef(null)
 
   useEffect(() => {
     const unsubs = [
@@ -118,20 +123,25 @@ export default function Konten() {
     setDoc(doc(db, 'transactions', tx.id), tx)
   }
 
-  // New rows always start with no account set — deliberately not
-  // pre-filled from an active account filter, since a row with neither
-  // fromAccountId nor toAccountId matching the filter would immediately
-  // vanish from the filtered view the moment it's created (confusing).
-  // The "+ Neue Buchung" button is disabled while filtered for the same
-  // reason (see below).
+  // Adds a blank row right below whatever's currently selected in the
+  // grid: same date (so it lands next to it once the grid re-sorts by
+  // date), and an id whose timestamp suffix sorts after every row that
+  // already exists on that date (rows sort by date, then id — §3a's
+  // "confirmed column order" note doesn't specify insert position, this is
+  // the natural reading of "below"). No selection -> falls back to today
+  // (or this year's Jan 1 if today isn't in the year being viewed).
+  // Pre-fills fromAccountId from the active account filter, if any, so the
+  // new row is actually visible in a filtered view instead of vanishing
+  // the moment it's created (it wouldn't match the filter otherwise).
   async function addRow() {
+    const selected = gridRef.current?.api?.getSelectedRows()?.[0]
     const today = new Date().toISOString().slice(0, 10)
-    const date = year && today.startsWith(year) ? today : `${year}-01-01`
-    const id = `tx-manual-${crypto.randomUUID()}`
+    const date = selected?.date ?? (year && today.startsWith(year) ? today : `${year}-01-01`)
+    const id = `tx-manual-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`
     await setDoc(doc(db, 'transactions', id), {
       id,
       date,
-      fromAccountId: null,
+      fromAccountId: accountFilter ?? null,
       toAccountId: null,
       amountCents: 0,
       rawDescription: '',
@@ -140,6 +150,27 @@ export default function Konten() {
       detail: '',
       createdAt: Date.now(),
     })
+  }
+
+  // Two clicks, not a modal (Markus's call) — hard delete for now, not
+  // §2.9a's planned soft-delete-with-recovery-window (that's Phase 1b).
+  // Firestore's Point-in-Time Recovery (enabled since Phase 0, a 7-day
+  // rolling window) is the real safety net behind this until then.
+  function armDelete(id) {
+    setConfirmDeleteId(id)
+    clearTimeout(confirmTimeoutRef.current)
+    confirmTimeoutRef.current = setTimeout(() => {
+      setConfirmDeleteId((cur) => (cur === id ? null : cur))
+    }, 4000)
+  }
+  async function handleDeleteClick(id) {
+    if (confirmDeleteId === id) {
+      clearTimeout(confirmTimeoutRef.current)
+      setConfirmDeleteId(null)
+      await deleteDoc(doc(db, 'transactions', id))
+    } else {
+      armDelete(id)
+    }
   }
 
   const years = useMemo(() => {
@@ -163,21 +194,28 @@ export default function Konten() {
   }, [transactions, year, accountFilter])
 
   // Confirmed column order (spec.md §3a): Datum → Konto → Empfänger →
-  // Betrag → Kategorie → Unterkategorie → Details → Tags. Konto is one
-  // merged column (not Konto1/Konto2 — revised Sept 2026): the primary
-  // account with an arrow to the second one for a transfer, unless an
-  // account filter is active, in which case it shows the *other* side only
-  // (a single-account register view) and Betrag is re-signed relative to
-  // the filtered account instead of the row's own primary side. Only
-  // Unterkategorie is stored; Kategorie is its derived parent.
+  // Betrag → Kategorie → Unterkategorie → Details → Tags (plus a narrow,
+  // unlabeled delete column at the end — not part of the spec'd order,
+  // just an action). Konto is one merged column (not Konto1/Konto2 —
+  // revised Sept 2026): the primary account with an arrow to the second
+  // one for a transfer, unless an account filter is active, in which case
+  // it shows the *other* side only (a single-account register view) and
+  // Betrag is re-signed relative to the filtered account instead of the
+  // row's own primary side. Only Unterkategorie is stored; Kategorie is
+  // its derived parent, but both columns open the same cascading picker.
   //
-  // Editing is disabled whenever an account filter is active: Konto/Betrag
-  // display and edit relative to *some* account, and while filtered that's
-  // the filtered account, not necessarily either of the row's own two
-  // fields — rather than juggle two different "what does this cell mean"
-  // conventions depending on filter state, editing simply requires "Alle
-  // Konten" first.
-  const editable = !accountFilter
+  // Editing works the same whether or not an account filter is active
+  // (rethought Sept 2026 — an earlier version disabled editing entirely
+  // while filtered). The only genuinely filter-dependent things are what
+  // Konto/Betrag *display*; neither actually needs editing disabled:
+  // Konto's editor always edits the real fromAccountId/toAccountId
+  // directly, regardless of what the cell shows when not being edited, and
+  // Betrag's valueSetter below uses the same "reference account" the
+  // display already uses (the filtered account, or Konto1 when unfiltered)
+  // to interpret the typed sign — so both stay well-defined either way.
+  // Filtering is in fact exactly when you're most likely reviewing and
+  // fixing one account's own entries, so disabling editing there was
+  // working against the feature's actual purpose.
   const columnDefs = useMemo(
     () => [
       {
@@ -185,7 +223,7 @@ export default function Konten() {
         headerName: 'Datum',
         width: 110,
         sort: 'asc',
-        editable,
+        editable: true,
         valueSetter: (p) => {
           if (!/^\d{4}-\d{2}-\d{2}$/.test(p.newValue ?? '')) return false
           p.data.date = p.newValue
@@ -220,21 +258,21 @@ export default function Konten() {
           return true
         },
         cellClass: (p) => (p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined),
-        editable,
+        editable: true,
         cellEditor: KontoEditor,
         cellEditorParams: { accounts },
         cellEditorPopup: true,
         flex: 1.6,
       },
-      { field: 'displayLabel', headerName: 'Empfänger', editable, flex: 1.4 },
+      { field: 'displayLabel', headerName: 'Empfänger', editable: true, flex: 1.4 },
       {
         headerName: 'Betrag',
         valueGetter: (p) => signedFor(p.data, accountFilter ?? (p.data.fromAccountId ?? p.data.toAccountId)),
         valueFormatter: (p) => centsToEuro(p.value),
-        // Typed relative to Konto1 (fromAccountId if set, else toAccountId)
-        // — same convention as the display. Two real accounts always store
-        // a positive magnitude regardless of the typed sign (§2.6); a
-        // single-sided row keeps exactly the typed sign.
+        // Typed relative to the same "reference account" the display uses
+        // (the filtered account if any, else Konto1). Two real accounts
+        // always store a positive magnitude regardless of the typed sign
+        // (§2.6); a single-sided row keeps exactly the typed sign.
         valueSetter: (p) => {
           const cents = parseEuroInput(p.newValue)
           if (cents === null) return false
@@ -246,7 +284,7 @@ export default function Konten() {
         cellEditor: 'agTextCellEditor',
         cellEditorParams: { useFormatter: true },
         cellClass: 'text-right tabular-figure',
-        editable,
+        editable: true,
         width: 130,
       },
       {
@@ -257,7 +295,19 @@ export default function Konten() {
           const groups = [...new Set(ids.map(groupName))]
           return groups.length === 1 ? groups[0] : '(mehrere)'
         },
+        // Same cascading Kategorie→Unterkategorie picker as the
+        // Unterkategorie column below — Kategorie has no stored value of
+        // its own, so editing it here writes the same categoryId.
+        valueSetter: (p) => {
+          const line = ensureLine(p.data)
+          line.categoryId = p.newValue?.categoryId ?? line.categoryId
+          return true
+        },
         cellClass: (p) => (p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined),
+        editable: (p) => (p.data.lines ?? []).length <= 1,
+        cellEditor: CategoryEditor,
+        cellEditorParams: { categories },
+        cellEditorPopup: true,
         flex: 1.1,
       },
       {
@@ -276,13 +326,13 @@ export default function Konten() {
           return true
         },
         cellClass: (p) => (p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined),
-        editable: (p) => editable && (p.data.lines ?? []).length <= 1,
+        editable: (p) => (p.data.lines ?? []).length <= 1,
         cellEditor: CategoryEditor,
         cellEditorParams: { categories },
         cellEditorPopup: true,
         flex: 1.3,
       },
-      { field: 'detail', headerName: 'Details', editable, flex: 1.3 },
+      { field: 'detail', headerName: 'Details', editable: true, flex: 1.3 },
       {
         headerName: 'Tags',
         valueGetter: (p) => [...new Set((p.data.lines ?? []).flatMap((l) => l.tags ?? []))].join(', '),
@@ -297,12 +347,43 @@ export default function Konten() {
             .filter(Boolean)
           return true
         },
-        editable: (p) => editable && (p.data.lines ?? []).length <= 1,
+        editable: (p) => (p.data.lines ?? []).length <= 1,
         flex: 1,
       },
+      {
+        headerName: '',
+        colId: 'delete',
+        width: 44,
+        sortable: false,
+        filter: false,
+        suppressMovable: true,
+        lockPosition: 'right',
+        resizable: false,
+        cellRenderer: (p) => {
+          const armed = confirmDeleteId === p.data.id
+          return (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleDeleteClick(p.data.id)
+              }}
+              title={armed ? 'Nochmal klicken zum Löschen' : 'Buchung löschen'}
+              className={
+                'w-full rounded px-1 text-xs ' +
+                (armed
+                  ? 'font-semibold text-[var(--color-alert)]'
+                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-alert)]')
+              }
+            >
+              {armed ? '⚠︎' : '🗑'}
+            </button>
+          )
+        },
+      },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- accountName/categoryName/groupName/ensureLine close over these
-    [accountById, categoryById, accountFilter, accounts, categories, editable],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- accountName/categoryName/groupName/ensureLine/handleDeleteClick close over these
+    [accountById, categoryById, accountFilter, accounts, categories, confirmDeleteId],
   )
 
   const panel = useMemo(() => {
@@ -381,9 +462,8 @@ export default function Konten() {
         <button
           type="button"
           onClick={addRow}
-          disabled={!editable}
-          title={editable ? undefined : 'Filter zum Bearbeiten aufheben ("Alle Konten")'}
-          className="rounded-md bg-[var(--color-computed)] px-3 py-1 text-sm font-medium text-white disabled:opacity-50"
+          title="Fügt eine leere Zeile direkt unter der markierten Zeile ein (mit deren Datum)"
+          className="rounded-md bg-[var(--color-computed)] px-3 py-1 text-sm font-medium text-white"
         >
           + Neue Buchung
         </button>
@@ -399,7 +479,18 @@ export default function Konten() {
         {panel.map(({ group, items, total }) => (
           <div key={group} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
             <div className="mb-1 flex items-baseline justify-between">
-              <h3 className="text-sm font-semibold">{group}</h3>
+              {/* The group heading itself is a shortcut back to "Alle
+                  Konten" — there's no group-level filter (only single
+                  accounts), so this just clears whatever's currently
+                  selected. */}
+              <button
+                type="button"
+                onClick={() => setAccountFilter(null)}
+                title='Filter zurücksetzen ("Alle Konten")'
+                className="text-sm font-semibold hover:underline"
+              >
+                {group}
+              </button>
               <span className="tabular-figure text-sm text-[var(--color-computed)]">{centsToEuro(total)} €</span>
             </div>
             <ul className="flex flex-col gap-0.5 text-xs text-[var(--color-text-muted)]">
@@ -431,9 +522,17 @@ export default function Konten() {
           the panel above is tall. */}
       <div className="h-[70vh] min-h-[360px]">
         <AgGridReact
+          ref={gridRef}
           theme={themeQuartz}
           rowData={rows}
           columnDefs={columnDefs}
+          // suppressMovable (not just per-column, so it also covers the
+          // default column menu) keeps the spec'd column order fixed —
+          // Markus's request: no accidental drag-reordering or hiding.
+          defaultColDef={{ suppressMovable: true }}
+          // Single-row selection just for "+ Neue Buchung"'s "insert below
+          // the selected row" — not a bulk-actions feature.
+          rowSelection={{ mode: 'singleRow', checkboxes: false, enableClickSelection: true }}
           getRowId={(p) => p.data.id}
           onCellValueChanged={handleCellValueChanged}
           undoRedoCellEditingLimit={20}

@@ -9,7 +9,7 @@ import { forwardRef, useImperativeHandle, useState } from 'react'
 // getValue(); Konten.jsx's valueSetter applies it to the transaction and
 // recomputes amountCents' sign convention from it.
 const KontoEditor = forwardRef(function KontoEditor(props, ref) {
-  const { data, accounts } = props
+  const { data, accounts, stopEditing, api } = props
   const [fromId, setFromId] = useState(data.fromAccountId ?? '')
   const [toId, setToId] = useState(data.toAccountId ?? '')
 
@@ -62,6 +62,26 @@ const KontoEditor = forwardRef(function KontoEditor(props, ref) {
           ))}
         </select>
       </label>
+      {/* Explicit Übernehmen/Abbrechen (Markus's request) — relying on
+          blur/Escape alone to commit or cancel a two-dropdown popup isn't
+          obviously discoverable, especially on a touch device. */}
+      <div className="mt-1 flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => api.stopEditing(true)}
+          className="rounded px-2 py-1 text-xs text-[var(--color-text-muted)]"
+        >
+          Abbrechen
+        </button>
+        <button
+          type="button"
+          onClick={() => stopEditing()}
+          disabled={!fromId && !toId}
+          className="rounded bg-[var(--color-computed)] px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+        >
+          Übernehmen
+        </button>
+      </div>
     </div>
   )
 })
