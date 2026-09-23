@@ -184,6 +184,22 @@ export default function Konten() {
     if (year === null && years.length > 0) setYear(years[years.length - 1])
   }, [years, year])
 
+  // AG Grid's own change detection is keyed on row-data identity, not on
+  // "did some external value a valueGetter closes over change" — Konto and
+  // Betrag both read `accountFilter` from closure (§3a's account filter),
+  // and a plain columnDefs update doesn't reliably make the grid re-run
+  // valueGetters for rows it already had cached from the *previous* filter
+  // (caught directly by Markus: switching from one filtered account
+  // straight to another, e.g. Bar Markus → Bar Julia, left stale values —
+  // Betrag showing 0,00 and Konto showing the wrong direction for rows
+  // that hadn't been re-evaluated against the new filter). Explicitly
+  // telling the grid to recompute every visible cell whenever the filter
+  // changes is the documented fix for a valueGetter with an external
+  // dependency like this.
+  useEffect(() => {
+    gridRef.current?.api?.refreshCells({ force: true })
+  }, [accountFilter])
+
   const rows = useMemo(() => {
     if (!year) return []
     return transactions
@@ -222,7 +238,6 @@ export default function Konten() {
         field: 'date',
         headerName: 'Datum',
         width: 110,
-        sort: 'asc',
         editable: true,
         valueSetter: (p) => {
           if (!/^\d{4}-\d{2}-\d{2}$/.test(p.newValue ?? '')) return false
@@ -542,6 +557,16 @@ export default function Konten() {
           getRowId={(p) => p.data.id}
           onCellValueChanged={handleCellValueChanged}
           undoRedoCellEditingLimit={20}
+          // Datum sorted ascending on first load only (the underlying rows
+          // are already date-sorted anyway — this is just the header
+          // arrow). Previously this was hard-set on the Datum colDef
+          // itself, which made it stick around as a permanent secondary
+          // sort criterion alongside whatever column got clicked afterward
+          // — the "Datum 2 / Betrag 1" priority badges Markus ran into.
+          // initialState applies once and then gets out of the way, so
+          // clicking any column header now does a normal single-column
+          // sort/replace.
+          initialState={{ sort: { sortModel: [{ colId: 'date', sort: 'asc' }] } }}
         />
       </div>
     </div>
