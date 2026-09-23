@@ -235,8 +235,14 @@ export default function Konten() {
         valueGetter: (p) => {
           const t = p.data
           if (accountFilter) {
-            const other = t.fromAccountId === accountFilter ? t.toAccountId : t.fromAccountId
-            return other ? accountName(other) : '—'
+            const outgoing = t.fromAccountId === accountFilter
+            const other = outgoing ? t.toAccountId : t.fromAccountId
+            if (!other) return '—'
+            // → for money leaving the filtered account (Betrag negative),
+            // ← for money arriving into it (Betrag positive) — same
+            // direction the unfiltered Konto column's arrow already uses,
+            // just read from the filtered account's own side.
+            return (outgoing ? '→ ' : '← ') + accountName(other)
           }
           if (t.fromAccountId && t.toAccountId) {
             return `${accountName(t.fromAccountId)} → ${accountName(t.toAccountId)}`
