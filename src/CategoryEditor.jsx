@@ -80,11 +80,18 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
           ref={groupRef}
           value={groupId}
           onChange={(id) => {
-            // Changing Kategorie clears the already-chosen Unterkategorie
-            // (spec.md §3a) — a stale leaf from the old group is never left
-            // silently selected under the new one.
             setGroupId(id)
-            setCategoryId('')
+            // Only clear the already-chosen Unterkategorie when the group
+            // actually changes (spec.md §3a: a stale leaf from a genuinely
+            // different old group is never left silently selected under
+            // the new one) — Listbox's Enter-to-commit fires onChange even
+            // when re-confirming the same group unchanged (the normal case
+            // when arrowing through an already-categorized transaction),
+            // and clearing on every commit regardless wiped the existing
+            // subcategory before the Unterkategorie list even opened,
+            // losing its pre-highlighted position (Markus: it should open
+            // "with the cursor sitting on... the selected subcategory").
+            if (id !== groupId) setCategoryId('')
           }}
           onEnter={(id) => id && subcatRef.current?.focus()}
           options={groupOptions}

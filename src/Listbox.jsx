@@ -60,6 +60,61 @@ const Listbox = forwardRef(function Listbox({ value, onChange, onEnter, options,
     onEnter?.(opt.id)
   }
 
+  // A *native* listener, attached directly to our own button — not React's
+  // onKeyDown, and stopPropagation() called from within a React handler
+  // isn't enough either. AG Grid's own PopupEditorWrapper (its core, not
+  // React) attaches a plain native keydown listener directly on the popup
+  // wrapper element our content is portalled into, which is a genuine DOM
+  // ancestor of this button. React 17+ attaches only one listener of its
+  // own, at the app's root container, and simulates the rest of the
+  // bubble internally from there — so the raw event reaches AG Grid's
+  // closer, native ancestor listener and gets acted on (stopping the edit,
+  // tearing down the whole popup) *before* React's own synthetic dispatch
+  // ever reaches this component's handler at all. No stopPropagation()
+  // called from inside a React handler can undo something an ancestor's
+  // native listener already did first — the only fix is a native listener
+  // of our own, on the button itself, which runs at the true target phase
+  // and gets first refusal on the event.
+  //
+  // (Arrow keys already worked via the old React onKeyDown: AG Grid
+  // explicitly skips its own navigation-key handling while a cell is being
+  // edited, so nothing ever raced ahead of them — only Enter/Escape, which
+  // AG Grid deliberately still acts on mid-edit to commit/cancel, needed
+  // this fix.)
+  useEffect(() => {
+    const el = buttonRef.current
+    if (!el || disabled) return
+    const onKeyDown = (e) => {
+      if (!open) {
+        if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key)) {
+          e.preventDefault()
+          e.stopPropagation()
+          openList()
+        }
+        return
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        e.stopPropagation()
+        setHighlight((i) => Math.min(options.length - 1, i + 1))
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        e.stopPropagation()
+        setHighlight((i) => Math.max(0, i - 1))
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        e.stopPropagation()
+        commit(highlight)
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        setOpen(false)
+      }
+    }
+    el.addEventListener('keydown', onKeyDown)
+    return () => el.removeEventListener('keydown', onKeyDown)
+  }, [disabled, open, highlight, options, value, onChange, onEnter])
+
   return (
     <div className="relative">
       <button
@@ -67,45 +122,6 @@ const Listbox = forwardRef(function Listbox({ value, onChange, onEnter, options,
         type="button"
         disabled={disabled}
         onClick={() => (open ? setOpen(false) : openList())}
-        onKeyDown={(e) => {
-          if (disabled) return
-          if (!open) {
-            if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key)) {
-              e.preventDefault()
-              e.stopPropagation()
-              openList()
-            }
-            return
-          }
-          // stopPropagation, not just preventDefault, on every key handled
-          // here: AG Grid attaches its own native Enter/Escape/Tab handling
-          // at the popup-editor-wrapper level (the same mechanism that
-          // makes its own built-in popup editors work), and this button —
-          // though rendered via a React portal — is still a genuine DOM
-          // descendant of that wrapper, so the raw keydown keeps bubbling
-          // to it unless stopped explicitly. Without this, Enter both
-          // committed our selection *and* triggered AG Grid's own
-          // stop-editing, tearing the whole popup down before the chain
-          // (or even the just-set value) could take effect (Markus: "hitting
-          // enter just closes the modal without any change applied").
-          if (e.key === 'ArrowDown') {
-            e.preventDefault()
-            e.stopPropagation()
-            setHighlight((i) => Math.min(options.length - 1, i + 1))
-          } else if (e.key === 'ArrowUp') {
-            e.preventDefault()
-            e.stopPropagation()
-            setHighlight((i) => Math.max(0, i - 1))
-          } else if (e.key === 'Enter') {
-            e.preventDefault()
-            e.stopPropagation()
-            commit(highlight)
-          } else if (e.key === 'Escape') {
-            e.preventDefault()
-            e.stopPropagation()
-            setOpen(false)
-          }
-        }}
         className="mt-0.5 flex w-full items-center justify-between gap-1 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-left text-sm disabled:opacity-50"
       >
         <span className={selected ? undefined : 'text-[var(--color-text-muted)]'}>

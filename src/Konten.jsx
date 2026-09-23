@@ -139,11 +139,28 @@ export default function Konten() {
   const confirmTimeoutRef = useRef(null)
   const gridRef = useRef(null)
   const accountSelectRef = useRef(null)
-  // The id of a just-created row waiting to be scrolled into view and put
-  // into edit mode once it actually arrives back from Firestore (addRow
-  // writes, then onSnapshot brings it into `rows` asynchronously — there's
-  // no row to focus synchronously right after the write resolves).
+  // The id (and target column) of a row waiting to be scrolled into view,
+  // selected, and cell-focused once it actually settles into `rows` —
+  // shared by addRow() and any cell edit that can move a row. Both write,
+  // then wait: addRow's row only exists in Firestore, not yet round-tripped
+  // back through onSnapshot into `rows`; a cell edit's row already exists
+  // in `rows`, but if the edited column is part of the active sort (Datum
+  // is, always), it can still move. AG Grid does its own immediate resort
+  // right after the valueSetter mutates the row locally, but that's not
+  // the *final* word — our own `rows` useMemo re-sorts again, from
+  // scratch, once the Firestore round-trip lands the edit back through
+  // onSnapshot, and its date-then-id tie-break for two same-date rows
+  // isn't guaranteed to agree with whatever order AG Grid's own transient
+  // in-place resort happened to leave them in (a stable sort keeps
+  // whatever relative order they already had, not an id comparison).
+  // Refocusing right after AG Grid's own resort (an earlier version of
+  // this did exactly that) can therefore end up one row off from where
+  // `rows` settles moments later — caught by Markus: two same-dated rows,
+  // blue tint on one, cursor rectangle on the other. Waiting for `rows`
+  // itself to contain the settled order, like addRow already did, is the
+  // one point both agree on.
   const pendingFocusIdRef = useRef(null)
+  const pendingFocusColRef = useRef('date')
 
   useEffect(() => {
     const unsubs = [
@@ -184,20 +201,14 @@ export default function Konten() {
     return null
   }
 
-  // Persists, then re-locates the focus rectangle to the edited row's own
-  // current position — editing Datum re-sorts the row (the grid stays
-  // sorted by date), and the blue selection tint correctly follows the row
-  // node wherever it moves (AG Grid tracks selection by node identity,
-  // keyed off getRowId), but the focus rectangle is tracked as a plain
-  // {rowIndex, column} pair, which does *not* move on its own when a row's
-  // index changes out from under it (Markus: tint moves, cursor doesn't).
+  // Persists, then defers to the same pendingFocusIdRef/rows effect addRow
+  // uses (see its declaration above) to re-locate both the selection tint
+  // and the focus rectangle together, once `rows` has actually settled —
+  // not right away, which was one resort too early.
   const handleCellValueChanged = (params) => {
     persistTx(params.data)
-    const colId = params.column.getColId()
-    setTimeout(() => {
-      const node = params.api.getRowNode(params.data.id)
-      if (node?.rowIndex != null) params.api.setFocusedCell(node.rowIndex, colId)
-    }, 0)
+    pendingFocusIdRef.current = params.data.id
+    pendingFocusColRef.current = params.column.getColId()
   }
 
   // Adds a blank row right below whatever's currently selected in the
@@ -216,6 +227,7 @@ export default function Konten() {
     const date = selected?.date ?? (year && today.startsWith(year) ? today : `${year}-01-01`)
     const id = `tx-manual-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`
     pendingFocusIdRef.current = id
+    pendingFocusColRef.current = 'date'
     await setDoc(doc(db, 'transactions', id), {
       id,
       date,
@@ -382,16 +394,19 @@ export default function Konten() {
       .sort((a, b) => (a.date === b.date ? a.id.localeCompare(b.id) : a.date.localeCompare(b.date)))
   }, [transactions, year, accountFilter])
 
-  // Once addRow's new row actually lands (via Firestore round-trip through
-  // onSnapshot into `rows`, not synchronously available right after the
-  // write), scroll it into view and put the cell cursor on its Datum cell
-  // — but don't start editing it (Markus: he wants the focus rectangle
-  // there, ready for a single tap/Enter to open the picker per §1's
-  // singleClickEdit, not editing already forced open on arrival).
+  // Once a pending row (addRow's new row, or a just-edited row that may
+  // have moved) actually settles into `rows` — via the Firestore
+  // round-trip through onSnapshot, never synchronously available right
+  // after a write — scroll it into view and put the cell cursor on the
+  // target column, selected too (the blue tint), so both always land on
+  // the exact same row together. Not editing it (Markus, re: addRow: he
+  // wants the focus rectangle there, ready for a single tap/Enter to open
+  // per §1's singleClickEdit, not editing already forced open on arrival).
   useEffect(() => {
     const id = pendingFocusIdRef.current
     if (!id || !rows.some((r) => r.id === id)) return
     pendingFocusIdRef.current = null
+    const colId = pendingFocusColRef.current
     const api = gridRef.current?.api
     if (!api) return
     setTimeout(() => {
@@ -402,7 +417,7 @@ export default function Konten() {
       // also means the *next* "+ Neue Buchung" naturally inserts below
       // this new row too, chaining correctly when adding several in a row.
       node.setSelected(true, true)
-      api.setFocusedCell(node.rowIndex, 'date')
+      api.setFocusedCell(node.rowIndex, colId)
     }, 0)
   }, [rows])
 
