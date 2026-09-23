@@ -57,11 +57,12 @@ See `CLAUDE.md` for how this fits alongside `spec.md` and `DEVLOG.md`.
 
 ## Phase 3 — Verlauf & Planung
 
+- **Real navigation shell (§1b.2)** — added here (gap found Sept 2026: spec.md fully designs this but no phase had ever actually scheduled building it), since this is the first phase where a third real destination screen exists. Before now, `App.jsx`'s plain Konten/Datenimport toggle was sufficient; it stops being sufficient once Verlauf and Planung both need to be reachable too. Bottom nav bar (phone, 5 items) / left sidebar (tablet, all items) per §1b.2 — the full item list there also includes several screens not built until later phases (Dashboard, Quickview, Fortschritt, etc.); those links can exist and simply lead nowhere yet, or be added incrementally as each phase builds its screen — Markus's call when this phase starts.
 - `budgets` collection wired up; Verlauf's grid (category/subcategory × month, Prog/Plan1/Plan0 rows, breakdown-line mechanism, parent-tag automated rollup). AG Grid's Undo/Redo (§2.9a) enabled here too, same as Konten.
 - Planung as the read-only mirror of Verlauf, with the automated regular/lump split (now reading `categoryYearSettings`, §2.7c).
 - **Test suite addition:** the §3c `Budget` formula, against the real 2025/2026 figures already in spec.md — ready-made expected values, no fixture data needed.
 
-**Testable deliverable:** with 2025's real Plan0 fully migrated, Verlauf and Planung reproduce 2025's actual numbers exactly as they read in the Gsheet. Markus then enters a Plan1 budget for one real 2026 category in Verlauf, sees Planung reflect the identical numbers as a report, and sees Prog auto-computed correctly once a few real Konten transactions land in that category.
+**Testable deliverable:** with 2025's real Plan0 fully migrated, Verlauf and Planung reproduce 2025's actual numbers exactly as they read in the Gsheet. Markus then enters a Plan1 budget for one real 2026 category in Verlauf, sees Planung reflect the identical numbers as a report, and sees Prog auto-computed correctly once a few real Konten transactions land in that category. Separately: Markus navigates between Konten, Verlauf, and Planung using the real nav shell on both phone and tablet, confirming the layout switches correctly at the breakpoint.
 
 ---
 
