@@ -110,6 +110,7 @@ export default function Konten() {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
   const confirmTimeoutRef = useRef(null)
   const gridRef = useRef(null)
+  const accountSelectRef = useRef(null)
   // The id of a just-created row waiting to be scrolled into view and put
   // into edit mode once it actually arrives back from Firestore (addRow
   // writes, then onSnapshot brings it into `rows` asynchronously — there's
@@ -209,6 +210,28 @@ export default function Konten() {
     return () => window.removeEventListener('keydown', onKeyDown)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- addRow closes over year/accountFilter, both already current each render
   }, [year, accountFilter])
+
+  // Ctrl/Cmd+K jumps into the account filter (Markus's request). If a
+  // filter is already active, focus lands on that account's own panel
+  // button — from there Session 15/16's roving arrow-key nav (which also
+  // applies the filter live and has its own Escape-back-to-grid) is
+  // already the richer way to navigate, not the plain <select>. With no
+  // filter active there's no "active" button to jump to, so this focuses
+  // the <select> itself instead.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'k') return
+      if (gridRef.current?.api?.getEditingCells().length > 0) return
+      e.preventDefault()
+      if (accountFilter) {
+        document.querySelector(`[data-account-id="${accountFilter}"]`)?.focus()
+      } else {
+        accountSelectRef.current?.focus()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [accountFilter])
 
   // Two clicks, not a modal (Markus's call) — hard delete for now, not
   // §2.9a's planned soft-delete-with-recovery-window (that's Phase 1b).
@@ -352,6 +375,7 @@ export default function Konten() {
         },
         cellEditor: DateEditor,
         cellEditorParams: { onApply: applyDateDirect },
+        cellEditorPopup: true,
         colId: 'date',
       },
       {
@@ -614,6 +638,7 @@ export default function Konten() {
         <div className="flex items-center gap-2">
           <span className="text-sm text-[var(--color-text-muted)]">Konto:</span>
           <select
+            ref={accountSelectRef}
             value={accountFilter ?? ''}
             onChange={(e) => setAccountFilter(e.target.value || null)}
             className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-sm"

@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useMemo, useState } from 'react'
+import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react'
 
 // The Unterkategorie cell editor — one combined popup with the cascading
 // Kategorie→Unterkategorie pair (spec.md §3a), rather than two independently
@@ -6,6 +6,14 @@ import { forwardRef, useImperativeHandle, useMemo, useState } from 'react'
 // always derived from Unterkategorie's parentCategoryId, §2.6), so there's
 // nothing for a separate Kategorie cell to actually edit — picking the
 // group here only exists to filter which Unterkategorie options show.
+//
+// Fully keyboard-chainable (Markus's request): focus lands on Kategorie
+// when the popup opens; arrow keys cycle a *focused* <select>'s value
+// directly (no need to visually open its dropdown first — plain, reliable
+// <select> behavior). Enter on Kategorie moves to Unterkategorie (once a
+// group is actually chosen — nothing to move to otherwise, since
+// Unterkategorie stays disabled until then); Enter on Unterkategorie
+// applies and returns focus to the grid cell, same as clicking Übernehmen.
 const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
   const { data, categories, onApply, api } = props
   const currentCategoryId = (data.lines ?? [])[0]?.categoryId ?? null
@@ -15,6 +23,8 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
 
   const [groupId, setGroupId] = useState(currentGroupId ?? '')
   const [categoryId, setCategoryId] = useState(currentCategoryId ?? '')
+  const groupRef = useRef(null)
+  const subcatRef = useRef(null)
 
   const groups = useMemo(() => categories.filter((c) => c.parentCategoryId === null), [categories])
   const subcats = useMemo(() => categories.filter((c) => c.parentCategoryId === groupId), [categories, groupId])
@@ -22,7 +32,13 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
   useImperativeHandle(ref, () => ({
     getValue: () => (categoryId ? { categoryId } : null),
     isCancelBeforeStart: () => false,
+    afterGuiAttached: () => groupRef.current?.focus(),
   }))
+
+  const apply = () => {
+    onApply(data, categoryId)
+    api.stopEditing(true)
+  }
 
   return (
     <div
@@ -32,6 +48,7 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
       <label className="text-xs text-[var(--color-text-muted)]">
         Kategorie
         <select
+          ref={groupRef}
           value={groupId}
           onChange={(e) => {
             // Changing Kategorie clears the already-chosen Unterkategorie
@@ -39,6 +56,11 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
             // silently selected under the new one.
             setGroupId(e.target.value)
             setCategoryId('')
+          }}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter' || !groupId) return
+            e.preventDefault()
+            subcatRef.current?.focus()
           }}
           className="mt-0.5 w-full rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-1 py-1 text-sm"
         >
@@ -53,8 +75,14 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
       <label className="text-xs text-[var(--color-text-muted)]">
         Unterkategorie
         <select
+          ref={subcatRef}
           value={categoryId}
           onChange={(e) => setCategoryId(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter') return
+            e.preventDefault()
+            apply()
+          }}
           disabled={!groupId}
           className="mt-0.5 w-full rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-1 py-1 text-sm disabled:opacity-50"
         >
@@ -66,10 +94,12 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
           ))}
         </select>
       </label>
-      {/* Explicit Übernehmen/Abbrechen (Markus's request) — same reasoning
-          as KontoEditor.jsx: Übernehmen writes directly via onApply and
-          closes with api.stopEditing(true), not AG Grid's own commit
-          pipeline, which confirmed didn't reliably apply the selection. */}
+      {/* Explicit Übernehmen/Abbrechen (Markus's request) for mouse/touch
+          use — the Enter chain above is the keyboard equivalent of the
+          same apply() call, not a separate path. Übernehmen writes
+          directly via onApply and closes with api.stopEditing(true), not
+          AG Grid's own commit pipeline, which confirmed didn't reliably
+          apply the selection. */}
       <div className="mt-1 flex justify-end gap-2">
         <button
           type="button"
@@ -80,10 +110,7 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
         </button>
         <button
           type="button"
-          onClick={() => {
-            onApply(data, categoryId)
-            api.stopEditing(true)
-          }}
+          onClick={apply}
           disabled={!categoryId}
           className="rounded bg-[var(--color-computed)] px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
         >

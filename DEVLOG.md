@@ -371,3 +371,17 @@ Markus reported four more issues after Session 12's fixes deployed. One (Überne
 **Markus confirmed the panel's arrow-key navigation itself (Up/Down/Left/Right) now works well** — Session 15's fix held.
 
 **Next session should probably:** still watching for confirmation on the trashcan/scrollbar corner (Session 15's open item) — otherwise keep going on real usage feedback.
+
+## Session 17 — 2026-09-23 — The keyboard-chain flow, built after reconsidering the earlier "too risky" call
+
+Markus pushed back directly on Session 12's deferral: "why do you not want to try the chain?" — a fair challenge, and worth re-examining rather than repeating the earlier reasoning. It turned out the earlier call was based on conflating two different things.
+
+**The actual re-think:** the concern back in Session 12 was `HTMLSelectElement.showPicker()` — the API for programmatically popping a `<select>`'s dropdown list open — whose browser support genuinely is inconsistent, notably on iPad Safari (Markus's actual device). But the described flow doesn't need that at all: a `<select>` that merely has **focus** (no visual dropdown open) already responds to arrow keys by cycling its value directly and firing `onChange` — plain, rock-solid, decades-old `<select>` behavior with zero cross-browser risk. The earlier deferral was treating "keyboard-navigable" and "visually popped open" as the same requirement when they aren't. Built now:
+
+- **`KontoEditor.jsx`, `CategoryEditor.jsx`, `DateEditor.jsx`** all auto-focus their first `<select>` when the popup opens (`afterGuiAttached`), and each `<select>`'s Enter key moves to the next one in the chain (Von→Nach, Kategorie→Unterkategorie, Tag→Monat→Jahr), with Enter on the last one calling the exact same `apply()` function as clicking Übernehmen. Matches Markus's described flow precisely: cursor on the cell → Enter → arrow through the first list → Enter → arrow through the second (dependent) list → Enter → applied, back to normal grid arrow-key navigation (AG Grid's own default behavior once the editor closes).
+
+**Fixed as a side effect, not the main point: the date field's two-click problem.** Rebuilt `DateEditor.jsx` from a native `<input type="date">` into three plain `<select>`s (Tag/Monat/Jahr), same visual family as the other two popups. This wasn't just for the keyboard chain — it directly explains why Datum needed two taps where Konto/Kategorie only needed one: a `<select>` always opens on a single tap everywhere, guaranteed; a native date input's calendar overlay needs `showPicker()` to open without a second tap, and that call's browser-enforced "must come from a real user gesture" requirement wasn't holding up reliably through AG Grid's own edit-start sequence. Matching the other two editors' mechanism sidesteps that instead of chasing it further. Year range is a fixed, generous −5/+2-around-today window, not just the current year, so historical corrections stay reachable.
+
+**Also added: Ctrl/Cmd+K jumps into the account filter.** Focuses the active filter's own panel button if one is set (handing straight into that panel's richer roving-arrow-key navigation from Sessions 15-16, including live-apply and Escape-back-to-grid), or the plain `<select>` if nothing's currently filtered.
+
+**Next session should probably:** get Markus's read on whether the full chain actually feels right in practice now that it's built — this was speculative-but-well-reasoned, not yet used for real.
