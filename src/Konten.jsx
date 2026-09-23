@@ -187,6 +187,29 @@ export default function Konten() {
     })
   }
 
+  // Ctrl/Cmd+'+' triggers "+ Neue Buchung" (Markus's request). Note, not
+  // hidden: Ctrl/Cmd+'+' is the browser's own zoom-in shortcut in Chrome/
+  // Firefox/Safari, and browsers commonly refuse to let a page override or
+  // suppress it (unlike most other shortcuts) — this listens for it
+  // anyway, since worst case the browser also zooms and best case both
+  // happen harmlessly, but it may not be fully reliable everywhere for
+  // reasons outside the app's control. '=' is included since '+' usually
+  // requires Shift, and keyboards/browsers report that combination either
+  // way depending on layout. Skipped while a cell is being edited, so it
+  // doesn't fire in the middle of typing a category/tag/etc.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!e.ctrlKey && !e.metaKey) return
+      if (e.key !== '+' && e.key !== '=') return
+      if (gridRef.current?.api?.getEditingCells().length > 0) return
+      e.preventDefault()
+      addRow()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- addRow closes over year/accountFilter, both already current each render
+  }, [year, accountFilter])
+
   // Two clicks, not a modal (Markus's call) — hard delete for now, not
   // §2.9a's planned soft-delete-with-recovery-window (that's Phase 1b).
   // Firestore's Point-in-Time Recovery (enabled since Phase 0, a 7-day
@@ -224,10 +247,10 @@ export default function Konten() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [confirmDeleteId])
 
-  // getRowClass alone doesn't get re-evaluated for already-rendered rows
+  // getRowStyle alone doesn't get re-evaluated for already-rendered rows
   // just because confirmDeleteId changed elsewhere in React state — force
   // AG Grid to re-ask for it whenever the armed row changes, so the
-  // grayed-out warning (Markus) actually appears/disappears live.
+  // red warning tint (Markus) actually appears/disappears live.
   useEffect(() => {
     gridRef.current?.api?.redrawRows()
   }, [confirmDeleteId])
@@ -669,10 +692,30 @@ export default function Konten() {
                     // Right: jump to the first account of the adjacent
                     // reportingGroup box (Barkonten/Sparkonten/Geldanlage/
                     // Außenstände, in that fixed order) via the panel's own
-                    // data-group wrapper and DOM sibling order.
+                    // data-group wrapper and DOM sibling order. Escape:
+                    // back to "Alle Konten" and hand the cursor back to
+                    // the grid itself, landing roughly mid-viewport rather
+                    // than wherever the first/last row happens to be.
                     onKeyDown={(e) => {
-                      if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return
+                      if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Escape'].includes(e.key)) return
                       e.preventDefault()
+                      if (e.key === 'Escape') {
+                        setAccountFilter(null)
+                        // Deferred: clearing the filter changes `rows`
+                        // (React state), and the grid only re-renders with
+                        // that new, larger row set after this handler
+                        // returns — computing the visible mid-point before
+                        // then would still reflect the old, filtered view.
+                        setTimeout(() => {
+                          const api = gridRef.current?.api
+                          const first = api?.getFirstDisplayedRowIndex()
+                          const last = api?.getLastDisplayedRowIndex()
+                          if (first != null && first >= 0 && last != null && last >= 0) {
+                            api.setFocusedCell(Math.floor((first + last) / 2), 'date')
+                          }
+                        }, 0)
+                        return
+                      }
                       let target
                       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
                         const buttons = [...e.currentTarget.closest('ul').querySelectorAll('button')]
@@ -729,12 +772,15 @@ export default function Konten() {
           getRowId={(p) => p.data.id}
           onCellValueChanged={handleCellValueChanged}
           undoRedoCellEditingLimit={20}
-          // Grays out a row while its delete is armed, waiting for the
-          // confirming second click/Delete/trashcan tap (Markus) — paired
-          // with the redrawRows() effect above, since getRowClass alone
-          // isn't re-evaluated for existing rows just because React state
-          // changed elsewhere.
-          getRowClass={(p) => (confirmDeleteId === p.data.id ? 'opacity-40 grayscale' : undefined)}
+          // Tints a row pale red while its delete is armed, waiting for
+          // the confirming second click/Delete/trashcan tap (Markus: red,
+          // not grey — an earlier version used opacity/grayscale) —
+          // paired with the redrawRows() effect above, since getRowStyle
+          // alone isn't re-evaluated for existing rows just because React
+          // state changed elsewhere.
+          getRowStyle={(p) =>
+            confirmDeleteId === p.data.id ? { backgroundColor: 'var(--color-alert-tint)' } : undefined
+          }
           // Keyboard cell navigation moves the row selection (the blue
           // tint) along with it, not just the mouse click (Markus: "it
           // will be clearer to know which row is selected"). This also

@@ -359,3 +359,15 @@ Markus reported four more issues after Session 12's fixes deployed. One (Überne
 **Trashcan/scrollbar — still reported (screenshot showed the delete column present but didn't clearly resolve whether it's still visually cut off).** No further scrollbar-overlap theory beyond Session 12's `pinned: 'right'` fix, which is architecturally correct per AG Grid's own docs; widened the column from 44px to 52px as a safety margin against any icon/padding-level clipping, distinct from the scrollbar-overlap question. Needs a tight, zoomed-in screenshot of just that corner to diagnose further if it's still wrong — a full-screen screenshot makes a few-pixel clipping issue hard to see either way.
 
 **Next session should probably:** get a close-up look at the trashcan corner specifically if it's still off, otherwise keep gathering real usage feedback — five sessions running now purely on real issues found by using the app for real.
+
+## Session 16 — 2026-09-23 — Three quick fixes: shortcut, red not grey, Escape in the panel
+
+**1. Ctrl/Cmd+'+' now triggers "+ Neue Buchung"**, skipped while a cell is being edited. Flagged, not hidden: Ctrl/Cmd+'+' is the browser's own zoom-in shortcut everywhere, and browsers commonly refuse to let a page override it — this listens for it regardless, but may not fire reliably on every platform for reasons outside the app's control.
+
+**2. Armed-delete tint is red now, not grey.** Added `--color-alert-tint` (a new light/dark token in `index.css`, distinct from `--color-alert` itself — a muted background, not the alert text color) and switched from `getRowClass`/opacity-grayscale to `getRowStyle` with that token.
+
+**3. Escape while navigating the pinned panel resets to "Alle Konten" and hands focus back to the grid**, landing on the Datum cell of whichever row is roughly mid-viewport (`getFirstDisplayedRowIndex`/`getLastDisplayedRowIndex`, averaged) — deferred a tick, since clearing the filter changes the row set and the grid only re-renders with the larger, unfiltered list after the handler returns.
+
+**Markus confirmed the panel's arrow-key navigation itself (Up/Down/Left/Right) now works well** — Session 15's fix held.
+
+**Next session should probably:** still watching for confirmation on the trashcan/scrollbar corner (Session 15's open item) — otherwise keep going on real usage feedback.

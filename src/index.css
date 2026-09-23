@@ -22,6 +22,7 @@
   --color-savings: #7c3aed; /* purple — savings/investment transfers */
   --color-needs-attention: #eab308; /* yellow — incomplete, needs categorization */
   --color-alert: #dc2626; /* red — alerts only, always */
+  --color-alert-tint: #fee2e2; /* pale red row background — an armed delete (Konten), not the alert red itself */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -38,6 +39,7 @@
     --color-savings: #a78bfa;
     --color-needs-attention: #fde047;
     --color-alert: #f87171;
+    --color-alert-tint: #3f1d1d;
   }
 }
 
