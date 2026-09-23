@@ -184,7 +184,21 @@ export default function Konten() {
     return null
   }
 
-  const handleCellValueChanged = (params) => persistTx(params.data)
+  // Persists, then re-locates the focus rectangle to the edited row's own
+  // current position — editing Datum re-sorts the row (the grid stays
+  // sorted by date), and the blue selection tint correctly follows the row
+  // node wherever it moves (AG Grid tracks selection by node identity,
+  // keyed off getRowId), but the focus rectangle is tracked as a plain
+  // {rowIndex, column} pair, which does *not* move on its own when a row's
+  // index changes out from under it (Markus: tint moves, cursor doesn't).
+  const handleCellValueChanged = (params) => {
+    persistTx(params.data)
+    const colId = params.column.getColId()
+    setTimeout(() => {
+      const node = params.api.getRowNode(params.data.id)
+      if (node?.rowIndex != null) params.api.setFocusedCell(node.rowIndex, colId)
+    }, 0)
+  }
 
   // Adds a blank row right below whatever's currently selected in the
   // grid: same date (so it lands next to it once the grid re-sorts by

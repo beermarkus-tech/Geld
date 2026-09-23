@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 
 // A custom-rendered dropdown, not a native <select> (Markus: the native
 // select inside KontoEditor/CategoryEditor's popups wasn't opening at all
@@ -22,8 +22,19 @@ const Listbox = forwardRef(function Listbox({ value, onChange, onEnter, options,
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(0)
   const buttonRef = useRef(null)
+  const listRef = useRef(null)
 
   const selected = options.find((o) => o.id === value)
+
+  // Keeps the highlighted option in view as arrow keys move past the
+  // visible scroll window — without this, arrowing down past the list's
+  // own max-height moved the highlight but left it scrolled out of sight
+  // (Markus: "the cursor is not visible on screen for entries below the
+  // drop down size").
+  useEffect(() => {
+    if (!open) return
+    listRef.current?.children[highlight]?.scrollIntoView({ block: 'nearest' })
+  }, [open, highlight])
 
   function openList() {
     if (disabled) return
@@ -61,21 +72,37 @@ const Listbox = forwardRef(function Listbox({ value, onChange, onEnter, options,
           if (!open) {
             if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key)) {
               e.preventDefault()
+              e.stopPropagation()
               openList()
             }
             return
           }
+          // stopPropagation, not just preventDefault, on every key handled
+          // here: AG Grid attaches its own native Enter/Escape/Tab handling
+          // at the popup-editor-wrapper level (the same mechanism that
+          // makes its own built-in popup editors work), and this button —
+          // though rendered via a React portal — is still a genuine DOM
+          // descendant of that wrapper, so the raw keydown keeps bubbling
+          // to it unless stopped explicitly. Without this, Enter both
+          // committed our selection *and* triggered AG Grid's own
+          // stop-editing, tearing the whole popup down before the chain
+          // (or even the just-set value) could take effect (Markus: "hitting
+          // enter just closes the modal without any change applied").
           if (e.key === 'ArrowDown') {
             e.preventDefault()
+            e.stopPropagation()
             setHighlight((i) => Math.min(options.length - 1, i + 1))
           } else if (e.key === 'ArrowUp') {
             e.preventDefault()
+            e.stopPropagation()
             setHighlight((i) => Math.max(0, i - 1))
           } else if (e.key === 'Enter') {
             e.preventDefault()
+            e.stopPropagation()
             commit(highlight)
           } else if (e.key === 'Escape') {
             e.preventDefault()
+            e.stopPropagation()
             setOpen(false)
           }
         }}
@@ -87,7 +114,10 @@ const Listbox = forwardRef(function Listbox({ value, onChange, onEnter, options,
         <span className="text-[var(--color-text-muted)]">▾</span>
       </button>
       {open && (
-        <ul className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded border border-[var(--color-border)] bg-[var(--color-surface)] text-sm shadow-lg">
+        <ul
+          ref={listRef}
+          className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded border border-[var(--color-border)] bg-[var(--color-surface)] text-sm shadow-lg"
+        >
           {options.map((o, idx) => (
             <li key={o.id || '(leer)'}>
               <button
