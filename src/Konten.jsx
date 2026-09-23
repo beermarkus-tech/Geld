@@ -228,7 +228,16 @@ export default function Konten() {
       const first = api?.getFirstDisplayedRowIndex()
       const last = api?.getLastDisplayedRowIndex()
       if (first != null && first >= 0 && last != null && last >= 0) {
-        api.setFocusedCell(Math.floor((first + last) / 2), 'date')
+        const rowIndex = Math.floor((first + last) / 2)
+        api.setFocusedCell(rowIndex, 'date')
+        // Select the landing row explicitly rather than relying on
+        // onCellFocused's selection side effect to fire in time — right
+        // after a filter change (Escape/Enter from the panel both change
+        // accountFilter first) the row set is still settling, and that side
+        // effect isn't reliably in sync yet, which left a stale blue tint
+        // on the row selected before Ctrl+K was pressed (caught by Markus,
+        // screenshot showing two rows tinted at once).
+        api.getDisplayedRowAtIndex(rowIndex)?.setSelected(true, true)
       }
     }, 0)
   }
@@ -413,6 +422,16 @@ export default function Konten() {
         headerName: 'Datum',
         width: 110,
         editable: true,
+        // Explicitly false, not left to infer — AG Grid samples this
+        // column's own data to auto-detect a "cellDataType" when none is
+        // set, and a plain ISO string like "2026-04-03" matches its own
+        // built-in "dateString" type, which silently swaps in AG Grid's
+        // own agDateStringCellEditor (a calendar popup) in place of the
+        // plain text editor intended here — confirmed by reading AG Grid's
+        // own DataTypeService source (dataTypeMatchers.dateString), and
+        // exactly the "modal still opens" behavior Markus reported despite
+        // no cellEditor being set on this column at all.
+        cellDataType: false,
         // Plain text, like Empfänger/Details — no picker, modal or
         // dropdown at all (Markus, replacing what had been a three-select
         // popup). Accepts flexible European shorthand via

@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 
 import Listbox from './Listbox'
 
@@ -46,8 +46,18 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
   useImperativeHandle(ref, () => ({
     getValue: () => (categoryId ? { categoryId } : null),
     isCancelBeforeStart: () => false,
-    afterGuiAttached: () => groupRef.current?.focus(),
   }))
+
+  // Focus (and open) Kategorie as soon as this component itself mounts —
+  // same fix and same reason as KontoEditor.jsx: afterGuiAttached's timing
+  // through AG Grid's popup-editor bridge isn't guaranteed relative to the
+  // portalled content actually committing to the DOM, which is why the
+  // keyboard chain wasn't working at all (Markus: "still only mouse
+  // input"). A plain mount effect is guaranteed by React to run only after
+  // this component's own DOM exists.
+  useEffect(() => {
+    groupRef.current?.focus()
+  }, [])
 
   // Takes an optional override for the just-committed Unterkategorie
   // value, for the same reason as KontoEditor.jsx's apply(): Listbox's

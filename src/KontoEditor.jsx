@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 
 import Listbox from './Listbox'
 
@@ -33,8 +33,21 @@ const KontoEditor = forwardRef(function KontoEditor(props, ref) {
     // every balance/display computation, which all key off fromAccountId/
     // toAccountId (spec.md §2.6/§2.8).
     isCancelAfterEnd: () => !fromId && !toId,
-    afterGuiAttached: () => fromRef.current?.focus(),
   }))
+
+  // Focus (and open) Von as soon as this component itself mounts, rather
+  // than relying solely on afterGuiAttached — that's bridged through AG
+  // Grid's own popup-editor wiring (a promise that resolves once this
+  // component's ref is registered), and for a popup editor specifically
+  // the timing isn't guaranteed relative to when the portalled content
+  // actually commits to the DOM. A plain mount effect is guaranteed by
+  // React to run only after this component's own DOM exists, which is
+  // what the keyboard chain (Markus's original request) actually depends
+  // on — confirmed broken ("still only mouse input") because focus was
+  // never reliably landing on Von in the first place.
+  useEffect(() => {
+    fromRef.current?.focus()
+  }, [])
 
   // Takes an optional override for the just-committed Nach value: when
   // Listbox's Enter-to-apply fires, it calls this synchronously right
