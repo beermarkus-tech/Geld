@@ -441,3 +441,11 @@ Markus tried build 46 and both Session 20 fixes were incomplete or wrong:
 All three verified by reading the actual library source paths involved (not assumption) before writing the fix, same discipline as Session 19 — Session 20's Enter "fix" is the cautionary example for why that discipline matters even when a diagnosis *sounds* plausible.
 
 **Next session should probably:** get Markus's confirmation. If Enter still misbehaves after this, the native-listener approach in `Listbox.jsx` is the right shape but worth re-checking for a missed key (Tab isn't handled at all yet, for instance) rather than assuming the whole approach is wrong again.
+
+## Session 22 — 2026-09-23 — Build 47 "works almost perfectly"; one refinement to the category popup
+
+Markus confirmed Session 21's three fixes all held. One remaining refinement: `CategoryEditor.jsx` is shared by both the Kategorie and Unterkategorie columns, and always started the keyboard chain at Kategorie regardless of which cell was actually opened — Markus wanted opening it *from* Unterkategorie directly to leave Kategorie exactly as it already was (it already did) and jump straight to the Unterkategorie list, open and pre-highlighted on the existing selection.
+
+Added a `startField` param (`cellEditorParams`, set per-column in `Konten.jsx`: `'group'` for Kategorie, `'category'` for Unterkategorie), which the editor's mount-focus effect now reads to decide whether to focus Kategorie or Unterkategorie first. No change to the underlying data or the rest of the chain — Kategorie was never being reset by this, only which list receives initial focus.
+
+**Next session should probably:** get Markus's confirmation on this one; if the keyboard chain overall is now solid, the standing "review the complete keyboard navigation once the app is fully built" item from Session 13 is worth reconsidering as done for this screen specifically, though not for the app as a whole yet.

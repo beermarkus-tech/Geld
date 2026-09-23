@@ -594,7 +594,9 @@ export default function Konten() {
         cellClass: (p) => (p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined),
         editable: (p) => (p.data.lines ?? []).length <= 1,
         cellEditor: CategoryEditor,
-        cellEditorParams: { categories, onApply: applyCategoryDirect },
+        // startField: 'group' — opening from Kategorie itself starts the
+        // chain at the top, same as before.
+        cellEditorParams: { categories, onApply: applyCategoryDirect, startField: 'group' },
         cellEditorPopup: true,
         flex: 1.1,
       },
@@ -616,7 +618,12 @@ export default function Konten() {
         cellClass: (p) => (p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined),
         editable: (p) => (p.data.lines ?? []).length <= 1,
         cellEditor: CategoryEditor,
-        cellEditorParams: { categories, onApply: applyCategoryDirect },
+        // startField: 'category' — opening from Unterkategorie directly
+        // (Markus) leaves Kategorie as already set (it already was, via
+        // currentGroupId) and jumps straight to the Unterkategorie list,
+        // open and pre-highlighted on the existing selection, instead of
+        // starting the chain over at Kategorie every time.
+        cellEditorParams: { categories, onApply: applyCategoryDirect, startField: 'category' },
         cellEditorPopup: true,
         flex: 1.3,
       },

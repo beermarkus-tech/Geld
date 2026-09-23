@@ -17,7 +17,7 @@ import Listbox from './Listbox'
 // Enter on a highlighted subcategory commits it and applies, closing back
 // to the grid — same as clicking Übernehmen.
 const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
-  const { data, categories, onApply, api } = props
+  const { data, categories, onApply, api, startField = 'group' } = props
   const currentCategoryId = (data.lines ?? [])[0]?.categoryId ?? null
   const currentGroupId = currentCategoryId
     ? (categories.find((c) => c.id === currentCategoryId)?.parentCategoryId ?? currentCategoryId)
@@ -48,16 +48,25 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
     isCancelBeforeStart: () => false,
   }))
 
-  // Focus (and open) Kategorie as soon as this component itself mounts —
-  // same fix and same reason as KontoEditor.jsx: afterGuiAttached's timing
-  // through AG Grid's popup-editor bridge isn't guaranteed relative to the
-  // portalled content actually committing to the DOM, which is why the
-  // keyboard chain wasn't working at all (Markus: "still only mouse
-  // input"). A plain mount effect is guaranteed by React to run only after
-  // this component's own DOM exists.
+  // Focus (and open) the field this editor should actually start on, as
+  // soon as this component itself mounts — a plain mount effect is
+  // guaranteed by React to run only after this component's own DOM
+  // exists (same fix and same reason as KontoEditor.jsx's mount effect;
+  // afterGuiAttached's timing through AG Grid's popup-editor bridge isn't
+  // guaranteed relative to that). Kategorie and Unterkategorie share this
+  // one editor, but opening it *from* Unterkategorie directly (Markus)
+  // should jump straight to the Unterkategorie list — already open, and
+  // pre-highlighted on whatever's already selected there, same as always
+  // — rather than restarting the chain at Kategorie every time; Kategorie
+  // itself is left exactly as it already was (currentGroupId), never
+  // reset just because this editor happened to open from the other field.
   useEffect(() => {
-    groupRef.current?.focus()
-  }, [])
+    if (startField === 'category') {
+      subcatRef.current?.focus()
+    } else {
+      groupRef.current?.focus()
+    }
+  }, [startField])
 
   // Takes an optional override for the just-committed Unterkategorie
   // value, for the same reason as KontoEditor.jsx's apply(): Listbox's
