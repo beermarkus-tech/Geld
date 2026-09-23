@@ -17,14 +17,20 @@ import Listbox from './Listbox'
 // Enter on a highlighted subcategory commits it and applies, closing back
 // to the grid — same as clicking Übernehmen.
 const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
-  const { data, categories, onApply, api, startField = 'group' } = props
-  const currentCategoryId = (data.lines ?? [])[0]?.categoryId ?? null
-  const currentGroupId = currentCategoryId
-    ? (categories.find((c) => c.id === currentCategoryId)?.parentCategoryId ?? currentCategoryId)
+  // initialCategoryId, not derived from data.lines[0] — this editor is
+  // now shared by the parent row's own Kategorie/Unterkategorie cells
+  // *and* an expanded split transaction's individual line rows (Konten.jsx
+  // §3a's auto-remainder mechanism); the caller already knows exactly
+  // which line (or none) it's editing and passes the right id directly,
+  // rather than this component guessing from a `data` shape that differs
+  // between the two cases.
+  const { data, categories, onApply, api, startField = 'group', initialCategoryId = null } = props
+  const currentGroupId = initialCategoryId
+    ? (categories.find((c) => c.id === initialCategoryId)?.parentCategoryId ?? initialCategoryId)
     : null
 
   const [groupId, setGroupId] = useState(currentGroupId ?? '')
-  const [categoryId, setCategoryId] = useState(currentCategoryId ?? '')
+  const [categoryId, setCategoryId] = useState(initialCategoryId ?? '')
   const groupRef = useRef(null)
   const subcatRef = useRef(null)
 

@@ -7,6 +7,7 @@ import CategoryEditor from './CategoryEditor'
 import { db } from './firebase'
 import KontoEditor from './KontoEditor'
 import { jahresende } from './lib/balance'
+import { withRemainder } from './lib/split'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 
@@ -66,12 +67,25 @@ function ensureLine(tx) {
 }
 
 // Full-document overwrite (§3a: "simple edit-in-place, no audit trail
-// needed, single user") — re-mirrors the sole line's amountCents to the
-// parent's here, generically, regardless of what changed.
+// needed, single user"). Two different mirroring directions depending on
+// how many lines exist, both keeping the split-transaction invariant
+// (§2.6: parent amountCents === Σ lines[].amountCents) true on every save,
+// not just checked afterward:
+// - Exactly one line: the parent is still authoritative (its Betrag cell
+//   is directly editable) — mirror it down into the line.
+// - More than one line (genuinely split): the parent becomes a fixed
+//   total ("a cached total... every aggregation runs off lines[]", §2.6)
+//   that splitting only ever redistributes, never changes. Every line
+//   except the last is directly editable; the last is always recomputed
+//   here as whatever's left — the "live, auto-generated remaining amount
+//   line" §3a describes, made concrete at the one point it actually has
+//   to be a real stored number rather than a live UI computation.
 function persistTx(tx) {
   const next = { ...tx }
   if (next.lines?.length === 1) {
     next.lines = [{ ...next.lines[0], amountCents: next.amountCents }]
+  } else if (next.lines?.length > 1) {
+    next.lines = withRemainder(next.amountCents, next.lines)
   }
   // A manually entered row has no real bank text to protect (§3a's "raw
   // label must never be overwritten" is about imported rows specifically,
@@ -104,6 +118,41 @@ function applyCategoryDirect(data, categoryId) {
   const line = ensureLine(tx)
   tx.lines = [{ ...line, categoryId }]
   persistTx(tx)
+}
+// Same idea, scoped to one specific line of an already-split transaction
+// (the expanded split-line rows' own Kategorie/Unterkategorie editor) —
+// unlike applyCategoryDirect, this never collapses lines down to one.
+function applyCategoryToLine(tx, lineIndex, categoryId) {
+  if (!categoryId) return
+  const next = { ...tx }
+  next.lines = next.lines.map((l, i) => (i === lineIndex ? { ...l, categoryId } : l))
+  persistTx(next)
+}
+
+// Split-transaction editing (§3a's auto-remainder mechanism): both of
+// these are the exact same operation regardless of whether they're
+// starting the first split or splitting the current remainder further —
+// "creating a first sub-line... automatically leaves a second,
+// system-maintained line... which can... be split further itself
+// (creating a new remainder each time)". Appending a blank line always
+// makes the line that was previously last become directly editable, and
+// the newly appended one the new live remainder (persistTx recomputes it
+// on every save) — one uniform rule instead of a special case for "the
+// first split" vs. "splitting again."
+function addSplitLine(tx) {
+  const next = { ...tx }
+  ensureLine(next)
+  next.lines = [...next.lines, { amountCents: 0, categoryId: null, note: '', tags: [] }]
+  persistTx(next)
+}
+// Removing any line (including the last) just leaves persistTx to
+// recompute the new last line's amount from whatever remains — no special
+// casing needed for which position was removed. Falling back to 0 or 1
+// lines this way is exactly how a split collapses back to normal.
+function removeLine(tx, lineIndex) {
+  const next = { ...tx }
+  next.lines = next.lines.filter((_, i) => i !== lineIndex)
+  persistTx(next)
 }
 
 // Barkonten/Sparkonten/Geldanlage/Außenstände — Markus's own top-level
@@ -161,6 +210,19 @@ export default function Konten() {
   // one point both agree on.
   const pendingFocusIdRef = useRef(null)
   const pendingFocusColRef = useRef('date')
+  // Which split transactions currently show their line rows expanded
+  // (§3a: "parent row with an expand chevron... plus its detail rows
+  // revealed on expand"). Keyed by the real transaction id, not the
+  // synthetic line-row ids — those only exist while expanded.
+  const [expandedIds, setExpandedIds] = useState(() => new Set())
+  function toggleExpanded(id) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   useEffect(() => {
     const unsubs = [
@@ -204,10 +266,18 @@ export default function Konten() {
   // Persists, then defers to the same pendingFocusIdRef/rows effect addRow
   // uses (see its declaration above) to re-locate both the selection tint
   // and the focus rectangle together, once `rows` has actually settled —
-  // not right away, which was one resort too early.
+  // not right away, which was one resort too early. A line row edits its
+  // __parent (a real transaction) rather than itself — that's what
+  // actually gets persisted and refocused; a line's own synthetic id only
+  // exists while its transaction is expanded, and can shift position on
+  // its next recompute anyway (removing an earlier line reindexes the
+  // ones after it), so refocusing lands back on the parent row rather
+  // than chasing the exact line — simple and always correct, if slightly
+  // less precise than tracking one specific line across edits.
   const handleCellValueChanged = (params) => {
-    persistTx(params.data)
-    pendingFocusIdRef.current = params.data.id
+    const tx = params.data.__isLine ? params.data.__parent : params.data
+    persistTx(tx)
+    pendingFocusIdRef.current = tx.id
     pendingFocusColRef.current = params.column.getColId()
   }
 
@@ -421,6 +491,30 @@ export default function Konten() {
     }, 0)
   }, [rows])
 
+  // What the grid actually renders: `rows` (real transactions) with each
+  // expanded split transaction's lines interleaved right after it as
+  // synthetic rows (§3a: "parent row... plus its detail rows revealed on
+  // expand"). AG Grid Community has no master/detail row support (that's
+  // an Enterprise feature) — this is the Community-tier equivalent,
+  // feeding the grid one flat array where a "line row" is just an
+  // ordinary row with `__isLine: true` that every column def below
+  // renders/edits differently. `__parent` is a live reference into `rows`
+  // (not a copy), so column defs read/mutate the real transaction object
+  // directly, the same pattern already used for every other in-place
+  // valueSetter mutation in this file.
+  const displayRows = useMemo(() => {
+    const out = []
+    for (const tx of rows) {
+      out.push(tx)
+      if ((tx.lines?.length ?? 0) > 1 && expandedIds.has(tx.id)) {
+        tx.lines.forEach((_, i) => {
+          out.push({ id: `${tx.id}::line::${i}`, __isLine: true, __parent: tx, __lineIndex: i })
+        })
+      }
+    }
+    return out
+  }, [rows, expandedIds])
+
   // Confirmed column order (spec.md §3a): Datum → Konto → Empfänger →
   // Betrag → Kategorie → Unterkategorie → Details → Tags (plus a narrow,
   // unlabeled delete column at the end — not part of the spec'd order,
@@ -447,10 +541,100 @@ export default function Konten() {
   const columnDefs = useMemo(
     () => [
       {
+        headerName: '',
+        colId: 'split',
+        width: 56,
+        sortable: false,
+        filter: false,
+        suppressMovable: true,
+        resizable: false,
+        pinned: 'left',
+        // The one control column for the whole split-transaction feature
+        // (§3a's "expand chevron and an 'N Positionen' hint" plus the
+        // auto-remainder mechanism's own add/remove actions), rather than
+        // spreading these across other columns:
+        // - Parent, not yet split (≤1 line): "✚" starts the first split
+        //   (addSplitLine) and auto-expands, so the newly appended line is
+        //   immediately visible without a second click.
+        // - Parent, split (>1 lines): a chevron toggling expandedIds.
+        // - A line row: "✕" removes just that line; the *last* line (the
+        //   live remainder) also gets "✚" to split further — "or split
+        //   further itself (creating a new remainder each time)".
+        cellRenderer: (p) => {
+          const row = p.data
+          if (row.__isLine) {
+            const isLast = row.__lineIndex === row.__parent.lines.length - 1
+            return (
+              <div className="flex h-full items-center justify-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    removeLine(row.__parent, row.__lineIndex)
+                  }}
+                  title="Position entfernen"
+                  className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-alert)]"
+                >
+                  ✕
+                </button>
+                {isLast && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      addSplitLine(row.__parent)
+                    }}
+                    title="Weiter aufteilen"
+                    className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-computed)]"
+                  >
+                    ✚
+                  </button>
+                )}
+              </div>
+            )
+          }
+          const lineCount = row.lines?.length ?? 0
+          if (lineCount > 1) {
+            const expanded = expandedIds.has(row.id)
+            return (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  toggleExpanded(row.id)
+                }}
+                title={expanded ? 'Einklappen' : `${lineCount} Positionen anzeigen`}
+                className="flex h-full w-full items-center justify-center text-xs text-[var(--color-text-muted)]"
+              >
+                {expanded ? '▾' : '▸'}
+              </button>
+            )
+          }
+          return (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                addSplitLine(row)
+                setExpandedIds((prev) => new Set(prev).add(row.id))
+              }}
+              title="Aufteilen"
+              className="flex h-full w-full items-center justify-center text-xs text-[var(--color-text-muted)] hover:text-[var(--color-computed)]"
+            >
+              ✚
+            </button>
+          )
+        },
+      },
+      {
         field: 'date',
         headerName: 'Datum',
         width: 110,
-        editable: true,
+        // Blank and non-editable for a line row — a split transaction has
+        // exactly one date, at the parent level; only the economic
+        // breakdown (category/tags/note/amount) splits across lines.
+        valueGetter: (p) => (p.data.__isLine ? '' : p.data.date),
+        editable: (p) => !p.data.__isLine,
         // Explicitly false, not left to infer — AG Grid samples this
         // column's own data to auto-detect a "cellDataType" when none is
         // set, and a plain ISO string like "2026-04-03" matches its own
@@ -478,8 +662,11 @@ export default function Konten() {
       },
       {
         headerName: accountFilter ? `Gegenkonto (${accountName(accountFilter)})` : 'Konto',
+        // Blank and non-editable for a line row, same reasoning as Datum —
+        // Konto is fixed at the parent level for a split transaction.
         valueGetter: (p) => {
           const t = p.data
+          if (t.__isLine) return ''
           if (accountFilter) {
             const outgoing = t.fromAccountId === accountFilter
             const other = outgoing ? t.toAccountId : t.fromAccountId
@@ -502,6 +689,7 @@ export default function Konten() {
         // p.data directly rather than re-parsing the value string.
         cellRenderer: (p) => {
           const t = p.data
+          if (t.__isLine) return ''
           let other, pointsLeft
           if (accountFilter) {
             const outgoing = t.fromAccountId === accountFilter
@@ -546,24 +734,58 @@ export default function Konten() {
           return true
         },
         cellClass: (p) => (p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined),
-        editable: true,
+        editable: (p) => !p.data.__isLine,
         cellEditor: KontoEditor,
         cellEditorParams: { accounts, onApply: applyKontoDirect },
         cellEditorPopup: true,
         flex: 1.6,
       },
-      { field: 'displayLabel', headerName: 'Empfänger', editable: true, flex: 1.4 },
+      {
+        headerName: 'Empfänger',
+        // A line row has no displayLabel of its own — it shows its own
+        // `note` instead (§2.6: each line's own short free-text field,
+        // e.g. "Gehalt Markus" for one leg of a split salary deposit),
+        // prefixed "↳" on display only (the raw value, what's actually
+        // editable, has no prefix — the prefix is cellRenderer-only so
+        // editing doesn't start from "↳ " as literal text).
+        valueGetter: (p) => (p.data.__isLine ? (p.data.__parent.lines[p.data.__lineIndex]?.note ?? '') : p.data.displayLabel),
+        cellRenderer: (p) => (p.data.__isLine ? `↳ ${p.value || '(kein Vermerk)'}` : p.value),
+        valueSetter: (p) => {
+          if (p.data.__isLine) {
+            const { __parent: parent, __lineIndex: idx } = p.data
+            parent.lines = parent.lines.map((l, i) => (i === idx ? { ...l, note: p.newValue ?? '' } : l))
+            return true
+          }
+          p.data.displayLabel = p.newValue ?? ''
+          return true
+        },
+        editable: true,
+        flex: 1.4,
+      },
       {
         headerName: 'Betrag',
-        valueGetter: (p) => signedFor(p.data, accountFilter ?? (p.data.fromAccountId ?? p.data.toAccountId)),
+        // A line row shows its own signed amountCents directly — no
+        // account-relative sign logic needed here, unlike the parent
+        // (§2.6: "a line can be positive or negative independent of the
+        // parent's own sign").
+        valueGetter: (p) =>
+          p.data.__isLine
+            ? (p.data.__parent.lines[p.data.__lineIndex]?.amountCents ?? 0)
+            : signedFor(p.data, accountFilter ?? (p.data.fromAccountId ?? p.data.toAccountId)),
         valueFormatter: (p) => centsToEuro(p.value),
         // Typed relative to the same "reference account" the display uses
         // (the filtered account if any, else Konto1). Two real accounts
         // always store a positive magnitude regardless of the typed sign
-        // (§2.6); a single-sided row keeps exactly the typed sign.
+        // (§2.6); a single-sided row keeps exactly the typed sign. A line
+        // row's amount is stored exactly as typed, no sign remapping.
         valueSetter: (p) => {
           const cents = parseEuroInput(p.newValue)
           if (cents === null) return false
+          if (p.data.__isLine) {
+            const { __parent: parent, __lineIndex: idx } = p.data
+            parent.lines = parent.lines.map((l, i) => (i === idx ? { ...l, amountCents: cents } : l))
+            return true
+          }
           const { fromAccountId, toAccountId } = p.data
           if (!fromAccountId && !toAccountId) return false
           p.data.amountCents = fromAccountId && toAccountId ? Math.abs(cents) : cents
@@ -572,12 +794,23 @@ export default function Konten() {
         cellEditor: 'agTextCellEditor',
         cellEditorParams: { useFormatter: true },
         cellClass: 'text-right tabular-figure',
-        editable: true,
+        // The parent, once split, is a fixed total that splitting only
+        // ever redistributes (persistTx's own comment) — not directly
+        // editable there anymore. A line is editable unless it's the
+        // *last* one: that's always the live remainder (persistTx
+        // recomputes it on every save), never typed into directly — "the
+        // live, auto-generated remaining amount line" (§3a).
+        editable: (p) =>
+          p.data.__isLine ? p.data.__lineIndex !== p.data.__parent.lines.length - 1 : (p.data.lines ?? []).length <= 1,
         width: 130,
       },
       {
         headerName: 'Kategorie',
         valueGetter: (p) => {
+          if (p.data.__isLine) {
+            const catId = p.data.__parent.lines[p.data.__lineIndex]?.categoryId
+            return catId ? groupName(catId) : '—'
+          }
           const ids = [...new Set((p.data.lines ?? []).map((l) => l.categoryId).filter(Boolean))]
           if (ids.length === 0) return '—'
           const groups = [...new Set(ids.map(groupName))]
@@ -585,64 +818,142 @@ export default function Konten() {
         },
         // Same cascading Kategorie→Unterkategorie picker as the
         // Unterkategorie column below — Kategorie has no stored value of
-        // its own, so editing it here writes the same categoryId.
+        // its own, so editing it here writes the same categoryId. A
+        // fallback path only (Übernehmen/Enter apply directly and cancel
+        // AG Grid's own commit via api.stopEditing(true)) — but AG Grid's
+        // own Tab handling can still stop editing in *commit* mode, which
+        // does reach this. A line row has no `.lines` of its own —
+        // ensureLine(p.data) would silently create a bogus one on the
+        // synthetic row object and lose the edit, so this branches exactly
+        // like the cellEditorParams above.
         valueSetter: (p) => {
+          if (p.data.__isLine) {
+            const categoryId = p.newValue?.categoryId
+            if (!categoryId) return false
+            const { __parent: parent, __lineIndex: idx } = p.data
+            parent.lines = parent.lines.map((l, i) => (i === idx ? { ...l, categoryId } : l))
+            return true
+          }
           const line = ensureLine(p.data)
           line.categoryId = p.newValue?.categoryId ?? line.categoryId
           return true
         },
         cellClass: (p) => (p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined),
-        editable: (p) => (p.data.lines ?? []).length <= 1,
+        // A line row is always editable here — including the last/remainder
+        // line, which "can... be categorized/tagged directly as the final
+        // line" (§3a) — a parent row only while unsplit (≤1 line); once
+        // split, per-line category editing happens on the expanded rows.
+        editable: (p) => p.data.__isLine || (p.data.lines ?? []).length <= 1,
         cellEditor: CategoryEditor,
-        // startField: 'group' — opening from Kategorie itself starts the
-        // chain at the top, same as before.
-        cellEditorParams: { categories, onApply: applyCategoryDirect, startField: 'group' },
+        // A per-row function, not a static object: a line row needs its
+        // own onApply (writing to that specific line, not
+        // ensureLine/replace-lines-with-one-element) and its own current
+        // selection to pre-highlight, read from that line directly rather
+        // than data.lines[0].
+        cellEditorParams: (p) =>
+          p.data.__isLine
+            ? {
+                categories,
+                initialCategoryId: p.data.__parent.lines[p.data.__lineIndex]?.categoryId ?? null,
+                onApply: (_data, categoryId) => applyCategoryToLine(p.data.__parent, p.data.__lineIndex, categoryId),
+                startField: 'group',
+              }
+            : {
+                categories,
+                initialCategoryId: (p.data.lines ?? [])[0]?.categoryId ?? null,
+                onApply: applyCategoryDirect,
+                startField: 'group',
+              },
         cellEditorPopup: true,
         flex: 1.1,
       },
       {
         headerName: 'Unterkategorie',
         valueGetter: (p) => {
+          if (p.data.__isLine) {
+            const catId = p.data.__parent.lines[p.data.__lineIndex]?.categoryId
+            return catId ? categoryName(catId) : '—'
+          }
           const ids = [...new Set((p.data.lines ?? []).map((l) => l.categoryId).filter(Boolean))]
           if (ids.length === 0) return '—'
           return ids.length === 1 ? categoryName(ids[0]) : '(mehrere)'
         },
-        // Only editable for an unsplit row (0 or 1 category so far) — a
-        // split transaction's per-line categories are Phase 1b's editing
-        // surface (the auto-remainder mechanism), not this column.
+        // Same fallback-path reasoning as Kategorie's valueSetter above.
         valueSetter: (p) => {
+          if (p.data.__isLine) {
+            const categoryId = p.newValue?.categoryId
+            if (!categoryId) return false
+            const { __parent: parent, __lineIndex: idx } = p.data
+            parent.lines = parent.lines.map((l, i) => (i === idx ? { ...l, categoryId } : l))
+            return true
+          }
           const line = ensureLine(p.data)
           line.categoryId = p.newValue?.categoryId ?? line.categoryId
           return true
         },
         cellClass: (p) => (p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined),
-        editable: (p) => (p.data.lines ?? []).length <= 1,
+        editable: (p) => p.data.__isLine || (p.data.lines ?? []).length <= 1,
         cellEditor: CategoryEditor,
         // startField: 'category' — opening from Unterkategorie directly
-        // (Markus) leaves Kategorie as already set (it already was, via
-        // currentGroupId) and jumps straight to the Unterkategorie list,
-        // open and pre-highlighted on the existing selection, instead of
-        // starting the chain over at Kategorie every time.
-        cellEditorParams: { categories, onApply: applyCategoryDirect, startField: 'category' },
+        // (Markus) leaves Kategorie as already set and jumps straight to
+        // the Unterkategorie list, open and pre-highlighted on the
+        // existing selection, instead of starting the chain over at
+        // Kategorie every time. Same per-row params as Kategorie above.
+        cellEditorParams: (p) =>
+          p.data.__isLine
+            ? {
+                categories,
+                initialCategoryId: p.data.__parent.lines[p.data.__lineIndex]?.categoryId ?? null,
+                onApply: (_data, categoryId) => applyCategoryToLine(p.data.__parent, p.data.__lineIndex, categoryId),
+                startField: 'category',
+              }
+            : {
+                categories,
+                initialCategoryId: (p.data.lines ?? [])[0]?.categoryId ?? null,
+                onApply: applyCategoryDirect,
+                startField: 'category',
+              },
         cellEditorPopup: true,
         flex: 1.3,
       },
-      { field: 'detail', headerName: 'Details', editable: true, flex: 1.3 },
+      {
+        headerName: 'Details',
+        // `detail` is parent-only free text (distinct from each line's own
+        // `note`, shown in Empfänger) — blank and non-editable on a line
+        // row rather than repeating/splitting the same field.
+        valueGetter: (p) => (p.data.__isLine ? '' : p.data.detail),
+        valueSetter: (p) => {
+          if (p.data.__isLine) return false
+          p.data.detail = p.newValue ?? ''
+          return true
+        },
+        editable: (p) => !p.data.__isLine,
+        flex: 1.3,
+      },
       {
         headerName: 'Tags',
-        valueGetter: (p) => [...new Set((p.data.lines ?? []).flatMap((l) => l.tags ?? []))].join(', '),
+        valueGetter: (p) =>
+          p.data.__isLine
+            ? (p.data.__parent.lines[p.data.__lineIndex]?.tags ?? []).join(', ')
+            : [...new Set((p.data.lines ?? []).flatMap((l) => l.tags ?? []))].join(', '),
         // Placeholder editor (comma-separated text) — the real inline
         // tag-autocomplete/creation mechanism (spec.md §2.5) is its own
         // separate feature, not built yet.
         valueSetter: (p) => {
-          const line = ensureLine(p.data)
-          line.tags = String(p.newValue || '')
+          const tags = String(p.newValue || '')
             .split(',')
             .map((t) => t.trim())
             .filter(Boolean)
+          if (p.data.__isLine) {
+            const { __parent: parent, __lineIndex: idx } = p.data
+            parent.lines = parent.lines.map((l, i) => (i === idx ? { ...l, tags } : l))
+            return true
+          }
+          const line = ensureLine(p.data)
+          line.tags = tags
           return true
         },
-        editable: (p) => (p.data.lines ?? []).length <= 1,
+        editable: (p) => p.data.__isLine || (p.data.lines ?? []).length <= 1,
         flex: 1,
       },
       {
@@ -660,6 +971,10 @@ export default function Konten() {
         pinned: 'right',
         resizable: false,
         cellRenderer: (p) => {
+          // Deleting a whole transaction from a line row doesn't make
+          // sense — removing just that line is the "split" colId's ✕
+          // button instead.
+          if (p.data.__isLine) return ''
           const armed = confirmDeleteId === p.data.id
           return (
             <button
@@ -682,8 +997,8 @@ export default function Konten() {
         },
       },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- accountName/categoryName/groupName/ensureLine/handleDeleteClick close over these
-    [accountById, categoryById, accountFilter, accounts, categories, confirmDeleteId, year],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- accountName/categoryName/groupName/ensureLine/handleDeleteClick/toggleExpanded close over these
+    [accountById, categoryById, accountFilter, accounts, categories, confirmDeleteId, year, expandedIds],
   )
 
   const panel = useMemo(() => {
@@ -881,7 +1196,7 @@ export default function Konten() {
         <AgGridReact
           ref={gridRef}
           theme={themeQuartz}
-          rowData={rows}
+          rowData={displayRows}
           columnDefs={columnDefs}
           // suppressMovable (not just per-column, so it also covers the
           // default column menu) keeps the spec'd column order fixed —
@@ -925,7 +1240,12 @@ export default function Konten() {
           // arming row deletion underneath it.
           onCellKeyDown={(p) => {
             const key = p.event?.key
-            if (key !== 'Delete' || p.api.getEditingCells().length > 0) return
+            // A line row's Delete key does nothing here — removing a line
+            // is the split column's ✕ button, not the whole-transaction
+            // delete (Delete on a line row would otherwise try to arm a
+            // transaction-delete against a synthetic id that doesn't
+            // exist in Firestore).
+            if (key !== 'Delete' || p.api.getEditingCells().length > 0 || p.data.__isLine) return
             handleDeleteClick(p.data.id)
           }}
           // Datum sorted ascending on first load only (the underlying rows
