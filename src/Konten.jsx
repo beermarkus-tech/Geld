@@ -1,12 +1,36 @@
 import { useEffect, useMemo, useState } from 'react'
-import { collection, onSnapshot } from 'firebase/firestore'
+import { collection, doc, onSnapshot, setDoc } from 'firebase/firestore'
 import { AgGridReact } from 'ag-grid-react'
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community'
 
+import CategoryEditor from './CategoryEditor'
 import { db } from './firebase'
+import KontoEditor from './KontoEditor'
 import { jahresende } from './lib/balance'
 
 ModuleRegistry.registerModules([AllCommunityModule])
+
+// "12,34" or "12.34" -> 1234 cents; null if unparseable. Markus types
+// amounts in euros with a comma decimal (German/French convention), not
+// the cents integers the schema stores (spec.md §2.6).
+function parseEuroInput(s) {
+  const cleaned = String(s).trim().replace(/[€\s]/g, '').replace(',', '.')
+  if (cleaned === '' || cleaned === '-') return null
+  const f = Number(cleaned)
+  return Number.isNaN(f) ? null : Math.round(f * 100)
+}
+
+// A brand-new manually entered transaction has no split yet — exactly one
+// line, created lazily the first time Kategorie or a tag is set, mirroring
+// whatever the transaction's own amount already is (spec.md §2.6's
+// invariant: parent amountCents === Σ lines[].amountCents, trivially true
+// for a single line).
+function ensureLine(tx) {
+  if (!tx.lines || tx.lines.length === 0) {
+    tx.lines = [{ amountCents: tx.amountCents, categoryId: null, note: tx.detail || '', tags: [] }]
+  }
+  return tx.lines[0]
+}
 
 // Barkonten/Sparkonten/Geldanlage/Außenstände — Markus's own top-level
 // mental model (spec.md §2.2's reportingGroup), not the technical account
@@ -75,6 +99,49 @@ export default function Konten() {
     return null
   }
 
+  // Full-document overwrite on every cell commit (§3a: "simple edit-in-place,
+  // no audit trail needed, single user") — simplest correct thing for a
+  // one-line transaction; splitting (Phase 1b) will need something finer.
+  // Re-mirrors the sole line's amountCents to the parent's here, generically,
+  // regardless of which column actually changed — cheaper than duplicating
+  // that sync in every individual valueSetter.
+  const handleCellValueChanged = (params) => {
+    const tx = { ...params.data }
+    if (tx.lines?.length === 1) {
+      tx.lines = [{ ...tx.lines[0], amountCents: tx.amountCents }]
+    }
+    // A manually entered row has no real bank text to protect (§3a's "raw
+    // label must never be overwritten" is about imported rows specifically,
+    // which already arrive with rawDescription set) — mirror Empfänger into
+    // it instead of leaving it permanently blank.
+    if (!tx.rawDescription) tx.rawDescription = tx.displayLabel
+    setDoc(doc(db, 'transactions', tx.id), tx)
+  }
+
+  // New rows always start with no account set — deliberately not
+  // pre-filled from an active account filter, since a row with neither
+  // fromAccountId nor toAccountId matching the filter would immediately
+  // vanish from the filtered view the moment it's created (confusing).
+  // The "+ Neue Buchung" button is disabled while filtered for the same
+  // reason (see below).
+  async function addRow() {
+    const today = new Date().toISOString().slice(0, 10)
+    const date = year && today.startsWith(year) ? today : `${year}-01-01`
+    const id = `tx-manual-${crypto.randomUUID()}`
+    await setDoc(doc(db, 'transactions', id), {
+      id,
+      date,
+      fromAccountId: null,
+      toAccountId: null,
+      amountCents: 0,
+      rawDescription: '',
+      displayLabel: '',
+      lines: [],
+      detail: '',
+      createdAt: Date.now(),
+    })
+  }
+
   const years = useMemo(() => {
     const set = new Set(transactions.map((t) => t.date.slice(0, 4)))
     return [...set].sort()
@@ -103,9 +170,28 @@ export default function Konten() {
   // (a single-account register view) and Betrag is re-signed relative to
   // the filtered account instead of the row's own primary side. Only
   // Unterkategorie is stored; Kategorie is its derived parent.
+  //
+  // Editing is disabled whenever an account filter is active: Konto/Betrag
+  // display and edit relative to *some* account, and while filtered that's
+  // the filtered account, not necessarily either of the row's own two
+  // fields — rather than juggle two different "what does this cell mean"
+  // conventions depending on filter state, editing simply requires "Alle
+  // Konten" first.
+  const editable = !accountFilter
   const columnDefs = useMemo(
     () => [
-      { field: 'date', headerName: 'Datum', width: 110, sort: 'asc' },
+      {
+        field: 'date',
+        headerName: 'Datum',
+        width: 110,
+        sort: 'asc',
+        editable,
+        valueSetter: (p) => {
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(p.newValue ?? '')) return false
+          p.data.date = p.newValue
+          return true
+        },
+      },
       {
         headerName: accountFilter ? `Gegenkonto (${accountName(accountFilter)})` : 'Konto',
         valueGetter: (p) => {
@@ -119,15 +205,48 @@ export default function Konten() {
           }
           return accountName(t.fromAccountId ?? t.toAccountId)
         },
+        // Editing sets fromAccountId/toAccountId directly, then re-derives
+        // amountCents' sign convention (positive magnitude once both sides
+        // are real accounts, natural sign for a single-sided row — §2.6),
+        // keeping whatever magnitude was already there so switching Konto
+        // never silently zeroes the amount.
+        valueSetter: (p) => {
+          const { fromAccountId, toAccountId } = p.newValue ?? {}
+          if (!fromAccountId && !toAccountId) return false
+          const magnitude = Math.abs(p.data.amountCents || 0)
+          p.data.fromAccountId = fromAccountId
+          p.data.toAccountId = toAccountId
+          p.data.amountCents = fromAccountId && toAccountId ? magnitude : fromAccountId ? -magnitude : magnitude
+          return true
+        },
         cellClass: (p) => (p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined),
+        editable,
+        cellEditor: KontoEditor,
+        cellEditorParams: { accounts },
+        cellEditorPopup: true,
         flex: 1.6,
       },
-      { field: 'displayLabel', headerName: 'Empfänger', flex: 1.4 },
+      { field: 'displayLabel', headerName: 'Empfänger', editable, flex: 1.4 },
       {
         headerName: 'Betrag',
         valueGetter: (p) => signedFor(p.data, accountFilter ?? (p.data.fromAccountId ?? p.data.toAccountId)),
         valueFormatter: (p) => centsToEuro(p.value),
+        // Typed relative to Konto1 (fromAccountId if set, else toAccountId)
+        // — same convention as the display. Two real accounts always store
+        // a positive magnitude regardless of the typed sign (§2.6); a
+        // single-sided row keeps exactly the typed sign.
+        valueSetter: (p) => {
+          const cents = parseEuroInput(p.newValue)
+          if (cents === null) return false
+          const { fromAccountId, toAccountId } = p.data
+          if (!fromAccountId && !toAccountId) return false
+          p.data.amountCents = fromAccountId && toAccountId ? Math.abs(cents) : cents
+          return true
+        },
+        cellEditor: 'agTextCellEditor',
+        cellEditorParams: { useFormatter: true },
         cellClass: 'text-right tabular-figure',
+        editable,
         width: 130,
       },
       {
@@ -148,18 +267,42 @@ export default function Konten() {
           if (ids.length === 0) return '—'
           return ids.length === 1 ? categoryName(ids[0]) : '(mehrere)'
         },
+        // Only editable for an unsplit row (0 or 1 category so far) — a
+        // split transaction's per-line categories are Phase 1b's editing
+        // surface (the auto-remainder mechanism), not this column.
+        valueSetter: (p) => {
+          const line = ensureLine(p.data)
+          line.categoryId = p.newValue?.categoryId ?? line.categoryId
+          return true
+        },
         cellClass: (p) => (p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined),
+        editable: (p) => editable && (p.data.lines ?? []).length <= 1,
+        cellEditor: CategoryEditor,
+        cellEditorParams: { categories },
+        cellEditorPopup: true,
         flex: 1.3,
       },
-      { field: 'detail', headerName: 'Details', flex: 1.3 },
+      { field: 'detail', headerName: 'Details', editable, flex: 1.3 },
       {
         headerName: 'Tags',
         valueGetter: (p) => [...new Set((p.data.lines ?? []).flatMap((l) => l.tags ?? []))].join(', '),
+        // Placeholder editor (comma-separated text) — the real inline
+        // tag-autocomplete/creation mechanism (spec.md §2.5) is its own
+        // separate feature, not built yet.
+        valueSetter: (p) => {
+          const line = ensureLine(p.data)
+          line.tags = String(p.newValue || '')
+            .split(',')
+            .map((t) => t.trim())
+            .filter(Boolean)
+          return true
+        },
+        editable: (p) => editable && (p.data.lines ?? []).length <= 1,
         flex: 1,
       },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- accountName/categoryName/groupName close over these
-    [accountById, categoryById, accountFilter],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- accountName/categoryName/groupName/ensureLine close over these
+    [accountById, categoryById, accountFilter, accounts, categories, editable],
   )
 
   const panel = useMemo(() => {
@@ -234,6 +377,16 @@ export default function Konten() {
               ))}
           </select>
         </div>
+
+        <button
+          type="button"
+          onClick={addRow}
+          disabled={!editable}
+          title={editable ? undefined : 'Filter zum Bearbeiten aufheben ("Alle Konten")'}
+          className="rounded-md bg-[var(--color-computed)] px-3 py-1 text-sm font-medium text-white disabled:opacity-50"
+        >
+          + Neue Buchung
+        </button>
       </div>
 
       {/* Pinned balance panel — Jahresende(selected year) per account,
@@ -277,7 +430,14 @@ export default function Konten() {
           working internal scroll, and the page itself scrolls normally if
           the panel above is tall. */}
       <div className="h-[70vh] min-h-[360px]">
-        <AgGridReact theme={themeQuartz} rowData={rows} columnDefs={columnDefs} getRowId={(p) => p.data.id} />
+        <AgGridReact
+          theme={themeQuartz}
+          rowData={rows}
+          columnDefs={columnDefs}
+          getRowId={(p) => p.data.id}
+          onCellValueChanged={handleCellValueChanged}
+          undoRedoCellEditingLimit={20}
+        />
       </div>
     </div>
   )
