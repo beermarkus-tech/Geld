@@ -190,7 +190,7 @@ export default function Konten() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-3 px-4 py-3">
+    <div className="flex min-h-full flex-col gap-3 px-4 py-3">
       <div className="flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-2">
           <span className="text-sm text-[var(--color-text-muted)]">Jahr:</span>
@@ -270,7 +270,13 @@ export default function Konten() {
         ))}
       </div>
 
-      <div className="min-h-0 flex-1">
+      {/* A fixed height, not flex-1/min-h-0: that relied on main having a
+          bounded height, which broke the moment the panel above grew taller
+          than the viewport on a narrow screen (nothing could scroll to
+          reach the grid at all). This way the grid always has its own
+          working internal scroll, and the page itself scrolls normally if
+          the panel above is tall. */}
+      <div className="h-[70vh] min-h-[360px]">
         <AgGridReact theme={themeQuartz} rowData={rows} columnDefs={columnDefs} getRowId={(p) => p.data.id} />
       </div>
     </div>

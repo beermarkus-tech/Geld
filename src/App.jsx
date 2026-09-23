@@ -95,9 +95,14 @@ export default function App() {
         </div>
       </header>
 
-      <main className="flex flex-1 flex-col overflow-hidden">
+      {/* overflow-y-auto, not overflow-hidden: Konten's own content (the
+          pinned panel especially, which stacks to four tall blocks on a
+          narrow phone screen) can be taller than the viewport, and the page
+          itself needs to be able to scroll to reach what's below it —
+          overflow-hidden here previously trapped that content unreachably. */}
+      <main className="flex flex-1 flex-col overflow-y-auto">
         {view === 'import' && (
-          <div className="flex-1 overflow-y-auto">
+          <div>
             <p className="px-6 pt-4 text-center text-sm text-[var(--color-text-muted)]">
               Angemeldet als {user.email}
               {usingCachedSession && ' (aus zwischengespeicherter Sitzung, noch nicht online bestätigt)'}

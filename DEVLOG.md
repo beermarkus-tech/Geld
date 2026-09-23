@@ -253,3 +253,11 @@ The ten generated files (both years' seed + migration output) were sent to Marku
 **Action needed from Markus, not yet done:** `accounts.json` already lives in Firestore from the earlier import — editing the seed file alone doesn't change what's already there. He needs to re-run `ImportScreen` (kept for exactly this) with the updated `accounts.json`, sent again this session. Re-importing just that one file is enough; every other collection is untouched.
 
 **Next session should probably:** confirm the re-import landed (Außenstände block should show real data, and the Barkonten total should drop by the open-claims amount), then continue toward manual entry + cascading dropdowns + keyboard nav — still the standing next step.
+
+## Session 7 — 2026-09-23 — Fixed: phone screen couldn't scroll past the panel
+
+**Bug, reported by Markus on phone:** the accounts panel filled the whole screen and nothing could scroll. Real cause, not just "phone polish missing": `App.jsx`'s `main` was `overflow-hidden`, relying on the AG Grid's own internal scroll (`flex-1`/`min-h-0`) to reach everything below the pinned panel. That works fine at tablet width, where the panel is a short 3-4 column row — but the panel now stacks to four tall blocks on a narrow phone screen (Barkonten alone lists ~17 accounts), taller than the viewport, and `overflow-hidden` trapped it with no way to scroll down to the grid at all. Fixed: `main` is `overflow-y-auto`, and the grid has a fixed height (`h-[70vh]`) instead of depending on a bounded flex parent. The whole page now scrolls normally on any width.
+
+**Answered directly, not ignored — Markus gave an explicit out ("if too early, ignore") but this wasn't a "too early for phone" situation, it was content becoming genuinely unreachable, which is a basic robustness bug regardless of device.** What's still genuinely not built, and *is* legitimately "too early": §1b.7/§3a's actual phone-specific condensed layout (fewer columns, tap-to-expand cards instead of the full grid). Konten today is the same grid+panel at every screen width, just reflowing — usable, not yet phone-optimized. Flagged in CODEMAP.md so it isn't mistaken for done.
+
+**Next session should probably:** continue toward manual entry + cascading dropdowns + keyboard nav — still the standing next step across several entries now.
