@@ -5,14 +5,15 @@ import { forwardRef, useImperativeHandle, useState } from 'react'
 // account fields underneath... exactly how editing a merged cell works...
 // is an implementation detail for whenever manual entry is built, not
 // resolved [in the spec]" — this is that decision, made here rather than
-// left unresolved forever). Returns {fromAccountId, toAccountId} from
-// getValue(); Konten.jsx's valueSetter applies it to the transaction and
-// recomputes amountCents' sign convention from it.
+// left unresolved forever).
 const KontoEditor = forwardRef(function KontoEditor(props, ref) {
-  const { data, accounts, stopEditing, api } = props
+  const { data, accounts, onApply, api } = props
   const [fromId, setFromId] = useState(data.fromAccountId ?? '')
   const [toId, setToId] = useState(data.toAccountId ?? '')
 
+  // getValue()/isCancelAfterEnd stay in place as a fallback for whatever
+  // other way a cell edit might end (Enter, tabbing away) — but Übernehmen
+  // itself no longer depends on this pipeline (see the button below).
   useImperativeHandle(ref, () => ({
     getValue: () => ({ fromAccountId: fromId || null, toAccountId: toId || null }),
     isCancelBeforeStart: () => false,
@@ -29,14 +30,6 @@ const KontoEditor = forwardRef(function KontoEditor(props, ref) {
 
   return (
     <div
-      // Stops the click/mousedown from ever reaching AG Grid's own
-      // document-level "click outside the popup, cancel the edit"
-      // listener, which fires on mousedown — before a button's onClick
-      // would — and was racing Übernehmen, cancelling the edit before its
-      // own click handler ran (the selection never applied, caught by
-      // Markus). One guard on the whole popup covers the selects too, not
-      // just the buttons.
-      onMouseDown={(e) => e.stopPropagation()}
       className="flex flex-col gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-2 shadow-lg"
       style={{ minWidth: 260 }}
     >
@@ -70,9 +63,13 @@ const KontoEditor = forwardRef(function KontoEditor(props, ref) {
           ))}
         </select>
       </label>
-      {/* Explicit Übernehmen/Abbrechen (Markus's request) — relying on
-          blur/Escape alone to commit or cancel a two-dropdown popup isn't
-          obviously discoverable, especially on a touch device. */}
+      {/* Explicit Übernehmen/Abbrechen (Markus's request). Übernehmen
+          writes directly via onApply + closes with api.stopEditing(true)
+          (cancel — we've already persisted ourselves) instead of relying
+          on AG Grid's own getValue()/stopEditing() commit pipeline, which
+          confirmed didn't reliably apply the selection (traced to AG
+          Grid's edit-commit flow, not the popup-dismiss mechanism an
+          earlier fix here wrongly targeted). */}
       <div className="mt-1 flex justify-end gap-2">
         <button
           type="button"
@@ -83,7 +80,10 @@ const KontoEditor = forwardRef(function KontoEditor(props, ref) {
         </button>
         <button
           type="button"
-          onClick={() => stopEditing()}
+          onClick={() => {
+            onApply(data, fromId || null, toId || null)
+            api.stopEditing(true)
+          }}
           disabled={!fromId && !toId}
           className="rounded bg-[var(--color-computed)] px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
         >

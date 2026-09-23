@@ -7,7 +7,7 @@ import { forwardRef, useImperativeHandle, useMemo, useState } from 'react'
 // nothing for a separate Kategorie cell to actually edit — picking the
 // group here only exists to filter which Unterkategorie options show.
 const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
-  const { data, categories, stopEditing, api } = props
+  const { data, categories, onApply, api } = props
   const currentCategoryId = (data.lines ?? [])[0]?.categoryId ?? null
   const currentGroupId = currentCategoryId
     ? (categories.find((c) => c.id === currentCategoryId)?.parentCategoryId ?? currentCategoryId)
@@ -26,10 +26,6 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
 
   return (
     <div
-      // Same fix as KontoEditor.jsx: stops mousedown reaching AG Grid's
-      // own outside-click popup-cancel listener before Übernehmen's click
-      // handler gets a chance to run.
-      onMouseDown={(e) => e.stopPropagation()}
       className="flex flex-col gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-2 shadow-lg"
       style={{ minWidth: 260 }}
     >
@@ -71,7 +67,9 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
         </select>
       </label>
       {/* Explicit Übernehmen/Abbrechen (Markus's request) — same reasoning
-          as KontoEditor.jsx. */}
+          as KontoEditor.jsx: Übernehmen writes directly via onApply and
+          closes with api.stopEditing(true), not AG Grid's own commit
+          pipeline, which confirmed didn't reliably apply the selection. */}
       <div className="mt-1 flex justify-end gap-2">
         <button
           type="button"
@@ -82,7 +80,10 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
         </button>
         <button
           type="button"
-          onClick={() => stopEditing()}
+          onClick={() => {
+            onApply(data, categoryId)
+            api.stopEditing(true)
+          }}
           disabled={!categoryId}
           className="rounded bg-[var(--color-computed)] px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
         >

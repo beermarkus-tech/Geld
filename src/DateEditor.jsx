@@ -1,23 +1,37 @@
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
 
-// A native <input type="date"> commits and closes as soon as a date is
-// picked (its own onChange fires the moment the OS picker's "Fertig"/
-// "Done" step completes — that step itself is the device's own UI, not
-// ours, and not something a web page can skip). What Markus actually ran
-// into was a *second*, app-level confirmation on top of that: AG Grid's
-// default date editor doesn't stop editing on change by itself, so picking
-// a date still needed a further tap elsewhere to commit it into the grid.
-// Fixed here by calling stopEditing() the instant the input's value
-// changes — one tap (the OS picker's own), not two.
+// A native <input type="date"> still needs its own OS picker UI confirmed
+// (its "Fertig"/"Done" step) — that's the device's own interaction, not
+// something a web page can skip. Everything *on top* of that is fixable
+// though, and was the actual friction Markus ran into: AG Grid defaults to
+// double-click-to-edit (fixed grid-wide in Konten.jsx via singleClickEdit),
+// and focusing a date input doesn't itself pop the calendar UI open on most
+// platforms — showPicker() below does that immediately instead of needing
+// a further manual tap on the input first.
 const DateEditor = forwardRef(function DateEditor(props, ref) {
-  const { value, stopEditing } = props
+  const { data, value, onApply, api } = props
   const [date, setDate] = useState(value ?? '')
   const inputRef = useRef(null)
 
   useImperativeHandle(ref, () => ({
+    // A plain string value — getValue() is fine here as a fallback path
+    // (Escape/blur), unlike Konto/Kategorie's popups where it confirmed
+    // unreliable; onChange below is the primary path and bypasses it.
     getValue: () => date,
     isCancelBeforeStart: () => false,
-    afterGuiAttached: () => inputRef.current?.focus(),
+    afterGuiAttached: () => {
+      const el = inputRef.current
+      if (!el) return
+      el.focus()
+      // Best-effort: not universally supported, and failing here just
+      // means the user taps the input once themselves — no worse than
+      // before this existed.
+      try {
+        el.showPicker?.()
+      } catch {
+        // ignore
+      }
+    },
   }))
 
   return (
@@ -27,10 +41,8 @@ const DateEditor = forwardRef(function DateEditor(props, ref) {
       value={date}
       onChange={(e) => {
         setDate(e.target.value)
-        // Deferred a tick so the value above is what getValue() reads —
-        // stopEditing() reads current React state, and the setState above
-        // hasn't necessarily flushed yet at this exact point in the handler.
-        setTimeout(() => stopEditing(), 0)
+        onApply(data, e.target.value)
+        api.stopEditing(true)
       }}
       className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-sm"
     />

@@ -33,6 +33,51 @@ function ensureLine(tx) {
   return tx.lines[0]
 }
 
+// Full-document overwrite (§3a: "simple edit-in-place, no audit trail
+// needed, single user") — re-mirrors the sole line's amountCents to the
+// parent's here, generically, regardless of what changed.
+function persistTx(tx) {
+  const next = { ...tx }
+  if (next.lines?.length === 1) {
+    next.lines = [{ ...next.lines[0], amountCents: next.amountCents }]
+  }
+  // A manually entered row has no real bank text to protect (§3a's "raw
+  // label must never be overwritten" is about imported rows specifically,
+  // which already arrive with rawDescription set) — mirror Empfänger into
+  // it instead of leaving it permanently blank.
+  if (!next.rawDescription) next.rawDescription = next.displayLabel
+  setDoc(doc(db, 'transactions', next.id), next)
+}
+
+// Konto's and Kategorie/Unterkategorie's Übernehmen buttons call these
+// directly and persist immediately, rather than going through AG Grid's
+// own getValue()/valueSetter commit pipeline the way every other column
+// does — a confirmed bug (Markus: selecting an account/category and
+// hitting Übernehmen silently did nothing). The column valueSetters below
+// still exist and do the same thing, as a fallback for whatever other way
+// a cell edit might end (Enter, tabbing away) — but Übernehmen no longer
+// depends on that pipeline succeeding.
+function applyKontoDirect(data, fromAccountId, toAccountId) {
+  if (!fromAccountId && !toAccountId) return
+  const tx = { ...data }
+  const magnitude = Math.abs(tx.amountCents || 0)
+  tx.fromAccountId = fromAccountId
+  tx.toAccountId = toAccountId
+  tx.amountCents = fromAccountId && toAccountId ? magnitude : fromAccountId ? -magnitude : magnitude
+  persistTx(tx)
+}
+function applyCategoryDirect(data, categoryId) {
+  if (!categoryId) return
+  const tx = { ...data }
+  const line = ensureLine(tx)
+  tx.lines = [{ ...line, categoryId }]
+  persistTx(tx)
+}
+function applyDateDirect(data, date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? '')) return
+  persistTx({ ...data, date })
+}
+
 // Barkonten/Sparkonten/Geldanlage/Außenstände — Markus's own top-level
 // mental model (spec.md §2.2's reportingGroup), not the technical account
 // `group`. Außenstände (the seven receivable accounts) got its own block
@@ -110,24 +155,7 @@ export default function Konten() {
     return null
   }
 
-  // Full-document overwrite on every cell commit (§3a: "simple edit-in-place,
-  // no audit trail needed, single user") — simplest correct thing for a
-  // one-line transaction; splitting (Phase 1b) will need something finer.
-  // Re-mirrors the sole line's amountCents to the parent's here, generically,
-  // regardless of which column actually changed — cheaper than duplicating
-  // that sync in every individual valueSetter.
-  const handleCellValueChanged = (params) => {
-    const tx = { ...params.data }
-    if (tx.lines?.length === 1) {
-      tx.lines = [{ ...tx.lines[0], amountCents: tx.amountCents }]
-    }
-    // A manually entered row has no real bank text to protect (§3a's "raw
-    // label must never be overwritten" is about imported rows specifically,
-    // which already arrive with rawDescription set) — mirror Empfänger into
-    // it instead of leaving it permanently blank.
-    if (!tx.rawDescription) tx.rawDescription = tx.displayLabel
-    setDoc(doc(db, 'transactions', tx.id), tx)
-  }
+  const handleCellValueChanged = (params) => persistTx(params.data)
 
   // Adds a blank row right below whatever's currently selected in the
   // grid: same date (so it lands next to it once the grid re-sorts by
@@ -272,6 +300,7 @@ export default function Konten() {
           return true
         },
         cellEditor: DateEditor,
+        cellEditorParams: { onApply: applyDateDirect },
         colId: 'date',
       },
       {
@@ -346,7 +375,7 @@ export default function Konten() {
         cellClass: (p) => (p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined),
         editable: true,
         cellEditor: KontoEditor,
-        cellEditorParams: { accounts },
+        cellEditorParams: { accounts, onApply: applyKontoDirect },
         cellEditorPopup: true,
         flex: 1.6,
       },
@@ -392,7 +421,7 @@ export default function Konten() {
         cellClass: (p) => (p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined),
         editable: (p) => (p.data.lines ?? []).length <= 1,
         cellEditor: CategoryEditor,
-        cellEditorParams: { categories },
+        cellEditorParams: { categories, onApply: applyCategoryDirect },
         cellEditorPopup: true,
         flex: 1.1,
       },
@@ -414,7 +443,7 @@ export default function Konten() {
         cellClass: (p) => (p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined),
         editable: (p) => (p.data.lines ?? []).length <= 1,
         cellEditor: CategoryEditor,
-        cellEditorParams: { categories },
+        cellEditorParams: { categories, onApply: applyCategoryDirect },
         cellEditorPopup: true,
         flex: 1.3,
       },
@@ -603,6 +632,23 @@ export default function Konten() {
                   <button
                     type="button"
                     onClick={() => setAccountFilter(i.id)}
+                    // Arrow keys move focus between sibling accounts within
+                    // this one group, listbox-style — plain <button>s have
+                    // no built-in arrow-key behavior on their own (Markus:
+                    // after clicking an account here, arrow keys just left
+                    // the browser's default focus outline sitting there,
+                    // not moving between accounts the way it does in the
+                    // Konto <select> above). Stays within one <ul> per
+                    // reportingGroup, same "don't cross group boundaries"
+                    // fix as that dropdown's <optgroup>s.
+                    onKeyDown={(e) => {
+                      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+                      e.preventDefault()
+                      const list = e.currentTarget.closest('ul')
+                      const buttons = [...list.querySelectorAll('button')]
+                      const idx = buttons.indexOf(e.currentTarget)
+                      buttons[idx + (e.key === 'ArrowDown' ? 1 : -1)]?.focus()
+                    }}
                     className={
                       'flex w-full justify-between gap-2 rounded px-1 text-left hover:bg-[var(--color-bg)] ' +
                       (i.id === accountFilter ? 'text-[var(--color-computed)]' : 'text-[var(--color-text-muted)]')
@@ -637,6 +683,12 @@ export default function Konten() {
           // Single-row selection just for "+ Neue Buchung"'s "insert below
           // the selected row" — not a bulk-actions feature.
           rowSelection={{ mode: 'singleRow', checkboxes: false, enableClickSelection: true }}
+          // One click starts editing an editable cell, not AG Grid's
+          // default double-click — Markus's date-field report ("double
+          // click... then a third click to open the date selector") was
+          // partly this: the first click was only ever selecting the row,
+          // never starting the edit at all.
+          singleClickEdit={true}
           getRowId={(p) => p.data.id}
           onCellValueChanged={handleCellValueChanged}
           undoRedoCellEditingLimit={20}
