@@ -169,9 +169,9 @@ tracked: boolean         // false = account exists conceptually but isn't active
 | Visa Airbus | payment | Barkonten | – | business credit card |
 | Livret A Sparen | savings | Sparkonten | – | subdivided by allocation tags Sparen Familie/Sophia/Julia, Rücklagen Steuern (see §2.5); previously referred to as "Livret A Famille" earlier in this doc — same account, name reconciled |
 | Livret A Tagesgeld | savings | Sparkonten | – | subdivided by allocation tag `Tagesgeld` (§2.5) — currently 1:1 (tag balance == account balance), modeled as a real tag anyway since it may be split into further sub-tags later |
-| Consors-Verrechnungskonto | investment-cash | Barkonten | – | freely movable to/from BNP/DKB |
-| Smartbroker-Verrechnungskonto | investment-cash | Barkonten | – | freely movable to/from BNP/DKB |
-| Coinbase-Verrechnungskonto | investment-cash | Barkonten | – | freely movable to/from BNP/DKB |
+| Consors | investment-cash | Barkonten | – | freely movable to/from BNP/DKB |
+| Smartbroker | investment-cash | Barkonten | – | freely movable to/from BNP/DKB |
+| Coinbase | investment-cash | Barkonten | – | freely movable to/from BNP/DKB |
 | Bar Markus | physical-cash | Barkonten | – | |
 | Bar Julia | physical-cash | Barkonten | – | |
 | Bar Haus | physical-cash | Barkonten | – | |
