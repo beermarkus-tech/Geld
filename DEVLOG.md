@@ -483,3 +483,15 @@ Markus tried splitting a real Bar Julia transaction and reported four issues, fr
 **Resolved directly with Markus, same session:** asked plainly whether deleting a non-last line should cascade-remove everything after it, or just re-absorb that one line into the remainder. Confirmed the built behavior (just that one line) is what he actually wants — the confusing report was very likely just the display-ordering bug (#1) making it hard to read the real state by eye, not a genuine mismatch in delete semantics. No further code change needed here.
 
 **Next session should probably:** get Markus to re-verify all three fixes against real data again, now that the display itself should read correctly.
+
+## Session 25 — 2026-09-23 — AG Grid was never actually following dark mode
+
+Markus: the grid was illegible in dark mode (screenshot: white grid, dark app shell around it, Session 24's new line-row tint barely readable smashed against that mismatch).
+
+Root cause: `themeQuartz` ships light/dark color params out of the box (its `colorSchemeVariable` theme part), but they only activate behind a `data-ag-theme-mode="dark"` attribute on `<html>`/`<body>` — nothing in this app was ever setting it, so the grid was stuck in its light default the whole time, completely independent of `index.css`'s own `prefers-color-scheme` media query that correctly drives the rest of the app. New `src/lib/gridColorScheme.js` (`syncAgGridColorScheme()`, called once at module load in `Konten.jsx`) mirrors the same system preference onto that attribute, kept in sync if it changes while the app is open. Written to be reusable as-is once Verlauf (spec.md §1b.3) shares the same grid engine later.
+
+**Verified visually, not just reasoned from source, given how many AG Grid quirks have needed correcting this session already:** built a standalone Playwright harness (scratchpad, not part of the repo) importing the real `ag-grid-community` package directly, rendered a small sample grid with both a dark-mode emulated page and a light one, and screenshotted both. Confirmed: the grid genuinely re-themes, and `--color-line-row-tint` (Session 24) reads clearly and legibly in both modes — not just plausible from reading the theming source.
+
+`npm run build`, `npm test` (still 14 passing), `npm run lint` all clean before pushing.
+
+**Next session should probably:** get Markus's confirmation this actually reads well on his real device — the standalone harness confirms the mechanism works, but AG Grid's own dark palette is its own generated colors, not tied to this app's specific CSS tokens, so it's worth a real look rather than assuming the harness's approximation is the final word on how it feels next to the rest of the app.

@@ -7,9 +7,11 @@ import CategoryEditor from './CategoryEditor'
 import { db } from './firebase'
 import KontoEditor from './KontoEditor'
 import { jahresende } from './lib/balance'
+import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { withRemainder } from './lib/split'
 
 ModuleRegistry.registerModules([AllCommunityModule])
+syncAgGridColorScheme()
 
 // "12,34" or "12.34" -> 1234 cents; null if unparseable. Markus types
 // amounts in euros with a comma decimal (German/French convention), not
