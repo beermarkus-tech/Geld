@@ -1,5 +1,7 @@
 import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react'
 
+import Listbox from './Listbox'
+
 // The Unterkategorie cell editor — one combined popup with the cascading
 // Kategorie→Unterkategorie pair (spec.md §3a), rather than two independently
 // clickable grid cells: Kategorie has no stored value of its own (it's
@@ -7,13 +9,13 @@ import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'reac
 // nothing for a separate Kategorie cell to actually edit — picking the
 // group here only exists to filter which Unterkategorie options show.
 //
-// Fully keyboard-chainable (Markus's request): focus lands on Kategorie
-// when the popup opens; arrow keys cycle a *focused* <select>'s value
-// directly (no need to visually open its dropdown first — plain, reliable
-// <select> behavior). Enter on Kategorie moves to Unterkategorie (once a
-// group is actually chosen — nothing to move to otherwise, since
-// Unterkategorie stays disabled until then); Enter on Unterkategorie
-// applies and returns focus to the grid cell, same as clicking Übernehmen.
+// Uses Listbox (a custom dropdown), not a native <select> — Markus found
+// the native select wasn't opening at all on tap inside this popup on his
+// device (see Listbox.jsx for the likely cause). Fully keyboard-chainable:
+// focus lands on Kategorie already open when the popup opens; Enter on a
+// highlighted group commits it and moves to Unterkategorie, already open;
+// Enter on a highlighted subcategory commits it and applies, closing back
+// to the grid — same as clicking Übernehmen.
 const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
   const { data, categories, onApply, api } = props
   const currentCategoryId = (data.lines ?? [])[0]?.categoryId ?? null
@@ -26,8 +28,20 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
   const groupRef = useRef(null)
   const subcatRef = useRef(null)
 
-  const groups = useMemo(() => categories.filter((c) => c.parentCategoryId === null), [categories])
-  const subcats = useMemo(() => categories.filter((c) => c.parentCategoryId === groupId), [categories, groupId])
+  const groupOptions = useMemo(
+    () => [
+      { id: '', name: '– wählen –' },
+      ...categories.filter((c) => c.parentCategoryId === null).map((g) => ({ id: g.id, name: g.name })),
+    ],
+    [categories],
+  )
+  const subcatOptions = useMemo(
+    () => [
+      { id: '', name: '– wählen –' },
+      ...categories.filter((c) => c.parentCategoryId === groupId).map((c) => ({ id: c.id, name: c.name })),
+    ],
+    [categories, groupId],
+  )
 
   useImperativeHandle(ref, () => ({
     getValue: () => (categoryId ? { categoryId } : null),
@@ -35,8 +49,13 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
     afterGuiAttached: () => groupRef.current?.focus(),
   }))
 
-  const apply = () => {
-    onApply(data, categoryId)
+  // Takes an optional override for the just-committed Unterkategorie
+  // value, for the same reason as KontoEditor.jsx's apply(): Listbox's
+  // Enter-to-apply fires synchronously right after its own onChange, before
+  // React has re-rendered `categoryId` with the new value.
+  const apply = (finalCategoryId) => {
+    const catId = finalCategoryId !== undefined ? finalCategoryId : categoryId
+    onApply(data, catId)
     api.stopEditing(true)
   }
 
@@ -47,59 +66,38 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
     >
       <label className="text-xs text-[var(--color-text-muted)]">
         Kategorie
-        <select
+        <Listbox
           ref={groupRef}
           value={groupId}
-          onChange={(e) => {
+          onChange={(id) => {
             // Changing Kategorie clears the already-chosen Unterkategorie
             // (spec.md §3a) — a stale leaf from the old group is never left
             // silently selected under the new one.
-            setGroupId(e.target.value)
+            setGroupId(id)
             setCategoryId('')
           }}
-          onKeyDown={(e) => {
-            if (e.key !== 'Enter' || !groupId) return
-            e.preventDefault()
-            subcatRef.current?.focus()
-          }}
-          className="mt-0.5 w-full rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-1 py-1 text-sm"
-        >
-          <option value="">– wählen –</option>
-          {groups.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.name}
-            </option>
-          ))}
-        </select>
+          onEnter={(id) => id && subcatRef.current?.focus()}
+          options={groupOptions}
+          placeholder="– wählen –"
+        />
       </label>
       <label className="text-xs text-[var(--color-text-muted)]">
         Unterkategorie
-        <select
+        <Listbox
           ref={subcatRef}
           value={categoryId}
-          onChange={(e) => setCategoryId(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key !== 'Enter') return
-            e.preventDefault()
-            apply()
-          }}
+          onChange={setCategoryId}
+          onEnter={apply}
+          options={subcatOptions}
           disabled={!groupId}
-          className="mt-0.5 w-full rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-1 py-1 text-sm disabled:opacity-50"
-        >
-          <option value="">– wählen –</option>
-          {subcats.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+          placeholder="– wählen –"
+        />
       </label>
       {/* Explicit Übernehmen/Abbrechen (Markus's request) for mouse/touch
           use — the Enter chain above is the keyboard equivalent of the
-          same apply() call, not a separate path. Übernehmen writes
-          directly via onApply and closes with api.stopEditing(true), not
-          AG Grid's own commit pipeline, which confirmed didn't reliably
-          apply the selection. */}
+          same apply() call. Übernehmen writes directly via onApply and
+          closes with api.stopEditing(true), not AG Grid's own commit
+          pipeline, which confirmed didn't reliably apply the selection. */}
       <div className="mt-1 flex justify-end gap-2">
         <button
           type="button"
@@ -110,7 +108,7 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
         </button>
         <button
           type="button"
-          onClick={apply}
+          onClick={() => apply()}
           disabled={!categoryId}
           className="rounded bg-[var(--color-computed)] px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
         >

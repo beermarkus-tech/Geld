@@ -4,7 +4,6 @@ import { AgGridReact } from 'ag-grid-react'
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community'
 
 import CategoryEditor from './CategoryEditor'
-import DateEditor from './DateEditor'
 import { db } from './firebase'
 import KontoEditor from './KontoEditor'
 import { jahresende } from './lib/balance'
@@ -19,6 +18,39 @@ function parseEuroInput(s) {
   if (cleaned === '' || cleaned === '-') return null
   const f = Number(cleaned)
   return Number.isNaN(f) ? null : Math.round(f * 100)
+}
+
+// Datum is a plain text cell, like Empfänger/Details — Markus specifically
+// didn't want a picker (modal or dropdown) here at all. Accepts either the
+// full stored "YYYY-MM-DD" as-is, or European shorthand — D.M / D.M. /
+// D/M (day first, always — never the American month-first order) with the
+// year taken from the app's own year selector (`fallbackYear`), or D.M.YYYY
+// / D/M/YYYY with an explicit year (2-digit years read as 20XX). "/", "."
+// and "-" are all accepted as separators for the shorthand forms; "-"
+// specifically with a 4-digit first part is read as the stored ISO format
+// instead, not a day.
+function parseFlexibleDate(input, fallbackYear) {
+  const parts = String(input ?? '')
+    .trim()
+    .split(/[./-]/)
+    .filter(Boolean)
+  let year, month, day
+  if (parts.length === 3 && parts[0].length === 4) {
+    ;[year, month, day] = parts.map(Number)
+  } else if (parts.length === 3) {
+    ;[day, month, year] = parts.map(Number)
+    if (year < 100) year += 2000
+  } else if (parts.length === 2) {
+    ;[day, month] = parts.map(Number)
+    year = Number(fallbackYear)
+  } else {
+    return null
+  }
+  if (!year || !month || !day || month < 1 || month > 12 || day < 1) return null
+  // Rejects an impossible day for that month (e.g. 31.04) instead of
+  // silently rolling over into the next month the way `new Date(...)` does.
+  if (day > new Date(year, month, 0).getDate()) return null
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
 // A brand-new manually entered transaction has no split yet — exactly one
@@ -72,10 +104,6 @@ function applyCategoryDirect(data, categoryId) {
   const line = ensureLine(tx)
   tx.lines = [{ ...line, categoryId }]
   persistTx(tx)
-}
-function applyDateDirect(data, date) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? '')) return
-  persistTx({ ...data, date })
 }
 
 // Barkonten/Sparkonten/Geldanlage/Außenstände — Markus's own top-level
@@ -188,6 +216,23 @@ export default function Konten() {
     })
   }
 
+  // Hands the cursor back to the grid, landing on the Datum cell of
+  // whichever row is roughly mid-viewport rather than the first/last one —
+  // shared by the panel's Escape (clears the filter first) and Enter
+  // (keeps it) key handling. Deferred a tick since clearing the filter
+  // changes the row set and the grid only re-renders with it after the
+  // caller's handler returns.
+  function focusGridMidViewport() {
+    setTimeout(() => {
+      const api = gridRef.current?.api
+      const first = api?.getFirstDisplayedRowIndex()
+      const last = api?.getLastDisplayedRowIndex()
+      if (first != null && first >= 0 && last != null && last >= 0) {
+        api.setFocusedCell(Math.floor((first + last) / 2), 'date')
+      }
+    }, 0)
+  }
+
   // Ctrl/Cmd+'+' triggers "+ Neue Buchung" (Markus's request). Note, not
   // hidden: Ctrl/Cmd+'+' is the browser's own zoom-in shortcut in Chrome/
   // Firefox/Safari, and browsers commonly refuse to let a page override or
@@ -211,23 +256,23 @@ export default function Konten() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- addRow closes over year/accountFilter, both already current each render
   }, [year, accountFilter])
 
-  // Ctrl/Cmd+K jumps into the account filter (Markus's request). If a
-  // filter is already active, focus lands on that account's own panel
-  // button — from there Session 15/16's roving arrow-key nav (which also
-  // applies the filter live and has its own Escape-back-to-grid) is
-  // already the richer way to navigate, not the plain <select>. With no
-  // filter active there's no "active" button to jump to, so this focuses
-  // the <select> itself instead.
+  // Ctrl/Cmd+K always jumps into the pinned panel's account boxes, never
+  // the plain <select> (Markus, correcting an earlier version of this) —
+  // landing on the currently active filter's own button if one is set,
+  // otherwise the first account overall. From there: arrow keys roam
+  // (Session 15/16), Escape resets to "Alle Konten" and returns to the
+  // grid, Enter keeps the highlighted filter and *also* returns to the
+  // grid (added below) — so Ctrl+K, arrow, Enter, Ctrl+K again reopens
+  // exactly where you left off, a closed loop.
   useEffect(() => {
     const onKeyDown = (e) => {
       if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'k') return
       if (gridRef.current?.api?.getEditingCells().length > 0) return
       e.preventDefault()
-      if (accountFilter) {
-        document.querySelector(`[data-account-id="${accountFilter}"]`)?.focus()
-      } else {
-        accountSelectRef.current?.focus()
-      }
+      const target = accountFilter
+        ? document.querySelector(`[data-account-id="${accountFilter}"]`)
+        : document.querySelector('[data-group] ul button')
+      target?.focus()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -368,14 +413,19 @@ export default function Konten() {
         headerName: 'Datum',
         width: 110,
         editable: true,
+        // Plain text, like Empfänger/Details — no picker, modal or
+        // dropdown at all (Markus, replacing what had been a three-select
+        // popup). Accepts flexible European shorthand via
+        // parseFlexibleDate; goes through the same default AG Grid text
+        // editor + valueSetter pipeline Empfänger/Details already use
+        // successfully (unlike the custom popup editors' getValue()/
+        // stopEditing() pipeline, which confirmed wasn't reliable there).
         valueSetter: (p) => {
-          if (!/^\d{4}-\d{2}-\d{2}$/.test(p.newValue ?? '')) return false
-          p.data.date = p.newValue
+          const parsed = parseFlexibleDate(p.newValue, year)
+          if (!parsed) return false
+          p.data.date = parsed
           return true
         },
-        cellEditor: DateEditor,
-        cellEditorParams: { onApply: applyDateDirect },
-        cellEditorPopup: true,
         colId: 'date',
       },
       {
@@ -578,7 +628,7 @@ export default function Konten() {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps -- accountName/categoryName/groupName/ensureLine/handleDeleteClick close over these
-    [accountById, categoryById, accountFilter, accounts, categories, confirmDeleteId],
+    [accountById, categoryById, accountFilter, accounts, categories, confirmDeleteId, year],
   )
 
   const panel = useMemo(() => {
@@ -718,27 +768,24 @@ export default function Konten() {
                     // reportingGroup box (Barkonten/Sparkonten/Geldanlage/
                     // Außenstände, in that fixed order) via the panel's own
                     // data-group wrapper and DOM sibling order. Escape:
-                    // back to "Alle Konten" and hand the cursor back to
-                    // the grid itself, landing roughly mid-viewport rather
-                    // than wherever the first/last row happens to be.
+                    // back to "Alle Konten", then to the grid. Enter: keep
+                    // whatever's currently highlighted as the filter, then
+                    // *also* to the grid — same destination, different
+                    // filter outcome. Ctrl+K (see the effect above) closes
+                    // the loop back to here, at the active filter's button.
                     onKeyDown={(e) => {
-                      if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Escape'].includes(e.key)) return
+                      if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Escape', 'Enter'].includes(e.key)) {
+                        return
+                      }
                       e.preventDefault()
                       if (e.key === 'Escape') {
                         setAccountFilter(null)
-                        // Deferred: clearing the filter changes `rows`
-                        // (React state), and the grid only re-renders with
-                        // that new, larger row set after this handler
-                        // returns — computing the visible mid-point before
-                        // then would still reflect the old, filtered view.
-                        setTimeout(() => {
-                          const api = gridRef.current?.api
-                          const first = api?.getFirstDisplayedRowIndex()
-                          const last = api?.getLastDisplayedRowIndex()
-                          if (first != null && first >= 0 && last != null && last >= 0) {
-                            api.setFocusedCell(Math.floor((first + last) / 2), 'date')
-                          }
-                        }, 0)
+                        focusGridMidViewport()
+                        return
+                      }
+                      if (e.key === 'Enter') {
+                        setAccountFilter(i.id)
+                        focusGridMidViewport()
                         return
                       }
                       let target

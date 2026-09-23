@@ -1,5 +1,7 @@
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
 
+import Listbox from './Listbox'
+
 // The Konto cell editor — a small popup with two account pickers (Von/Nach)
 // rather than two separate grid columns (spec.md §3a: "still two separate
 // account fields underneath... exactly how editing a merged cell works...
@@ -7,15 +9,13 @@ import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
 // resolved [in the spec]" — this is that decision, made here rather than
 // left unresolved forever).
 //
-// Fully keyboard-chainable (Markus's request, built after reconsidering an
-// earlier "too risky" call): focus lands on Von when the popup opens;
-// arrow keys cycle a *focused* <select>'s value directly, with no need to
-// visually open its dropdown first — that's plain, universally-supported
-// <select> behavior, not the `showPicker()` API this was originally
-// (wrongly) conflated with, which is specifically for popping the visual
-// list open and does have real cross-browser risk. Enter on Von moves to
-// Nach; Enter on Nach applies and returns focus to the grid cell, the same
-// as clicking Übernehmen.
+// Uses Listbox (a custom dropdown), not a native <select> — Markus found
+// the native select wasn't opening at all on tap inside this popup on his
+// device (see Listbox.jsx for the likely cause). Fully keyboard-chainable:
+// focus lands on Von already open when the popup opens; Enter on a
+// highlighted option in Von commits it and moves to Nach, already open;
+// Enter on Nach's highlighted option commits it and applies, closing back
+// to the grid — same as clicking Übernehmen.
 const KontoEditor = forwardRef(function KontoEditor(props, ref) {
   const { data, accounts, onApply, api } = props
   const [fromId, setFromId] = useState(data.fromAccountId ?? '')
@@ -36,15 +36,27 @@ const KontoEditor = forwardRef(function KontoEditor(props, ref) {
     afterGuiAttached: () => fromRef.current?.focus(),
   }))
 
-  const apply = () => {
-    onApply(data, fromId || null, toId || null)
+  // Takes an optional override for the just-committed Nach value: when
+  // Listbox's Enter-to-apply fires, it calls this synchronously right
+  // after its own onChange(setToId) — React state hasn't re-rendered yet
+  // at that point, so reading `toId` here would still see the *previous*
+  // value. The Listbox passes the id it just committed as this argument
+  // specifically to avoid that. The Übernehmen button calls apply() with
+  // no argument, where the plain `toId` state is already current.
+  const apply = (finalToId) => {
+    const to = finalToId !== undefined ? finalToId : toId
+    onApply(data, fromId || null, to || null)
     api.stopEditing(true)
   }
 
-  const options = accounts
-    .filter((a) => a.tracked !== false && a.group !== 'system')
-    .slice()
-    .sort((a, b) => a.name.localeCompare(b.name))
+  const options = [
+    { id: '', name: '– keins –' },
+    ...accounts
+      .filter((a) => a.tracked !== false && a.group !== 'system')
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((a) => ({ id: a.id, name: a.name })),
+  ]
 
   return (
     <div
@@ -53,45 +65,18 @@ const KontoEditor = forwardRef(function KontoEditor(props, ref) {
     >
       <label className="text-xs text-[var(--color-text-muted)]">
         Von (Abfluss)
-        <select
+        <Listbox
           ref={fromRef}
           value={fromId}
-          onChange={(e) => setFromId(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key !== 'Enter') return
-            e.preventDefault()
-            toRef.current?.focus()
-          }}
-          className="mt-0.5 w-full rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-1 py-1 text-sm"
-        >
-          <option value="">– keins –</option>
-          {options.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
-        </select>
+          onChange={setFromId}
+          onEnter={() => toRef.current?.focus()}
+          options={options}
+          placeholder="– keins –"
+        />
       </label>
       <label className="text-xs text-[var(--color-text-muted)]">
         Nach (Zufluss)
-        <select
-          ref={toRef}
-          value={toId}
-          onChange={(e) => setToId(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key !== 'Enter') return
-            e.preventDefault()
-            apply()
-          }}
-          className="mt-0.5 w-full rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-1 py-1 text-sm"
-        >
-          <option value="">– keins –</option>
-          {options.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
-        </select>
+        <Listbox ref={toRef} value={toId} onChange={setToId} onEnter={apply} options={options} placeholder="– keins –" />
       </label>
       {/* Explicit Übernehmen/Abbrechen (Markus's request) for mouse/touch
           use — the Enter chain above is the keyboard equivalent of the
@@ -110,7 +95,7 @@ const KontoEditor = forwardRef(function KontoEditor(props, ref) {
         </button>
         <button
           type="button"
-          onClick={apply}
+          onClick={() => apply()}
           disabled={!fromId && !toId}
           className="rounded bg-[var(--color-computed)] px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
         >
