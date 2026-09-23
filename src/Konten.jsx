@@ -562,6 +562,15 @@ export default function Konten() {
         //   further itself (creating a new remainder each time)".
         cellRenderer: (p) => {
           const row = p.data
+          // Every button here goes through the same pendingFocusIdRef/rows
+          // effect as a normal cell edit (see handleCellValueChanged) —
+          // these are button clicks, not cell edits, so nothing else
+          // would otherwise tell the grid which row to re-select once the
+          // Firestore round-trip lands. Without this, AG Grid's own
+          // selection state was left to drift across the rowData
+          // replacement these actions cause, showing a stale blue tint on
+          // some other row that happened to land at the same position
+          // (Markus, second screenshot).
           if (row.__isLine) {
             const isLast = row.__lineIndex === row.__parent.lines.length - 1
             return (
@@ -571,6 +580,8 @@ export default function Konten() {
                   onClick={(e) => {
                     e.stopPropagation()
                     removeLine(row.__parent, row.__lineIndex)
+                    pendingFocusIdRef.current = row.__parent.id
+                    pendingFocusColRef.current = 'split'
                   }}
                   title="Position entfernen"
                   className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-alert)]"
@@ -583,6 +594,8 @@ export default function Konten() {
                     onClick={(e) => {
                       e.stopPropagation()
                       addSplitLine(row.__parent)
+                      pendingFocusIdRef.current = row.__parent.id
+                      pendingFocusColRef.current = 'split'
                     }}
                     title="Weiter aufteilen"
                     className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-computed)]"
@@ -617,6 +630,8 @@ export default function Konten() {
                 e.stopPropagation()
                 addSplitLine(row)
                 setExpandedIds((prev) => new Set(prev).add(row.id))
+                pendingFocusIdRef.current = row.id
+                pendingFocusColRef.current = 'split'
               }}
               title="Aufteilen"
               className="flex h-full w-full items-center justify-center text-xs text-[var(--color-text-muted)] hover:text-[var(--color-computed)]"
@@ -657,6 +672,21 @@ export default function Konten() {
           if (!parsed) return false
           p.data.date = parsed
           return true
+        },
+        // A custom comparator, not just the default value-based sort — the
+        // Datum sort is always active (initialState below), and the
+        // default comparator sorts by whatever valueGetter returns, which
+        // is '' for every line row. An empty string sorts before any real
+        // date, so every expanded transaction's line rows were floating to
+        // the very top of the whole grid instead of staying directly under
+        // their own parent (Markus, screenshot). Comparing by the *parent's*
+        // date instead — for both the parent row and its own lines — makes
+        // them tie under Datum sort, and JS's sort is stable (ES2019+), so
+        // ties preserve displayRows' own [parent, line0, line1, ...] order.
+        comparator: (_valueA, _valueB, nodeA, nodeB) => {
+          const dateA = nodeA.data.__isLine ? nodeA.data.__parent.date : nodeA.data.date
+          const dateB = nodeB.data.__isLine ? nodeB.data.__parent.date : nodeB.data.date
+          return dateA < dateB ? -1 : dateA > dateB ? 1 : 0
         },
         colId: 'date',
       },
@@ -1219,10 +1249,15 @@ export default function Konten() {
           // not grey — an earlier version used opacity/grayscale) —
           // paired with the redrawRows() effect above, since getRowStyle
           // alone isn't re-evaluated for existing rows just because React
-          // state changed elsewhere.
-          getRowStyle={(p) =>
-            confirmDeleteId === p.data.id ? { backgroundColor: 'var(--color-alert-tint)' } : undefined
-          }
+          // state changed elsewhere. A split transaction's own line rows
+          // get a distinct subtle tint too (Markus), so they read as
+          // visually separate from ordinary transaction rows at a glance —
+          // armed-delete red still wins if a line row is somehow both.
+          getRowStyle={(p) => {
+            if (confirmDeleteId === p.data.id) return { backgroundColor: 'var(--color-alert-tint)' }
+            if (p.data.__isLine) return { backgroundColor: 'var(--color-line-row-tint)' }
+            return undefined
+          }}
           // Keyboard cell navigation moves the row selection (the blue
           // tint) along with it, not just the mouse click (Markus: "it
           // will be clearer to know which row is selected"). This also

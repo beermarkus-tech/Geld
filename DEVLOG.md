@@ -465,3 +465,19 @@ Markus: "ok lets go for split bookings as specced." Read spec.md §2.6/§3a's au
 `npm run build`, `npm test` (14 passing, 5 new), `npm run lint` all clean before pushing.
 
 **Next session should probably:** get Markus's read on the interaction model itself against a real split (e.g. the Airbus salary deposit) — this was built carefully from the spec but not yet exercised against real data, and the mouse-only control buttons are the most likely first friction point to report back.
+
+## Session 24 — 2026-09-23 — First real-usage round on split transactions: three fixed, one open question
+
+Markus tried splitting a real Bar Julia transaction and reported four issues, from two screenshots. Three fixed:
+
+**1. Line rows appeared above the parent instead of below it.** Root cause: the Datum sort is always active, and a line row's Datum cell is deliberately blank — AG Grid's *default* comparator sorts an empty string before any real date, so every expanded transaction's lines floated to the very top of the whole grid, not just above their own parent. Fixed with a custom `comparator` on the Datum column that compares by the *parent's* date for both a parent row and its own lines (tying them), relying on JS's stable sort to then preserve `displayRows`' own build order for the tie. Disclosed limitation, not chased further: only Datum got this fix, so sorting by a different column could still scatter an expanded transaction's lines away from its parent.
+
+**2. Split lines now get a distinct tint** (`--color-line-row-tint`, new token in `index.css`) via `getRowStyle`, so they read as visually separate from ordinary rows at a glance.
+
+**3. Stale tint after adding/removing a split line.** The split column's ✚/✕ buttons are plain clicks, not cell edits — they never went through `handleCellValueChanged`, so nothing told the grid which row to re-select once each action's Firestore round-trip landed, leaving AG Grid's own selection state to drift onto whatever row happened to land at the same position afterward. Fixed by routing these buttons through the same `pendingFocusIdRef`/`rows`-settle mechanism cell edits already use.
+
+**4. Open question, not guessed at a third time this session:** Markus's report — "when i delete one out of two splitlines... both remaining lines need to be deleted when i delete the one before the last split line" — describes a cascade-delete expectation for removing a *non-last* line in a 3+-line split that doesn't match what's built (removing any one line just lets the remainder re-absorb it, per spec's own "creating a first sub-line... leaves a second... line" framing, which is what §3a actually describes). Given two fixes already went out wrong earlier this session on non-obvious AG Grid behavior, and given the display bug above (#1) likely made the actual state hard to read correctly by eye, this needs a direct answer from Markus rather than a third guess — asked directly rather than shipped speculatively.
+
+`npm run build`, `npm test` (still 14 passing), `npm run lint` all clean before pushing.
+
+**Next session should probably:** resolve the open cascade-delete question above, then get Markus to re-verify all three fixes plus whatever #4 turns into against real data again.
