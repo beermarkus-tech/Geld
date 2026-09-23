@@ -480,4 +480,6 @@ Markus tried splitting a real Bar Julia transaction and reported four issues, fr
 
 `npm run build`, `npm test` (still 14 passing), `npm run lint` all clean before pushing.
 
-**Next session should probably:** resolve the open cascade-delete question above, then get Markus to re-verify all three fixes plus whatever #4 turns into against real data again.
+**Resolved directly with Markus, same session:** asked plainly whether deleting a non-last line should cascade-remove everything after it, or just re-absorb that one line into the remainder. Confirmed the built behavior (just that one line) is what he actually wants — the confusing report was very likely just the display-ordering bug (#1) making it hard to read the real state by eye, not a genuine mismatch in delete semantics. No further code change needed here.
+
+**Next session should probably:** get Markus to re-verify all three fixes against real data again, now that the display itself should read correctly.
