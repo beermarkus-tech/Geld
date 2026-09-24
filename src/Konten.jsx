@@ -1411,6 +1411,12 @@ export default function Konten() {
           // Single-row selection just for "+ Neue Buchung"'s "insert below
           // the selected row" — not a bulk-actions feature.
           rowSelection={{ mode: 'singleRow', checkboxes: false, enableClickSelection: true }}
+          // No hover tint: on a touchscreen the last tap leaves the pointer
+          // parked on screen, so the hover highlight sticks to whichever row
+          // scrolls under that spot — a second "selected-looking" row that
+          // follows scrolling (Markus). The selection tint already marks the
+          // current row.
+          suppressRowHoverHighlight
           // One click starts editing an editable cell, not AG Grid's
           // default double-click — Markus's date-field report ("double
           // click... then a third click to open the date selector") was

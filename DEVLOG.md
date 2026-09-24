@@ -594,3 +594,15 @@ The capture-phase/`stopPropagation()` fix from Session 30 was real and correct f
 `npm run build`, `npm test` (still 14 passing), `npm run lint` all clean before pushing.
 
 **Next session should probably:** same as above — get Markus's confirmation both the tint race and Ctrl+N are working as expected on his real device.
+
+## Session 33 — 2026-09-24 — The "stale tint" was the hover highlight, not selection
+
+Correction to Session 32: Build 63 didn't fix the stale tint. Markus's next report pinned it down: it appears after tapping a cell to edit it, and from then on the tint stays on the *middle visible row* while the grid scrolls underneath it. A selected row would scroll away with its data, so a tint that stays put on screen can't be selection. It's AG Grid's row-hover highlight (`ag-row-hover`). On a touchscreen the last tap leaves the pointer parked in that spot, so hover keeps applying to whichever row scrolls under it. In the dark theme it looks almost the same as the selection tint.
+
+**Fix:** `suppressRowHoverHighlight` on the grid (option name checked in `ag-grid-community`'s own `gridOptions.d.ts`). The selection tint already marks the current row, so the hover tint wasn't adding anything. Session 32's focus-claim counter is kept. It guards against a real possible race between two deferred callbacks, even though that race wasn't what Markus was seeing. CODEMAP.md now says this.
+
+Lesson worth keeping: before diagnosing a "wrong row highlighted" report, check whether the tint *moves with the data or stays fixed on screen*. That one observation separates selection/focus bugs from hover.
+
+`npm run build`, `npm test`, `npm run lint` clean before pushing.
+
+**Next session should probably:** have Markus confirm the tint is gone on the tablet, and whether Ctrl+N works there.
