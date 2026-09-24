@@ -421,7 +421,7 @@ export default function Konten() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- addRow closes over year/accountFilter, both already current each render
   }, [year, accountFilter])
 
-  // Ctrl/Cmd+Enter triggers the split column's own ✚ (Markus) for
+  // Ctrl/Cmd+T ("Teilen") triggers the split column's own ✚ (Markus) for
   // whichever transaction the cursor is currently on — a parent row
   // (starts the first split) or any of its own line rows (splits
   // further), same as clicking the button itself; landing on the first
@@ -430,29 +430,40 @@ export default function Konten() {
   // making this reachable without leaving the keyboard, since every other
   // split-column action already was except this one.
   //
+  // Was Ctrl+Enter — still didn't fire even after fixing the AG Grid race
+  // below (capture phase + stopPropagation, kept here for T too, since it's
+  // real and still needed for the *page-level* race regardless of which
+  // key). Enter specifically has a second, earlier obstacle no in-page fix
+  // can reach: 'T' is one of the most universally browser/OS-reserved
+  // Ctrl-combos there is (new tab, everywhere, iPadOS included) — if it
+  // *also* silently fails, that's the browser/OS swallowing the keypress
+  // before it ever reaches the page's JavaScript at all, not this code.
+  //
   // Capture phase, not the default bubble phase, and stopPropagation() once
-  // we've decided to act — plain Enter, Ctrl held or not, is one of the few
-  // keys AG Grid's own core (not React) attaches a *native* keydown
-  // listener for directly on the row container (RowContainerEventsFeature,
-  // confirmed in its actual bundled source), which starts editing the
-  // focused cell. That listener sits on a real DOM ancestor of the grid's
-  // cells and fires in the normal bubble phase; a bubble-phase listener on
-  // `window` (what every other shortcut here uses) is strictly further out,
-  // so it always loses that race — by the time it ran, AG Grid had already
-  // started editing, and this handler's own "not already editing" guard
-  // then correctly, but unhelpfully, bailed out (Markus: "ctrl+enter does
-  // not work, just behaves like enter"). A capture-phase window listener
+  // we've decided to act — Enter, Ctrl held or not, is one of the few keys
+  // AG Grid's own core (not React) attaches a *native* keydown listener for
+  // directly on the row container (RowContainerEventsFeature, confirmed in
+  // its actual bundled source), which starts editing the focused cell. That
+  // listener sits on a real DOM ancestor of the grid's cells and fires in
+  // the normal bubble phase; a bubble-phase listener on `window` (what
+  // every other shortcut here uses) is strictly further out, so it always
+  // loses that race — by the time it ran, AG Grid had already started
+  // editing, and this handler's own "not already editing" guard then
+  // correctly, but unhelpfully, bailed out. A capture-phase window listener
   // runs during the top-down capture pass, before the target is even
   // reached, i.e. strictly before any bubble-phase listener anywhere —
   // stopping propagation here prevents AG Grid's own handler from ever
-  // running at all for this specific keypress. Same category of fix as
+  // running at all for this specific keypress, same category of fix as
   // Listbox.jsx's native listener for the same underlying reason: a React
   // (or here, default-phase-`window`) handler can't out-run a closer native
   // one just by asking nicely — it has to run first, or not compete at all.
+  // T isn't a key AG Grid's own core claims at all, so this part shouldn't
+  // matter for T specifically — kept anyway, since it's still correct and
+  // harmless, and saves re-deriving it if this ever moves to another key.
   useEffect(() => {
     const onKeyDown = (e) => {
       if (!e.ctrlKey && !e.metaKey) return
-      if (e.key !== 'Enter') return
+      if (e.key.toLowerCase() !== 't') return
       const api = gridRef.current?.api
       if (!api || api.getEditingCells().length > 0) return
       const focused = api.getFocusedCell()
@@ -740,7 +751,7 @@ export default function Konten() {
                   pendingFocusColRef.current = 'betrag'
                   pendingFocusLineIndexRef.current = 0
                 }}
-                title="Weiter aufteilen (Ctrl+Enter)"
+                title="Weiter aufteilen (Ctrl+T)"
                 className="flex h-full w-full items-center justify-center text-xs text-[var(--color-text-muted)] hover:text-[var(--color-computed)]"
               >
                 ✚
@@ -775,7 +786,7 @@ export default function Konten() {
                 pendingFocusColRef.current = 'betrag'
                 pendingFocusLineIndexRef.current = 0
               }}
-              title="Aufteilen (Ctrl+Enter)"
+              title="Aufteilen (Ctrl+T)"
               className="flex h-full w-full items-center justify-center text-xs text-[var(--color-text-muted)] hover:text-[var(--color-computed)]"
             >
               ✚

@@ -556,3 +556,17 @@ Fix: register the Ctrl+Enter listener on `window` with the capture-phase flag (`
 `npm run build`, `npm test` (still 14 passing), `npm run lint` all clean before pushing.
 
 **Next session should probably:** get Markus's confirmation Ctrl+Enter actually works now. Also worth keeping in mind for any *future* single-key global shortcut in Konten: check whether AG Grid's own `_onCellKeyDown` switch (Enter/F2/Escape/Tab/Backspace/Delete/arrows) already claims that key before assuming a plain bubble-phase `window` listener will work — it only reliably does for keys AG Grid doesn't already own.
+
+## Session 31 — 2026-09-24 — Ctrl+Enter still didn't fire even fixed; reassigned to Ctrl+T
+
+Markus, after Session 30's capture-phase fix shipped: "ctrl enter does not work, gues this is blocked. assign splitting to ctrl+t instead (for teilen)."
+
+The capture-phase/`stopPropagation()` fix from Session 30 was real and correct for the race it targeted — AG Grid's own row-container listener genuinely no longer sees the keypress first. But it only wins races *within* the page's own JS event handling; it can't reach a layer further out than that. Enter is one of the most universally browser/OS-reserved key combinations there is on some platforms — iPadOS's own external-keyboard handling among them, and Markus's screenshots this session have consistently shown an iPad — meaning the browser/OS can swallow the keypress before it's ever dispatched to the page's JavaScript at all. No in-page fix, capture phase included, can reach that. Not independently confirmed (no way to from here), but it's the only explanation left standing once the actual in-page race was already fixed and still didn't work.
+
+**Fix, per Markus's explicit instruction: reassigned the shortcut from Ctrl+Enter to Ctrl+T** ("Teilen"). Same handler, same capture-phase/`stopPropagation()` technique kept (still correct and still needed for the in-page AG Grid race regardless of which key, harmless to keep even though T isn't a key AG Grid's own core claims at all). Both button `title`s ("Weiter aufteilen"/"Aufteilen") updated to say "(Ctrl+T)".
+
+**Flagged to Markus, not yet answered:** Ctrl+T carries a real risk of failing the exact same way — it's arguably an even more universally browser/OS-reserved combo than Enter ("open new tab," virtually everywhere). If it silently fails too, that's the same underlying obstacle, not a code problem, and no further code-level diagnosis is likely to help — the only way to actually know is Markus trying it on his real device and reporting back.
+
+`npm run build`, `npm test` (still 14 passing), `npm run lint` all clean before pushing.
+
+**Next session should probably:** get Markus's confirmation on whether Ctrl+T actually works. If it also silently fails, the likely real fix is abandoning a Ctrl-combo entirely in favor of a key with no browser/OS reservation at all (a bare letter while a cell is focused but not editing, for instance) rather than continuing to gamble on modifier combos one at a time.
