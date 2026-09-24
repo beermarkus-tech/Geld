@@ -24,6 +24,17 @@
   --color-alert: #dc2626; /* red — alerts only, always */
   --color-alert-tint: #fee2e2; /* pale red row background — an armed delete (Konten), not the alert red itself */
   --color-line-row-tint: #eef0f4; /* subtle grey row background — a split transaction's own line rows (Konten), distinguishing them from ordinary transaction rows */
+
+  /* Tag class/groupingType color layer (spec.md §2.5) — extends the
+     semantic palette above with a tag-specific one. `allocation` tags
+     reuse --color-savings above (spec: "purple, unchanged from §1b.4 —
+     they already have a fixed, structural meaning") rather than a new
+     token. `groupingType: null` (not yet typed) reuses --color-tag-statement
+     too (spec: "same family as statement until deliberately typed"). */
+  --color-tag-project: #0d9488; /* teal — trip/project tags */
+  --color-tag-statement: #64748b; /* slate — statement-grouping tags, and unspecified grouping tags */
+  --color-tag-claim: #4f46e5; /* indigo — claim tags (CPAM, Reisekosten, informal loans, §3g) */
+  --color-tag-claim-category: #e11d48; /* rose — claim-category tags (Meal/Taxi/Hotel etc.), only ever offered alongside a claim tag */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -42,6 +53,11 @@
     --color-alert: #f87171;
     --color-alert-tint: #3f1d1d;
     --color-line-row-tint: #1c2330;
+
+    --color-tag-project: #2dd4bf;
+    --color-tag-statement: #94a3b8;
+    --color-tag-claim: #818cf8;
+    --color-tag-claim-category: #fb7185;
   }
 }
 

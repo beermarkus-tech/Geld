@@ -9,6 +9,8 @@ import KontoEditor from './KontoEditor'
 import { jahresende } from './lib/balance'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { withRemainder } from './lib/split'
+import { tagColorVar } from './lib/tagStyle'
+import TagEditor, { slugify } from './TagEditor'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 syncAgGridColorScheme()
@@ -130,6 +132,22 @@ function applyCategoryToLine(tx, lineIndex, categoryId) {
   next.lines = next.lines.map((l, i) => (i === lineIndex ? { ...l, categoryId } : l))
   persistTx(next)
 }
+// Same direct-write pattern as applyCategoryDirect/applyCategoryToLine
+// above, for TagEditor's own Übernehmen — unlike category, an empty
+// tagIds array is a perfectly valid commit (a line can carry zero tags),
+// so there's no "if (!tagIds) return" guard here the way category's
+// truthiness check has.
+function applyTagsDirect(data, tagIds) {
+  const tx = { ...data }
+  const line = ensureLine(tx)
+  tx.lines = [{ ...line, tags: tagIds }]
+  persistTx(tx)
+}
+function applyTagsToLine(tx, lineIndex, tagIds) {
+  const next = { ...tx }
+  next.lines = next.lines.map((l, i) => (i === lineIndex ? { ...l, tags: tagIds } : l))
+  persistTx(next)
+}
 
 // Split-transaction editing (§3a's auto-remainder mechanism): both of
 // these are the exact same operation regardless of whether they're
@@ -191,12 +209,13 @@ function glueToParent(getValue) {
 export default function Konten() {
   const [accounts, setAccounts] = useState([])
   const [categories, setCategories] = useState([])
+  const [tags, setTags] = useState([])
   // All-time, never year-scoped: balance() needs the full history back to
   // the one Jahresabschluß anchor (spec.md §2.1/§2.3/§2.8). At real-world
   // volume — a few thousand transactions a year, one household — this
   // stays trivial to hold in memory even as more years accumulate.
   const [transactions, setTransactions] = useState([])
-  const [loaded, setLoaded] = useState({ accounts: false, categories: false, transactions: false })
+  const [loaded, setLoaded] = useState({ accounts: false, categories: false, tags: false, transactions: false })
   const [year, setYear] = useState(null)
   // Account filter: a distinct mechanism from a plain column filter (spec.md
   // §3a's filtering section) — Konto's own display is derived per row, so
@@ -291,6 +310,10 @@ export default function Konten() {
         setCategories(snap.docs.map((d) => d.data()))
         setLoaded((l) => ({ ...l, categories: true }))
       }),
+      onSnapshot(collection(db, 'tags'), (snap) => {
+        setTags(snap.docs.map((d) => d.data()))
+        setLoaded((l) => ({ ...l, tags: true }))
+      }),
       onSnapshot(collection(db, 'transactions'), (snap) => {
         setTransactions(snap.docs.map((d) => d.data()))
         setLoaded((l) => ({ ...l, transactions: true }))
@@ -301,8 +324,31 @@ export default function Konten() {
 
   const accountById = useMemo(() => Object.fromEntries(accounts.map((a) => [a.id, a])), [accounts])
   const categoryById = useMemo(() => Object.fromEntries(categories.map((c) => [c.id, c])), [categories])
+  const tagById = useMemo(() => Object.fromEntries(tags.map((t) => [t.id, t])), [tags])
   const accountName = (id) => accountById[id]?.name ?? id
   const categoryName = (id) => categoryById[id]?.name ?? id
+  // Grouping tags only, never allocation (spec.md §2.5: allocation tags
+  // are fixed/pre-seeded, "a deliberate Settings-area action," never
+  // created inline while entering a transaction). Fire-and-forget, same
+  // style as persistTx elsewhere — TagEditor needs the new id back
+  // synchronously to add it to the line's selection right away, not after
+  // a round trip. Collision-checked against currently-loaded tags (a
+  // brand new name colliding with an existing slug, e.g. two different
+  // "2026-08" style labels) rather than assumed unique.
+  function createTag(name) {
+    let id = slugify(name)
+    if (tags.some((t) => t.id === id)) id = `${id}-${Math.random().toString(36).slice(2, 6)}`
+    setDoc(doc(db, 'tags', id), {
+      id,
+      name,
+      parentTag: null,
+      class: 'grouping',
+      reconciliationTargetAccountIds: [],
+      groupingType: null,
+      archived: false,
+    })
+    return id
+  }
   // Kategorie (the parent group, e.g. "Lebenshaltung") is derived/display
   // only — only the leaf Unterkategorie is ever stored (spec.md §2.6/§3a).
   const groupName = (id) => {
@@ -348,7 +394,13 @@ export default function Konten() {
     if (ids.length === 0) return '—'
     return ids.length === 1 ? categoryName(ids[0]) : '(mehrere)'
   }
-  const tagsValue = (t) => [...new Set((t.lines ?? []).flatMap((l) => l.tags ?? []))].join(', ')
+  // Resolved names, not raw ids (sorting by cryptic slugs would be
+  // meaningless) — falls back to the raw string itself for a legacy
+  // pre-tag-mechanism free-text entry that doesn't resolve to any real
+  // tag id (TagEditor's own note on this has the full explanation).
+  const tagsValue = (t) =>
+    [...new Set((t.lines ?? []).flatMap((l) => l.tags ?? []))].map((id) => tagById[id]?.name ?? id).join(', ')
+  const tagIdsValue = (t) => [...new Set((t.lines ?? []).flatMap((l) => l.tags ?? []))]
 
   // Persists, then defers to the same pendingFocusIdRef/rows effect addRow
   // uses (see its declaration above) to re-locate both the selection tint
@@ -1139,23 +1191,77 @@ export default function Konten() {
       },
       {
         headerName: 'Tags',
-        valueGetter: (p) => (p.data.__isLine ? (p.data.__parent.lines[p.data.__lineIndex]?.tags ?? []).join(', ') : tagsValue(p.data)),
+        // The value is the raw tag-id array (or, for a legacy pre-mechanism
+        // line, whatever raw strings are still sitting there) — cellRenderer
+        // resolves each to a name+color chip; the comparator below uses its
+        // own resolved-name string separately (tagsValue), so this can stay
+        // the plain array AG Grid actually hands the cellRenderer.
+        valueGetter: (p) => (p.data.__isLine ? (p.data.__parent.lines[p.data.__lineIndex]?.tags ?? []) : tagIdsValue(p.data)),
         comparator: glueToParent(tagsValue),
-        // Placeholder editor (comma-separated text) — the real inline
-        // tag-autocomplete/creation mechanism (spec.md §2.5) is its own
-        // separate feature, not built yet.
+        cellRenderer: (p) => {
+          const ids = p.value ?? []
+          if (ids.length === 0) return null
+          return (
+            <div className="flex flex-wrap gap-1 py-0.5">
+              {ids.map((id) => {
+                const t = tagById[id]
+                const colorVar = tagColorVar(t)
+                return (
+                  <span
+                    key={id}
+                    className={'rounded-full px-1.5 py-0.5 text-xs ' + (t ? '' : 'border border-dashed border-[var(--color-text-muted)]')}
+                    style={
+                      t
+                        ? {
+                            color: `var(${colorVar})`,
+                            backgroundColor: `color-mix(in srgb, var(${colorVar}) 15%, transparent)`,
+                          }
+                        : undefined
+                    }
+                    title={t ? undefined : 'Alter Freitext-Tag — noch nicht mit einem echten Tag verknüpft'}
+                  >
+                    {t?.name ?? id}
+                  </span>
+                )
+              })}
+            </div>
+          )
+        },
+        cellEditor: TagEditor,
+        // Per-row function, same reason as Kategorie/Unterkategorie above —
+        // a line row writes to that specific line (applyTagsToLine), a
+        // parent row (only while unsplit) writes via applyTagsDirect.
+        cellEditorParams: (p) =>
+          p.data.__isLine
+            ? {
+                tags,
+                initialTagIds: p.data.__parent.lines[p.data.__lineIndex]?.tags ?? [],
+                onApply: (_data, tagIds) => applyTagsToLine(p.data.__parent, p.data.__lineIndex, tagIds),
+                onCreateTag: createTag,
+              }
+            : {
+                tags,
+                initialTagIds: (p.data.lines ?? [])[0]?.tags ?? [],
+                onApply: applyTagsDirect,
+                onCreateTag: createTag,
+              },
+        cellEditorPopup: true,
+        // Fallback for whatever other way an edit might end (e.g. blur) —
+        // same reasoning as Konto/Category's own fallback valueSetter,
+        // Übernehmen itself writes directly via onApply and never depends
+        // on this running. An empty tagIds array is a valid, intentional
+        // commit (a line can carry zero tags) — unlike Kategorie's
+        // valueSetter, there's no truthiness guard here.
         valueSetter: (p) => {
-          const tags = String(p.newValue || '')
-            .split(',')
-            .map((t) => t.trim())
-            .filter(Boolean)
+          const tagIds = p.newValue?.tagIds
+          if (!tagIds) return false
           if (p.data.__isLine) {
             const { __parent: parent, __lineIndex: idx } = p.data
-            parent.lines = parent.lines.map((l, i) => (i === idx ? { ...l, tags } : l))
+            parent.lines = parent.lines.map((l, i) => (i === idx ? { ...l, tags: tagIds } : l))
             return true
           }
           const line = ensureLine(p.data)
-          line.tags = tags
+          line.tags = tagIds
           return true
         },
         editable: (p) => p.data.__isLine || (p.data.lines ?? []).length <= 1,
@@ -1203,8 +1309,8 @@ export default function Konten() {
         },
       },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- accountName/categoryName/groupName/ensureLine/handleDeleteClick/toggleExpanded close over these
-    [accountById, categoryById, accountFilter, accounts, categories, confirmDeleteId, year, expandedIds],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- accountName/categoryName/groupName/ensureLine/handleDeleteClick/toggleExpanded/createTag close over these
+    [accountById, categoryById, tagById, accountFilter, accounts, categories, tags, confirmDeleteId, year, expandedIds],
   )
 
   const panel = useMemo(() => {
@@ -1221,7 +1327,7 @@ export default function Konten() {
     })
   }, [accounts, transactions, year])
 
-  const stillLoading = !(loaded.accounts && loaded.categories && loaded.transactions)
+  const stillLoading = !(loaded.accounts && loaded.categories && loaded.tags && loaded.transactions)
 
   if (stillLoading) {
     return <p className="px-6 py-4 text-[var(--color-text-muted)]">Lädt…</p>

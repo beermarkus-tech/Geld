@@ -606,3 +606,25 @@ Lesson worth keeping: before diagnosing a "wrong row highlighted" report, check 
 `npm run build`, `npm test`, `npm run lint` clean before pushing.
 
 **Next session should probably:** have Markus confirm the tint is gone on the tablet, and whether Ctrl+N works there.
+
+## Session 34 — 2026-09-24 — Real tag mechanism built (Phase 1b), while Markus slept
+
+Markus picked the real tag mechanism as the next piece of Phase 1b and asked me to start on it overnight, testing to happen tomorrow. Replaces the plain comma-separated-text placeholder from Session 8 with spec.md §2.5's actual design.
+
+**Built:**
+- New `tags` Firestore collection wired into Konten the same way `accounts`/`categories` already were (`onSnapshot`, a `tagById` lookup memo). It already existed and was correctly seeded by the migration (allocation tags from `migration/seed/tags-allocation.json`, breakdown/grouping tags from `transform-budgets.py`) — Konten's grid just never referenced it until now.
+- New `src/TagEditor.jsx` — a popup cell editor, same family as `KontoEditor`/`CategoryEditor`: multi-select autocomplete, type to filter existing non-archived tags, Enter/click to add a chip, "Tag '…' erstellen" when nothing matches. Same direct-write-then-`stopEditing(true)` Übernehmen pattern as the other two editors, with a fallback `valueSetter` in `Konten.jsx` for however else an edit might end.
+- **claim-category sequencing** (§2.5): a `claim-category` tag is only offered in the suggestion list once the line already carries a `claim`-type tag — a filter condition on the suggestion list, not a separate mode.
+- **New tags are always `class: "grouping"`, never `allocation`** — allocation tags stay fixed/pre-seeded per spec, never created inline.
+- **Color-coding** (`src/lib/tagStyle.js`, new CSS tokens in `index.css`): allocation reuses the existing `--color-savings` purple; the four grouping types get new tokens (teal/slate/indigo/rose); `groupingType: null` reuses the slate/statement token, matching spec's own "same family as statement" wording.
+- **Backward compatibility, deliberately conservative:** every tag Markus typed before tonight is a raw string, not a real tag id. Both the grid's read-only chip display and TagEditor's own chip list render an unresolved id as a plain dashed-border chip (its literal text) rather than silently auto-creating a real tag document for it — avoids quietly multiplying the `tags` collection with typo-derived duplicates unsupervised, overnight, with nobody watching. Fully removable; becoming a real tracked tag is a deliberate re-add.
+
+**Verified, not just written and hoped:** a standalone Playwright harness (scratchpad, not part of the repo — same approach as Session 25's AG Grid dark-mode check) rendered `TagEditor` directly with fake data covering every tag class/groupingType from spec's own examples. Confirmed against real rendered/interactive output, both light and dark mode: the claim-category sequencing filter (hidden without a claim tag present, shown once one is added, hidden again once removed), archived tags never offered, tag creation returns a working id and adds the chip, Escape on an empty input calls `stopEditing(true)`, all five color tokens render distinctly and legibly in both themes. This was worth the extra step specifically because a multi-select popup is a new interaction shape in this codebase (every editor so far — Konto, Kategorie/Unterkategorie — is single-value), not a small tweak to something already proven.
+
+`npm run build`, `npm test` (still 14 passing — the pure calculation functions weren't touched), `npm run lint` all clean before pushing. **Not run tonight: `npm run dev`/build against the real app with real Firestore data** — I don't have live Firebase access in this session (established earlier), and Markus is asleep. Everything above was checked against the isolated harness only.
+
+**Open question, not resolved, needs Markus:** there's no UI to pick a groupingType (project/statement/claim/claim-category) when creating a tag inline — every new tag starts as `groupingType: null` ("unspecified," a real state spec.md itself anticipates and styles). Is retyping/re-picking later good enough as the permanent workflow, or does creation need a lightweight type picker? Genuinely open, not guessed at silently.
+
+**Explicitly out of scope tonight, still open from PLAN.md's Phase 1b list:** the Tag-management Settings screen (rename/merge/archive) — that's Phase 7 per spec.md/PLAN.md, not touched. Soft-delete-with-recovery and the basic export/restore script (the other two Phase 1b items Markus chose not to start with) are also still open.
+
+**Next session should probably:** Markus's own real test against real Firestore data — the actual point of "we'll do the testing tomorrow." Specifically worth checking: does an old free-text tag from before tonight render correctly as the dashed-border fallback chip (real data, not the harness's fake unresolved-id case, which wasn't separately exercised); does the claim-category sequencing feel right in practice, not just in the isolated test; and his answer to the open groupingType-at-creation question above.
