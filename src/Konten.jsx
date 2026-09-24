@@ -421,6 +421,36 @@ export default function Konten() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- addRow closes over year/accountFilter, both already current each render
   }, [year, accountFilter])
 
+  // Ctrl/Cmd+Enter triggers the split column's own ✚ (Markus) for
+  // whichever transaction the cursor is currently on — a parent row
+  // (starts the first split) or any of its own line rows (splits
+  // further), same as clicking the button itself; landing on the first
+  // line's Betrag field either way (see the split column's own cellRenderer
+  // for why). No dedicated button to click first — the whole point is
+  // making this reachable without leaving the keyboard, since every other
+  // split-column action already was except this one.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!e.ctrlKey && !e.metaKey) return
+      if (e.key !== 'Enter') return
+      const api = gridRef.current?.api
+      if (!api || api.getEditingCells().length > 0) return
+      const focused = api.getFocusedCell()
+      if (!focused) return
+      const row = api.getDisplayedRowAtIndex(focused.rowIndex)?.data
+      if (!row) return
+      e.preventDefault()
+      const tx = row.__isLine ? row.__parent : row
+      addSplitLine(tx)
+      setExpandedIds((prev) => new Set(prev).add(tx.id))
+      pendingFocusIdRef.current = tx.id
+      pendingFocusColRef.current = 'betrag'
+      pendingFocusLineIndexRef.current = 0
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
   // Ctrl/Cmd+K always jumps into the pinned panel's account boxes, never
   // the plain <select> (Markus, correcting an earlier version of this) —
   // landing on the currently active filter's own button if one is set,
@@ -454,13 +484,24 @@ export default function Konten() {
       setConfirmDeleteId((cur) => (cur === id ? null : cur))
     }, 4000)
   }
-  async function handleDeleteClick(id) {
-    if (confirmDeleteId === id) {
+  // Takes the row itself, not just an id — a split line's own row has no
+  // Firestore document of its own to delete (Markus: a breakdown line's
+  // trashcan should behave exactly like a transaction's own, arm/confirm/
+  // red-tint included, but what "confirm" actually does differs: removeLine
+  // on the parent, not deleteDoc). confirmDeleteId doesn't care whether the
+  // id it's holding belongs to a parent or a line row — it's just "the
+  // currently armed row's own id" either way.
+  async function handleDeleteClick(row) {
+    if (confirmDeleteId === row.id) {
       clearTimeout(confirmTimeoutRef.current)
       setConfirmDeleteId(null)
-      await deleteDoc(doc(db, 'transactions', id))
+      if (row.__isLine) {
+        removeLine(row.__parent, row.__lineIndex)
+      } else {
+        await deleteDoc(doc(db, 'transactions', row.id))
+      }
     } else {
-      armDelete(id)
+      armDelete(row.id)
     }
   }
 
@@ -639,17 +680,18 @@ export default function Konten() {
         suppressMovable: true,
         resizable: false,
         pinned: 'left',
-        // The one control column for the whole split-transaction feature
-        // (§3a's "expand chevron and an 'N Positionen' hint" plus the
-        // auto-remainder mechanism's own add/remove actions), rather than
-        // spreading these across other columns:
+        // The one control column for expand/split (§3a's "expand chevron
+        // and an 'N Positionen' hint" plus starting/continuing a split) —
+        // removing a line moved to the trashcan column instead (Markus:
+        // it should arm/confirm/red-tint exactly like deleting a whole
+        // transaction, not this column's old instant-remove ✕).
         // - Parent, not yet split (≤1 line): "✚" starts the first split
         //   (addSplitLine) and auto-expands, so the newly appended line is
         //   immediately visible without a second click.
         // - Parent, split (>1 lines): a chevron toggling expandedIds.
-        // - A line row: "✕" removes just that line; the *last* line (the
-        //   live remainder) also gets "✚" to split further — "or split
-        //   further itself (creating a new remainder each time)".
+        // - A line row: blank, except the *last* line (the live remainder)
+        //   gets "✚" to split further — "or split further itself
+        //   (creating a new remainder each time)".
         cellRenderer: (p) => {
           const row = p.data
           // Every button here goes through the same pendingFocusIdRef/rows
@@ -660,42 +702,28 @@ export default function Konten() {
           // selection state was left to drift across the rowData
           // replacement these actions cause, showing a stale blue tint on
           // some other row that happened to land at the same position
-          // (Markus, second screenshot).
+          // (Markus, second screenshot). Landing specifically on the
+          // *first* line's own Betrag field, not just the transaction's
+          // split column (Markus) — that's the natural next step after
+          // starting or continuing a split: type how much this piece is.
           if (row.__isLine) {
             const isLast = row.__lineIndex === row.__parent.lines.length - 1
+            if (!isLast) return null
             return (
-              <div className="flex h-full items-center justify-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    removeLine(row.__parent, row.__lineIndex)
-                    pendingFocusIdRef.current = row.__parent.id
-                    pendingFocusColRef.current = 'split'
-                    pendingFocusLineIndexRef.current = null
-                  }}
-                  title="Position entfernen"
-                  className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-alert)]"
-                >
-                  ✕
-                </button>
-                {isLast && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      addSplitLine(row.__parent)
-                      pendingFocusIdRef.current = row.__parent.id
-                      pendingFocusColRef.current = 'split'
-                      pendingFocusLineIndexRef.current = null
-                    }}
-                    title="Weiter aufteilen"
-                    className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-computed)]"
-                  >
-                    ✚
-                  </button>
-                )}
-              </div>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  addSplitLine(row.__parent)
+                  pendingFocusIdRef.current = row.__parent.id
+                  pendingFocusColRef.current = 'betrag'
+                  pendingFocusLineIndexRef.current = 0
+                }}
+                title="Weiter aufteilen (Ctrl+Enter)"
+                className="flex h-full w-full items-center justify-center text-xs text-[var(--color-text-muted)] hover:text-[var(--color-computed)]"
+              >
+                ✚
+              </button>
             )
           }
           const lineCount = row.lines?.length ?? 0
@@ -723,10 +751,10 @@ export default function Konten() {
                 addSplitLine(row)
                 setExpandedIds((prev) => new Set(prev).add(row.id))
                 pendingFocusIdRef.current = row.id
-                pendingFocusColRef.current = 'split'
-                pendingFocusLineIndexRef.current = null
+                pendingFocusColRef.current = 'betrag'
+                pendingFocusLineIndexRef.current = 0
               }}
-              title="Aufteilen"
+              title="Aufteilen (Ctrl+Enter)"
               className="flex h-full w-full items-center justify-center text-xs text-[var(--color-text-muted)] hover:text-[var(--color-computed)]"
             >
               ✚
@@ -862,6 +890,10 @@ export default function Konten() {
       },
       {
         headerName: 'Betrag',
+        // Explicit colId, not left auto-generated — starting/continuing a
+        // split (below) focuses this column by id directly, landing the
+        // cursor on the first line's own amount field (Markus).
+        colId: 'betrag',
         // A line row shows its own signed amountCents directly — no
         // account-relative sign logic needed here, unlike the parent
         // (§2.6: "a line can be positive or negative independent of the
@@ -1066,20 +1098,21 @@ export default function Konten() {
         // trashcan is never half-covered by it (caught by Markus).
         pinned: 'right',
         resizable: false,
+        // Works the same for a line row as for a transaction row (Markus:
+        // a breakdown line's own trashcan should arm/confirm/red-tint
+        // exactly like a transaction's own, not the split column's old
+        // instant-remove ✕, which is gone now — one consistent delete
+        // affordance instead of two with different confirmation behavior).
         cellRenderer: (p) => {
-          // Deleting a whole transaction from a line row doesn't make
-          // sense — removing just that line is the "split" colId's ✕
-          // button instead.
-          if (p.data.__isLine) return ''
           const armed = confirmDeleteId === p.data.id
           return (
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation()
-                handleDeleteClick(p.data.id)
+                handleDeleteClick(p.data)
               }}
-              title={armed ? 'Nochmal klicken zum Löschen' : 'Buchung löschen'}
+              title={armed ? 'Nochmal klicken zum Löschen' : p.data.__isLine ? 'Position löschen' : 'Buchung löschen'}
               className={
                 'w-full rounded px-1 text-xs ' +
                 (armed
@@ -1341,13 +1374,8 @@ export default function Konten() {
           // arming row deletion underneath it.
           onCellKeyDown={(p) => {
             const key = p.event?.key
-            // A line row's Delete key does nothing here — removing a line
-            // is the split column's ✕ button, not the whole-transaction
-            // delete (Delete on a line row would otherwise try to arm a
-            // transaction-delete against a synthetic id that doesn't
-            // exist in Firestore).
-            if (key !== 'Delete' || p.api.getEditingCells().length > 0 || p.data.__isLine) return
-            handleDeleteClick(p.data.id)
+            if (key !== 'Delete' || p.api.getEditingCells().length > 0) return
+            handleDeleteClick(p.data)
           }}
           // Datum sorted ascending on first load only (the underlying rows
           // are already date-sorted anyway — this is just the header

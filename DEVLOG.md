@@ -530,3 +530,17 @@ Markus flagged this directly, asked it be noted rather than acted on immediately
 - **The migration scripts** (`migration/transform-transactions.py`) always assume transaction-level Konto routing; historical data doesn't have this concept at all, so nothing there breaks, but any future re-import logic would need to know this is a schema extension, not the original shape.
 
 **Next session should probably:** not guess at a schema extension here — this needs a real conversation with Markus about the actual shape (a per-line account override field? something else?) before any code changes, given how central `balance()` is to everything else already built and tested.
+
+## Session 29 — 2026-09-24 — Split-line delete moved to the trashcan, Ctrl+Enter added
+
+Three requests, all about the split-line UX getting closer to how the rest of Konten already behaves.
+
+**1. A split line's own delete now goes through the trashcan column, not the split column's old instant-remove ✕.** Markus wanted it to behave exactly like deleting a whole transaction — arm, red tint, confirm — not a one-click removal sitting right next to a two-click one. `handleDeleteClick` now takes the row itself (not just an id) and branches: `removeLine` on the parent for a line row, `deleteDoc` for a transaction row; `confirmDeleteId`/`getRowStyle`'s red tint didn't need any change at all, since they already just compare against whatever id is currently armed, parent or line. The split column's own ✕ is gone — one consistent delete affordance now, not two with different confirmation behavior. The keyboard Delete key picked this up for free (same `handleDeleteClick` call), closing part of Session 23's disclosed "mouse/tap only" gap — the guard that used to skip line rows entirely is gone too.
+
+**2. Ctrl/Cmd+Enter now triggers the same add/split-further action as the ✚ button**, for whichever transaction the cursor currently sits on — reads the grid's focused cell, resolves it to a transaction (its own row, or its line's `__parent`), and calls the same `addSplitLine`. Closes the other half of that gap; only the expand/collapse chevron itself stays mouse-only now (noted in CODEMAP, not chased further without a real reason to).
+
+**3. Both the button and the shortcut now land the cursor on line index 0's own Betrag field afterward** — the natural next step either way is typing how much that first piece actually is. Taken literally from Markus's wording ("the first breakdown line," not "whichever line just became editable") — worth watching whether that's still the wanted behavior once he's used "split further" a few times on a line deep into an already-multi-line split, since that case lands back on line 0 rather than the line that just unlocked. Betrag got an explicit `colId` so this could target it reliably (previously auto-generated, never referenced anywhere by name).
+
+`npm run build`, `npm test` (still 14 passing), `npm run lint` all clean before pushing.
+
+**Next session should probably:** get Markus's confirmation on all three against real data, and specifically watch for feedback on point 3's "always line 0" choice during a deeper split-further sequence — the one part of this session's reasoning that was a judgment call on ambiguous wording rather than a literal instruction.
