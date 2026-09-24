@@ -237,6 +237,36 @@ export default function Konten() {
   // (editing a split line's own field, per Markus — the cursor should
   // stay on the line just edited, not jump back to the parent row).
   const pendingFocusLineIndexRef = useRef(null)
+  // A second, independent focus/selection claim exists —
+  // focusGridMidViewport (Ctrl+K panel's Escape/Enter) — with its own
+  // immediate setTimeout(0), not gated on `rows` settling at all, since it
+  // often has nothing to wait for (the filter may not even have changed
+  // row data). Two genuinely independent "claim the focus rectangle and
+  // the blue tint" mechanisms, each firing its own deferred callback, can
+  // interleave: an edit made just before a Ctrl+K/arrow/Enter round trip
+  // may still have its settle effect below pending when
+  // focusGridMidViewport's own timeout runs, and either callback's two
+  // calls (setFocusedCell, setSelected) aren't atomic against the other's
+  // — caught by Markus, screenshot showing the cell-focus rectangle on one
+  // row and the blue selection tint on a different one after exactly this
+  // sequence. Same underlying shape as the race the comment above already
+  // fixed once (AG Grid's own transient resort vs. `rows`' own), just a
+  // second, independent pair of racing callbacks rather than that one.
+  // Fixed the same way in spirit: whichever claim was made *last* should
+  // always win, in full (both calls together, never split) — a shared
+  // monotonic counter, bumped by every claimant, checked right before each
+  // deferred callback actually applies anything; a claim whose number has
+  // since been superseded silently no-ops instead of clobbering half of a
+  // newer claim's work.
+  const focusClaimRef = useRef(0)
+  const pendingFocusClaimRef = useRef(0)
+  function claimPendingFocus(id, colId, lineIndex = null) {
+    pendingFocusIdRef.current = id
+    pendingFocusColRef.current = colId
+    pendingFocusLineIndexRef.current = lineIndex
+    focusClaimRef.current += 1
+    pendingFocusClaimRef.current = focusClaimRef.current
+  }
   // Which split transactions currently show their line rows expanded
   // (§3a: "parent row with an expand chevron... plus its detail rows
   // revealed on expand"). Keyed by the real transaction id, not the
@@ -335,9 +365,7 @@ export default function Konten() {
   const handleCellValueChanged = (params) => {
     const tx = params.data.__isLine ? params.data.__parent : params.data
     persistTx(tx)
-    pendingFocusIdRef.current = tx.id
-    pendingFocusColRef.current = params.column.getColId()
-    pendingFocusLineIndexRef.current = params.data.__isLine ? params.data.__lineIndex : null
+    claimPendingFocus(tx.id, params.column.getColId(), params.data.__isLine ? params.data.__lineIndex : null)
   }
 
   // Adds a blank row right below whatever's currently selected in the
@@ -355,9 +383,7 @@ export default function Konten() {
     const today = new Date().toISOString().slice(0, 10)
     const date = selected?.date ?? (year && today.startsWith(year) ? today : `${year}-01-01`)
     const id = `tx-manual-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`
-    pendingFocusIdRef.current = id
-    pendingFocusColRef.current = 'date'
-    pendingFocusLineIndexRef.current = null
+    claimPendingFocus(id, 'date')
     await setDoc(doc(db, 'transactions', id), {
       id,
       date,
@@ -377,9 +403,25 @@ export default function Konten() {
   // shared by the panel's Escape (clears the filter first) and Enter
   // (keeps it) key handling. Deferred a tick since clearing the filter
   // changes the row set and the grid only re-renders with it after the
-  // caller's handler returns.
+  // caller's handler returns. Makes its own claim on the shared
+  // focusClaimRef counter (see its declaration above) — this used to be
+  // fully independent of the edit-settle effect's own deferred callback,
+  // which could leave the two mid-air at once: an edit made just before
+  // Ctrl+K/arrow/Enter could still be waiting on its own settle when this
+  // fires, and whichever of the two happened to apply *second* would only
+  // partially overwrite the other (one call succeeding, one not), splitting
+  // the focus rectangle from the blue tint across two different rows
+  // (Markus, screenshot). Clearing pendingFocusIdRef here too, not just
+  // bumping the counter, so a same-id edit-settle that hasn't even fired
+  // yet won't spuriously re-claim later, off some unrelated future `rows`
+  // change, and jump the cursor back without any new user action asking it
+  // to.
   function focusGridMidViewport() {
+    pendingFocusIdRef.current = null
+    focusClaimRef.current += 1
+    const myClaim = focusClaimRef.current
     setTimeout(() => {
+      if (focusClaimRef.current !== myClaim) return
       const api = gridRef.current?.api
       const first = api?.getFirstDisplayedRowIndex()
       const last = api?.getLastDisplayedRowIndex()
@@ -475,9 +517,7 @@ export default function Konten() {
       const tx = row.__isLine ? row.__parent : row
       addSplitLine(tx)
       setExpandedIds((prev) => new Set(prev).add(tx.id))
-      pendingFocusIdRef.current = tx.id
-      pendingFocusColRef.current = 'betrag'
-      pendingFocusLineIndexRef.current = 0
+      claimPendingFocus(tx.id, 'betrag', 0)
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
@@ -608,6 +648,7 @@ export default function Konten() {
   useEffect(() => {
     const id = pendingFocusIdRef.current
     if (!id || !rows.some((r) => r.id === id)) return
+    const myClaim = pendingFocusClaimRef.current
     pendingFocusIdRef.current = null
     const colId = pendingFocusColRef.current
     const lineIndex = pendingFocusLineIndexRef.current
@@ -615,6 +656,10 @@ export default function Konten() {
     const api = gridRef.current?.api
     if (!api) return
     setTimeout(() => {
+      // A newer claim (another edit, or focusGridMidViewport returning
+      // focus from the panel) has since been made — let it stand rather
+      // than split it with half of this older, now-superseded one.
+      if (focusClaimRef.current !== myClaim) return
       let node = api.getRowNode(id)
       // A pending line index means the edit was on a specific split line
       // (Markus: stay there, don't jump to the parent) — find its row by
@@ -747,9 +792,7 @@ export default function Konten() {
                 onClick={(e) => {
                   e.stopPropagation()
                   addSplitLine(row.__parent)
-                  pendingFocusIdRef.current = row.__parent.id
-                  pendingFocusColRef.current = 'betrag'
-                  pendingFocusLineIndexRef.current = 0
+                  claimPendingFocus(row.__parent.id, 'betrag', 0)
                 }}
                 title="Weiter aufteilen (Ctrl+T)"
                 className="flex h-full w-full items-center justify-center text-xs text-[var(--color-text-muted)] hover:text-[var(--color-computed)]"
@@ -782,9 +825,7 @@ export default function Konten() {
                 e.stopPropagation()
                 addSplitLine(row)
                 setExpandedIds((prev) => new Set(prev).add(row.id))
-                pendingFocusIdRef.current = row.id
-                pendingFocusColRef.current = 'betrag'
-                pendingFocusLineIndexRef.current = 0
+                claimPendingFocus(row.id, 'betrag', 0)
               }}
               title="Aufteilen (Ctrl+T)"
               className="flex h-full w-full items-center justify-center text-xs text-[var(--color-text-muted)] hover:text-[var(--color-computed)]"
