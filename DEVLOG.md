@@ -584,3 +584,13 @@ The capture-phase/`stopPropagation()` fix from Session 30 was real and correct f
 `npm run build`, `npm test` (still 14 passing), `npm run lint` all clean before pushing.
 
 **Next session should probably:** get Markus's confirmation the stale-tint bug is actually gone now, specifically re-testing the same Ctrl+K → arrow → Enter sequence right after an edit. Also worth a general note for any *future* code that wants to move the grid's focus/selection programmatically: route it through `claimPendingFocus` (if it can wait for `rows` to settle) or through `focusGridMidViewport`'s claim pattern (if it needs to act immediately) rather than adding a third independent `setTimeout` — that's exactly how this class of bug keeps recurring.
+
+## Session 32, continued — 2026-09-24 — Ctrl+N added; tint theory matches the actual mechanism
+
+**Ctrl+N now also triggers "+ Neue Buchung"** (Markus), added alongside the existing Ctrl/Cmd+`'+'`/`'='`, not replacing it — same key-handling effect, extended rather than duplicated. Same disclosed caveat as `'+'` before it and Ctrl+T before that: N is the browser's own "new window" shortcut almost everywhere, so it carries the same real risk of being swallowed before the page's JS ever sees it; worth Markus confirming on his own device. Button's own `title` updated to mention both combos.
+
+**Markus's own read on the stale-tint bug, offered mid-investigation:** "the stale tint seems to be a cursor line the app is trying to keep centered while scrolling the grid." This lines up exactly with what `focusGridMidViewport` actually does by design — it deliberately lands on whichever row is roughly mid-viewport when returning from the panel, not the row that was selected before Ctrl+K. That part was never the bug; the bug (fixed earlier this session, above) was that this mid-viewport landing could lose a race against a still-pending edit's own focus-settle effect, splitting the cell-focus rectangle from the blue tint across two different rows instead of both correctly landing on the mid-viewport row together. Explained back to Markus rather than treated as a new, separate report — the fix already pushed (Build 62) should cover exactly this.
+
+`npm run build`, `npm test` (still 14 passing), `npm run lint` all clean before pushing.
+
+**Next session should probably:** same as above — get Markus's confirmation both the tint race and Ctrl+N are working as expected on his real device.

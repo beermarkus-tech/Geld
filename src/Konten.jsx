@@ -448,12 +448,16 @@ export default function Konten() {
   // happen harmlessly, but it may not be fully reliable everywhere for
   // reasons outside the app's control. '=' is included since '+' usually
   // requires Shift, and keyboards/browsers report that combination either
-  // way depending on layout. Skipped while a cell is being edited, so it
-  // doesn't fire in the middle of typing a category/tag/etc.
+  // way depending on layout. Ctrl/Cmd+N added alongside it (Markus) — same
+  // caveat as Ctrl+T/'+' before it: 'N' is the browser's own "new window"
+  // shortcut nearly everywhere, so it carries the same real risk of being
+  // swallowed before the page ever sees it, worth Markus confirming on his
+  // own device same as the others. Skipped while a cell is being edited,
+  // so neither fires in the middle of typing a category/tag/etc.
   useEffect(() => {
     const onKeyDown = (e) => {
       if (!e.ctrlKey && !e.metaKey) return
-      if (e.key !== '+' && e.key !== '=') return
+      if (e.key !== '+' && e.key !== '=' && e.key.toLowerCase() !== 'n') return
       if (gridRef.current?.api?.getEditingCells().length > 0) return
       e.preventDefault()
       addRow()
@@ -1293,7 +1297,7 @@ export default function Konten() {
         <button
           type="button"
           onClick={addRow}
-          title="Fügt eine leere Zeile direkt unter der markierten Zeile ein (mit deren Datum)"
+          title="Fügt eine leere Zeile direkt unter der markierten Zeile ein (mit deren Datum) (Ctrl+N oder Ctrl+'+')"
           className="rounded-md bg-[var(--color-computed)] px-3 py-1 text-sm font-medium text-white"
         >
           + Neue Buchung
