@@ -544,3 +544,15 @@ Three requests, all about the split-line UX getting closer to how the rest of Ko
 `npm run build`, `npm test` (still 14 passing), `npm run lint` all clean before pushing.
 
 **Next session should probably:** get Markus's confirmation on all three against real data, and specifically watch for feedback on point 3's "always line 0" choice during a deeper split-further sequence — the one part of this session's reasoning that was a judgment call on ambiguous wording rather than a literal instruction.
+
+## Session 30 — 2026-09-24 — Ctrl+Enter didn't actually work: AG Grid's own Enter handling won the race
+
+Markus: "ctrl+enter does not work, just behaves like enter." Root-caused before patching, not guessed — checked the exact same class of bug Session 21 already found once this session (worth remembering going forward: any single-key binding on Enter/Escape/Tab/Delete/F2/arrows needs this check by default, not just when something breaks).
+
+Confirmed directly in `ag-stack`'s bundled source: `RowContainerEventsFeature` attaches a genuine *native* `keydown` listener straight on the row container element — a real DOM ancestor of every grid cell — via a plain bubble-phase `addEventListener` (no capture option passed anywhere in the chain down to `_addSafePassiveEventListener`). That listener reacts to plain `Enter` regardless of any Ctrl modifier and starts editing the focused cell. Session 29's Ctrl+Enter handler was a normal bubble-phase `window` listener — strictly further out in the same bubble chain than the row container, so it always lost the race: AG Grid's own handler ran first, started editing, and by the time this handler ran its own "don't fire while a cell is already mid-edit" guard correctly, but unhelpfully, treated that as "already editing" and no-opped. Exactly the same shape of bug as `Listbox.jsx`'s Enter-key fix (Session 21), just a different pair of competing listeners.
+
+Fix: register the Ctrl+Enter listener on `window` with the capture-phase flag (`addEventListener('keydown', onKeyDown, true)`) and call `stopPropagation()` once it's decided to act. Capture phase runs top-down before the event ever reaches its target, which is strictly before *any* bubble-phase listener anywhere in the tree — stopping propagation there means AG Grid's own row-container listener never sees this specific keypress at all. The other two global shortcuts (Ctrl+`'+'`, Ctrl+K) didn't need this, since `+`/`=` and `k` aren't keys AG Grid's own core handling intercepts.
+
+`npm run build`, `npm test` (still 14 passing), `npm run lint` all clean before pushing.
+
+**Next session should probably:** get Markus's confirmation Ctrl+Enter actually works now. Also worth keeping in mind for any *future* single-key global shortcut in Konten: check whether AG Grid's own `_onCellKeyDown` switch (Enter/F2/Escape/Tab/Backspace/Delete/arrows) already claims that key before assuming a plain bubble-phase `window` listener will work — it only reliably does for keys AG Grid doesn't already own.

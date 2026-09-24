@@ -429,6 +429,26 @@ export default function Konten() {
   // for why). No dedicated button to click first — the whole point is
   // making this reachable without leaving the keyboard, since every other
   // split-column action already was except this one.
+  //
+  // Capture phase, not the default bubble phase, and stopPropagation() once
+  // we've decided to act — plain Enter, Ctrl held or not, is one of the few
+  // keys AG Grid's own core (not React) attaches a *native* keydown
+  // listener for directly on the row container (RowContainerEventsFeature,
+  // confirmed in its actual bundled source), which starts editing the
+  // focused cell. That listener sits on a real DOM ancestor of the grid's
+  // cells and fires in the normal bubble phase; a bubble-phase listener on
+  // `window` (what every other shortcut here uses) is strictly further out,
+  // so it always loses that race — by the time it ran, AG Grid had already
+  // started editing, and this handler's own "not already editing" guard
+  // then correctly, but unhelpfully, bailed out (Markus: "ctrl+enter does
+  // not work, just behaves like enter"). A capture-phase window listener
+  // runs during the top-down capture pass, before the target is even
+  // reached, i.e. strictly before any bubble-phase listener anywhere —
+  // stopping propagation here prevents AG Grid's own handler from ever
+  // running at all for this specific keypress. Same category of fix as
+  // Listbox.jsx's native listener for the same underlying reason: a React
+  // (or here, default-phase-`window`) handler can't out-run a closer native
+  // one just by asking nicely — it has to run first, or not compete at all.
   useEffect(() => {
     const onKeyDown = (e) => {
       if (!e.ctrlKey && !e.metaKey) return
@@ -440,6 +460,7 @@ export default function Konten() {
       const row = api.getDisplayedRowAtIndex(focused.rowIndex)?.data
       if (!row) return
       e.preventDefault()
+      e.stopPropagation()
       const tx = row.__isLine ? row.__parent : row
       addSplitLine(tx)
       setExpandedIds((prev) => new Set(prev).add(tx.id))
@@ -447,8 +468,8 @@ export default function Konten() {
       pendingFocusColRef.current = 'betrag'
       pendingFocusLineIndexRef.current = 0
     }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [])
 
   // Ctrl/Cmd+K always jumps into the pinned panel's account boxes, never
