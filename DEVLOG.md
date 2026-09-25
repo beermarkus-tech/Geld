@@ -787,3 +787,13 @@ Markus: "I need to be able to filter for the parent tag, too, and show the total
 `npm run build`, `npm test` (31), `npm run lint` all clean before pushing.
 
 **Next session should probably:** same standing open item as the last several entries — confirming the Außenstände migration and panel against Markus's real Firestore data. Nothing new pending from this round.
+
+## Session 35, continued a tenth time — 2026-09-25 — Negative Betrag turns amber while filtered (not red — spec.md §1b.4)
+
+Markus: "when i filter for a certain account or tag, please display negative values in red." Before touching color-coding, checked it against the existing rule in `index.css`/spec.md §1b.4: "red is reserved exclusively for alerts everywhere, never for 'this is an expense section.'" A genuinely resolved spec decision the new request would directly contradict, so this blocked rather than a silent judgment call (CLAUDE.md's own rule for exactly this situation) — asked Markus which way he wanted it (keep the rule, reuse the existing amber expense color; or officially change the rule and use red). He chose **amber** — the rule stands as written, no spec.md change needed.
+
+**Implementation:** `Konten.jsx`'s Betrag column `cellClass` is now a function of `p.value` (the already-resolved signed amount) — appends `text-[var(--color-expense)]` when `accountFilter` is set and the value is negative, plain otherwise. No new re-render wiring needed: an existing effect already force-refreshes every cell on `accountFilter` change (needed for Betrag's own `valueGetter`, which also reads `accountFilter` from closure — a stale-value bug Markus caught earlier this project), and that same refresh now also re-evaluates `cellClass`.
+
+**Verified** via a disposable Playwright harness (deleted before commit) reading the cell's real computed CSS color: unfiltered, both a negative and a positive row render in the default text color; filtered, the negative row turns exactly `#d97706` (`--color-expense`) while the positive row stays default; clearing the filter reverts it. `npm run build`, `npm test` (still 31), `npm run lint` all clean before pushing.
+
+**Next session should probably:** same standing open item as the last several entries — confirming the Außenstände migration and panel against Markus's real Firestore data.

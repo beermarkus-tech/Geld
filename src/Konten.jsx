@@ -1234,7 +1234,14 @@ export default function Konten() {
         },
         cellEditor: 'agTextCellEditor',
         cellEditorParams: { useFormatter: true },
-        cellClass: 'text-right tabular-figure',
+        // Negative amounts turn amber while an account or tag filter is
+        // active (Markus) — reuses --color-expense rather than red: spec.md
+        // §1b.4 reserves red exclusively for alerts, never for "this is an
+        // expense/negative," and Markus confirmed keeping that rule rather
+        // than carving out an exception here. `p.value` is already the
+        // resolved signed amount (this column's own valueGetter above), so
+        // no separate recomputation is needed.
+        cellClass: (p) => 'text-right tabular-figure' + (accountFilter && p.value < 0 ? ' text-[var(--color-expense)]' : ''),
         // The parent, once split, is a fixed total that splitting only
         // ever redistributes (persistTx's own comment) — not directly
         // editable there anymore. A line is editable unless it's the
