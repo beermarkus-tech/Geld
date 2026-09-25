@@ -97,6 +97,13 @@ function persistTx(tx) {
   // which already arrive with rawDescription set) — mirror Empfänger into
   // it instead of leaving it permanently blank.
   if (!next.rawDescription) next.rawDescription = next.displayLabel
+  // Every save touches this, distinct from createdAt (§2.6, set once and
+  // never again) — recentTagValues (below) needs "when was this actually
+  // last edited," not the transaction's own booking date, to rank recently
+  // *used* tags (Markus: the top of the tag dropdown was ranking by
+  // transaction date, so tagging an old January row today didn't bring
+  // that tag to the top the way actually just having picked it should).
+  next.updatedAt = Date.now()
   setDoc(doc(db, 'transactions', next.id), next)
 }
 
@@ -339,21 +346,29 @@ export default function Konten() {
     transactions.forEach((t) => (t.lines ?? []).forEach((l) => (l.tags ?? []).forEach((v) => set.add(v))))
     return set
   }, [transactions])
-  // Every used value again, this time ordered by its own most-recent
-  // transaction date (Markus: show the 5 most-recently-used tags at the
-  // top of the dropdown) — TagEditor takes the first 5 of these that are
-  // still real suggestion candidates (already-selected/archived/etc.
-  // filtered out there, not here).
+  // Every used value again, ordered by when it was actually *applied* —
+  // each transaction's own `updatedAt` (persistTx, above), not its booking
+  // `date` (Markus caught this: tagging an old January row today didn't
+  // bring that tag to the top, because the original version ranked by the
+  // transaction's calendar date instead of when it was actually last
+  // touched). TagEditor takes the first 5 of these that are still real
+  // suggestion candidates (already-selected/archived/etc. filtered out
+  // there, not here). Known imprecision, not chased further: `updatedAt`
+  // is per-transaction, not per-tag-application, so editing any other
+  // field (Betrag, Datum, ...) on a transaction also bumps every tag
+  // already sitting on it — close enough for "what did I just tag," not
+  // worth a per-tag timestamp for.
   const recentTagValues = useMemo(() => {
     const lastUsed = new Map()
-    transactions.forEach((t) =>
-      (t.lines ?? []).forEach((l) =>
+    transactions.forEach((t) => {
+      const ts = t.updatedAt ?? 0
+      ;(t.lines ?? []).forEach((l) =>
         (l.tags ?? []).forEach((v) => {
-          if (!lastUsed.has(v) || lastUsed.get(v) < t.date) lastUsed.set(v, t.date)
+          if (!lastUsed.has(v) || lastUsed.get(v) < ts) lastUsed.set(v, ts)
         }),
-      ),
-    )
-    return [...lastUsed.entries()].sort((a, b) => (a[1] < b[1] ? 1 : a[1] > b[1] ? -1 : 0)).map(([v]) => v)
+      )
+    })
+    return [...lastUsed.entries()].sort((a, b) => b[1] - a[1]).map(([v]) => v)
   }, [transactions])
   const accountName = (id) => accountById[id]?.name ?? id
   const categoryName = (id) => categoryById[id]?.name ?? id
@@ -1276,6 +1291,20 @@ export default function Konten() {
         // the plain array AG Grid actually hands the cellRenderer.
         valueGetter: (p) => (p.data.__isLine ? (p.data.__parent.lines[p.data.__lineIndex]?.tags ?? []) : tagIdsValue(p.data)),
         comparator: glueToParent(tagsValue),
+        // Markus's "C": a real header filter, the same convention spec.md
+        // §3a already describes for every column ("tag 'has this tag'")
+        // but that turned out to have never actually been wired up
+        // anywhere in the grid yet (no column had `filter` set at all —
+        // caught only because Markus asked for this one specifically).
+        // A plain text ("contains") filter against the resolved qualified
+        // names, not a picker — simplest thing that works without a
+        // custom filter component, and pairs naturally with "B" (clicking
+        // a chip) as the precise/one-click alternative to typing a name.
+        filter: 'agTextColumnFilter',
+        filterValueGetter: (p) =>
+          p.data.__isLine
+            ? (p.data.__parent.lines[p.data.__lineIndex]?.tags ?? []).map((id) => qualifiedTagName(tagById[id], tagById) || id).join(', ')
+            : tagsValue(p.data),
         // Colored fill only for a tag with a determined type (allocation,
         // or a grouping tag with a real groupingType); a plain dashed
         // outline for an unspecified grouping tag *and* an unresolved
@@ -1285,6 +1314,13 @@ export default function Konten() {
         // items-center vertically centers the chip row within the cell
         // (Markus) — AG Grid's own cell wrapper doesn't do this by default
         // for a multi-line-capable custom renderer like this one.
+        // Each chip is clickable — sets the grid filter to that tag
+        // (Markus's "B": click any tag chip to filter by it, the same
+        // shortcut relationship the pinned panel's own account/tag buttons
+        // already have to the Konto dropdown). stopPropagation so this
+        // doesn't *also* trigger the grid's singleClickEdit and pop the
+        // TagEditor open at the same time — clicking a chip filters,
+        // clicking the cell's own empty space still edits.
         cellRenderer: (p) => {
           const ids = p.value ?? []
           if (ids.length === 0) return null
@@ -1294,18 +1330,26 @@ export default function Konten() {
                 const t = tagById[id]
                 const colorVar = tagColorVar(t)
                 return (
-                  <span
+                  <button
                     key={id}
-                    className={'rounded-full px-1.5 py-0.5 text-xs ' + (colorVar ? '' : 'border border-dashed border-[var(--color-text-muted)] text-[var(--color-text-muted)]')}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setAccountFilter(id)
+                    }}
+                    className={
+                      'rounded-full px-1.5 py-0.5 text-xs hover:opacity-75 ' +
+                      (colorVar ? '' : 'border border-dashed border-[var(--color-text-muted)] text-[var(--color-text-muted)]')
+                    }
                     style={
                       colorVar
                         ? { color: `var(${colorVar})`, backgroundColor: `color-mix(in srgb, var(${colorVar}) 15%, transparent)` }
                         : undefined
                     }
-                    title={t ? undefined : 'Alter Freitext-Tag — noch nicht mit einem echten Tag verknüpft'}
+                    title={(t ? '' : 'Alter Freitext-Tag — noch nicht mit einem echten Tag verknüpft. ') + 'Klicken zum Filtern'}
                   >
                     {qualifiedTagName(t, tagById) || id}
-                  </span>
+                  </button>
                 )
               })}
             </div>
