@@ -105,7 +105,7 @@ const CREATE_TYPES = [
 // real tracked tag is a deliberate re-add (remove the old chip, retype —
 // matches the real tag by name if one already exists, or creates it).
 const TagEditor = forwardRef(function TagEditor(props, ref) {
-  const { data, tags, usedTagValues, initialTagIds = [], onApply, onCreateTag, api } = props
+  const { data, tags, usedTagValues, recentTagValues = [], initialTagIds = [], onApply, onCreateTag, api } = props
   const [selectedIds, setSelectedIds] = useState(initialTagIds)
   const [inputText, setInputText] = useState('')
   const [highlight, setHighlight] = useState(0)
@@ -134,7 +134,11 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
   // aren't meaningful outside some specific trip/claim context).
   const hasClaimTag = selectedIds.some((id) => tagById[id]?.groupingType === 'claim')
 
-  const suggestions = useMemo(() => {
+  // recentCount marks how many entries at the front of `suggestions` are
+  // the "recently used" section (rendered with a separator after them,
+  // below) — 0 whenever that section doesn't apply (typing a search, or
+  // nothing recent to show).
+  const { suggestions, recentCount } = useMemo(() => {
     const text = inputText.trim().toLowerCase()
     // Usage always gates a grouping tag (Markus, real-usage feedback: an
     // unused one still showed up while typing, since the original version
@@ -146,14 +150,28 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
       (t) => t.class === 'grouping' && (usedTagValues.has(t.id) || qName(t).toLowerCase() === text),
     )
     const candidates = [...tags.filter((t) => t.class === 'allocation'), ...groupingCandidates, ...legacyCandidates]
-    return candidates
+    const eligible = candidates
       .filter((t) => !t.archived)
       .filter((t) => !selectedIds.includes(t.id))
       .filter((t) => t.groupingType !== 'claim-category' || hasClaimTag)
       .filter((t) => text === '' || qName(t).toLowerCase().includes(text))
-      .slice(0, 25)
+    if (text !== '') return { suggestions: eligible.slice(0, 25), recentCount: 0 }
+    // Empty input (pure browsing): the 5 most-recently-used tags first,
+    // separated from the rest (Markus) — recentTagValues (Konten.jsx) is
+    // every used value ordered by its most recent transaction date.
+    const byId = new Map(eligible.map((t) => [t.id, t]))
+    const recent = []
+    for (const v of recentTagValues) {
+      if (recent.length >= 5) break
+      const t = byId.get(v)
+      if (t) {
+        recent.push(t)
+        byId.delete(v)
+      }
+    }
+    return { suggestions: [...recent, ...byId.values()].slice(0, 25), recentCount: recent.length }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- qName closes over tagById, already covered by `tags`
-  }, [tags, legacyCandidates, usedTagValues, selectedIds, inputText, hasClaimTag])
+  }, [tags, legacyCandidates, usedTagValues, recentTagValues, selectedIds, inputText, hasClaimTag])
 
   // Checked against real tags *and* legacy free-text values in current
   // use (not just `tags`) — otherwise typing a legacy string's exact name
@@ -166,15 +184,25 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
   const createTypeOptions = canCreate ? CREATE_TYPES.filter((o) => o.groupingType !== 'claim-category' || hasClaimTag) : []
   const optionCount = suggestions.length + createTypeOptions.length
 
+  // Applies and closes immediately (Markus: "rarely ever will i select two
+  // tags in one go") — computes the new id directly and calls onApply
+  // itself rather than going through setSelectedIds first, since that
+  // state update wouldn't be visible yet on this same call (React state
+  // updates aren't synchronous) and the popup is closing regardless.
+  // Removing a chip (below) still doesn't auto-close — only *adding* one
+  // does, so correcting a mis-tagged line (remove, then pick the right
+  // one) stays a single visit to the popup, not two.
   function selectSuggestion(idx) {
+    let id
     if (idx < suggestions.length) {
-      setSelectedIds((prev) => [...prev, suggestions[idx].id])
+      id = suggestions[idx].id
     } else {
       const opt = createTypeOptions[idx - suggestions.length]
-      if (opt) setSelectedIds((prev) => [...prev, onCreateTag(inputText.trim(), opt.groupingType)])
+      if (!opt) return
+      id = onCreateTag(inputText.trim(), opt.groupingType)
     }
-    setInputText('')
-    setHighlight(0)
+    onApply(data, [...selectedIds, id])
+    api.stopEditing(true)
   }
 
   function removeChip(id) {
@@ -214,10 +242,11 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
       } else if (e.key === 'Enter') {
         e.preventDefault()
         e.stopPropagation()
-        // Empty input + Enter finishes and closes (same "final Enter
-        // closes the popup" convention as Kategorie/Unterkategorie's own
-        // chain) — typing/selecting several tags in one sitting doesn't
-        // close after each one, only this does.
+        // Either way this closes: empty input applies whatever's already
+        // selected (same "final Enter closes the popup" convention as
+        // Kategorie/Unterkategorie's own chain); a highlighted option goes
+        // through selectSuggestion, which now also closes immediately
+        // (Markus — below).
         if (inputText === '') apply()
         else if (optionCount > 0) selectSuggestion(highlight)
       } else if (e.key === 'Escape') {
@@ -269,6 +298,10 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
             const colorVar = tagColorVar(t)
             return (
               <li key={t.id}>
+                {/* Separator after the 5 most-recently-used (Markus) — only
+                    ever present when browsing (recentCount is 0 while
+                    searching, see the suggestions useMemo above). */}
+                {idx === recentCount && recentCount > 0 && <hr className="border-[var(--color-border)]" />}
                 <button
                   type="button"
                   onMouseDown={(e) => {

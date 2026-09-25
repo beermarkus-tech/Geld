@@ -339,6 +339,22 @@ export default function Konten() {
     transactions.forEach((t) => (t.lines ?? []).forEach((l) => (l.tags ?? []).forEach((v) => set.add(v))))
     return set
   }, [transactions])
+  // Every used value again, this time ordered by its own most-recent
+  // transaction date (Markus: show the 5 most-recently-used tags at the
+  // top of the dropdown) — TagEditor takes the first 5 of these that are
+  // still real suggestion candidates (already-selected/archived/etc.
+  // filtered out there, not here).
+  const recentTagValues = useMemo(() => {
+    const lastUsed = new Map()
+    transactions.forEach((t) =>
+      (t.lines ?? []).forEach((l) =>
+        (l.tags ?? []).forEach((v) => {
+          if (!lastUsed.has(v) || lastUsed.get(v) < t.date) lastUsed.set(v, t.date)
+        }),
+      ),
+    )
+    return [...lastUsed.entries()].sort((a, b) => (a[1] < b[1] ? 1 : a[1] > b[1] ? -1 : 0)).map(([v]) => v)
+  }, [transactions])
   const accountName = (id) => accountById[id]?.name ?? id
   const categoryName = (id) => categoryById[id]?.name ?? id
   // Grouping tags only, never allocation (spec.md §2.5: allocation tags
@@ -1304,6 +1320,7 @@ export default function Konten() {
             ? {
                 tags,
                 usedTagValues,
+                recentTagValues,
                 initialTagIds: p.data.__parent.lines[p.data.__lineIndex]?.tags ?? [],
                 onApply: (_data, tagIds) => applyTagsToLine(p.data.__parent, p.data.__lineIndex, tagIds),
                 onCreateTag: createTag,
@@ -1311,6 +1328,7 @@ export default function Konten() {
             : {
                 tags,
                 usedTagValues,
+                recentTagValues,
                 initialTagIds: (p.data.lines ?? [])[0]?.tags ?? [],
                 onApply: applyTagsDirect,
                 onCreateTag: createTag,
@@ -1383,7 +1401,7 @@ export default function Konten() {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps -- accountName/categoryName/groupName/ensureLine/handleDeleteClick/toggleExpanded/createTag close over these
-    [accountById, categoryById, tagById, usedTagValues, accountFilter, accounts, categories, tags, confirmDeleteId, year, expandedIds],
+    [accountById, categoryById, tagById, usedTagValues, recentTagValues, accountFilter, accounts, categories, tags, confirmDeleteId, year, expandedIds],
   )
 
   const panel = useMemo(() => {

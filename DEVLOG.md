@@ -678,3 +678,17 @@ Couldn't independently confirm this actually resolves the full €3444,11 — no
 `npm run build`, `npm test` (24 passing), `npm run lint` all clean before pushing.
 
 **Next session should probably:** get Markus's confirmation the Anlage Familie figure is now correct (and, while checking, the other allocation-tag rows too — Sparen Familie/Julia/Sophia, Rücklagen/Steuern, Anlage Sophia — since the same bug would have affected any of them wherever a negative-signed tagged line exists in their history, not just Anlage Familie).
+
+## Session 35, continued a third time — 2026-09-25 — Recent tags, one-click close, and the AG Grid bulk-edit question
+
+Two more requests from the same real-usage test session, both landed:
+
+**1. The 5 most-recently-used tags now sit above a separator at the top of the empty-input browse list.** `recentTagValues` (`Konten.jsx`) — every used value ordered by its own most recent transaction date — feeds `TagEditor`, which takes the first 5 still-eligible candidates and lists them first with an `<hr>` after. Only applies while browsing (empty input); an active search drops back to plain relevance-ordered matches.
+
+**2. Selecting a tag now applies and closes the popup immediately, instead of staying open for more.** Markus: "rarely ever will i select two tags in one go." `selectSuggestion()` now computes the chosen id directly and calls `onApply`/`stopEditing(true)` itself, rather than updating local state and waiting for a separate close action. Removing a chip via its own `×` still doesn't auto-close — only adding one does, so correcting a wrong tag (remove, then pick the right one) stays one visit to the popup.
+
+**Answered, not built (a question, not a request): "is there any way in AG Grid to select multiple rows and apply the same change to them?"** Checked the actual installed package's module list (`ag-grid-community`'s own `iModule.d.ts`) rather than trusting memory — this project has been burned by bad third-party AG Grid licensing claims before (Session 0's undo/redo research). Confirmed: multi-*row* selection itself (shift/ctrl-click to select several rows) is a Community-tier module (`RowSelectionModule`) and could be turned on cheaply (`rowSelection: {mode: 'multiRow'}`, currently `singleRow`). But the actual "push one edit to every selected row" mechanism — range selection, the fill handle, clipboard paste-across-a-range (`CellSelectionModule`, `ClipboardModule`) — is Enterprise-only; confirmed by its position in the module list, listed alongside other unambiguously-Enterprise modules (`ColumnMenuModule`, `ExcelExportModule`, etc.), not the Community section. Told Markus this plainly and offered the realistic alternative: a small custom "apply to selected rows" action (read `api.getSelectedRows()`, loop a normal `persistTx`/`applyCategoryDirect`/etc. call) is fully buildable without Enterprise, same pattern this app already uses everywhere else AG Grid's free tier falls short (KontoEditor, CategoryEditor, the account filter) — not built yet, a real feature to scope if he wants it, not guessed into existence.
+
+`npm run build`, `npm test` (still 24 — no pure-function changes this round), `npm run lint` all clean before pushing.
+
+**Next session should probably:** get Markus's confirmation on the recent-tags section and one-click-close, and find out whether he wants the custom bulk-edit-selected-rows action actually built — and if so, which columns it should cover (Kategorie/Tags seem like the obvious candidates, but worth asking rather than assuming).
