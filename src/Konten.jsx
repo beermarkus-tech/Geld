@@ -231,6 +231,12 @@ export default function Konten() {
   // transaction's direction. Picking an account here instead re-displays
   // every matching row from *that* account's own perspective.
   const [accountFilter, setAccountFilter] = useState(null)
+  // Tracks AG Grid's own column filters (Datum/Empfänger/Kategorie/
+  // Unterkategorie/Details/Betrag/Tags' header filters) — separate from
+  // accountFilter, which is Konten's own account/tag mechanism, not an AG
+  // Grid column filter at all. Drives the "Filter zurücksetzen" button
+  // below (Markus): visible whenever *either* kind of filter is active.
+  const [anyColumnFilter, setAnyColumnFilter] = useState(false)
   // Two-click delete: which row (if any) is currently armed, waiting for a
   // second click to actually confirm. See handleDeleteClick below.
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
@@ -767,6 +773,36 @@ export default function Konten() {
     gridRef.current?.api?.refreshCells({ force: true })
   }, [accountFilter])
 
+  // Keeps the Tags column's own native header filter in sync with
+  // accountFilter whenever it's a tag (Markus: clicking a tag to filter
+  // should also show that tag in the header filter box) — a single effect
+  // covers every way accountFilter can become a tag (a grid chip, a panel
+  // button) rather than duplicating the sync at each click site. Clears
+  // the column filter back out again the moment the filter becomes an
+  // account or nothing, so a stale tag search never lingers in the header
+  // after switching away from it. setColumnFilterModel is async — must
+  // await before calling onFilterChanged (AG Grid's own doc comment on
+  // the method), or the grid re-applies filtering before the new model
+  // actually landed.
+  useEffect(() => {
+    const api = gridRef.current?.api
+    if (!api) return
+    let cancelled = false
+    ;(async () => {
+      if (accountFilter && !filteredAccountId) {
+        const t = tagById[accountFilter]
+        const label = t ? qualifiedTagName(t, tagById) : accountFilter
+        await api.setColumnFilterModel('tags', { filterType: 'text', type: 'equals', filter: label })
+      } else {
+        await api.setColumnFilterModel('tags', null)
+      }
+      if (!cancelled) api.onFilterChanged()
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accountFilter, filteredAccountId, tagById])
+
   const rows = useMemo(() => {
     if (!year) return []
     return transactions
@@ -1022,9 +1058,23 @@ export default function Konten() {
         // glueToParent's own comment for why.
         comparator: glueToParent((t) => t.date),
         colId: 'date',
+        // Markus: header filters on the other columns too, now that
+        // building Tags' own turned up that none of them had ever
+        // actually been wired up (spec.md §3a's own gap). Plain text
+        // ("contains" etc.) works fine even here — Datum is stored as a
+        // "YYYY-MM-DD" string, so it compares/sorts correctly as text
+        // without needing a real date-typed filter.
+        filter: 'agTextColumnFilter',
       },
       {
         headerName: filteredAccountId ? `Gegenkonto (${accountName(filteredAccountId)})` : 'Konto',
+        // Deliberately no header filter here, unlike every other column
+        // now — spec.md §3a already settled this exact question: "Filtering
+        // by account is its own filter, not a plain column filter on Konto"
+        // (Sept 2026), precisely because Konto's displayed value is
+        // *derived*/relative to whichever account is filtered, not a plain
+        // field a text search could meaningfully match against. The
+        // dedicated Konto dropdown + pinned panel already cover this.
         // Blank and non-editable for a line row, same reasoning as Datum —
         // Konto is fixed at the parent level for a split transaction.
         valueGetter: (p) => (p.data.__isLine ? '' : kontoValue(p.data)),
@@ -1107,6 +1157,11 @@ export default function Konten() {
           p.data.displayLabel = p.newValue ?? ''
           return true
         },
+        // A line row's own valueGetter returns its `note`, not the
+        // parent's displayLabel — matches what the cellRenderer's "↳"
+        // prefix actually reads, so filtering a line row searches the same
+        // text that's actually shown for it.
+        filter: 'agTextColumnFilter',
         editable: true,
         flex: 1.4,
       },
@@ -1122,6 +1177,14 @@ export default function Konten() {
         // parent's own sign").
         valueGetter: (p) => (p.data.__isLine ? (p.data.__parent.lines[p.data.__lineIndex]?.amountCents ?? 0) : betragValue(p.data)),
         valueFormatter: (p) => centsToEuro(p.value),
+        // A number filter (greater/less/equals etc.), not text — but
+        // against euros, not the raw stored cents, via filterValueGetter:
+        // the column's own value is cents (10000 for 100,00€), and typing
+        // "100" to mean "100 euros" is what Markus would actually expect
+        // to type, matching what the cell itself displays.
+        filter: 'agNumberColumnFilter',
+        filterValueGetter: (p) =>
+          (p.data.__isLine ? (p.data.__parent.lines[p.data.__lineIndex]?.amountCents ?? 0) : betragValue(p.data)) / 100,
         // Sorting the whole grid by every individual split line's own
         // amount wouldn't be that meaningful anyway — glued to its
         // already-amount-sorted parent (like every other column) is the
@@ -1168,6 +1231,7 @@ export default function Konten() {
           return kategorieValue(p.data)
         },
         comparator: glueToParent(kategorieValue),
+        filter: 'agTextColumnFilter',
         // Same cascading Kategorie→Unterkategorie picker as the
         // Unterkategorie column below — Kategorie has no stored value of
         // its own, so editing it here writes the same categoryId. A
@@ -1229,6 +1293,7 @@ export default function Konten() {
           return unterkategorieValue(p.data)
         },
         comparator: glueToParent(unterkategorieValue),
+        filter: 'agTextColumnFilter',
         // Same fallback-path reasoning as Kategorie's valueSetter above.
         valueSetter: (p) => {
           if (p.data.__isLine) {
@@ -1279,6 +1344,7 @@ export default function Konten() {
           p.data.detail = p.newValue ?? ''
           return true
         },
+        filter: 'agTextColumnFilter',
         editable: (p) => !p.data.__isLine,
         flex: 1.3,
       },
@@ -1317,10 +1383,27 @@ export default function Konten() {
         // Each chip is clickable — sets the grid filter to that tag
         // (Markus's "B": click any tag chip to filter by it, the same
         // shortcut relationship the pinned panel's own account/tag buttons
-        // already have to the Konto dropdown). stopPropagation so this
-        // doesn't *also* trigger the grid's singleClickEdit and pop the
-        // TagEditor open at the same time — clicking a chip filters,
-        // clicking the cell's own empty space still edits.
+        // already have to the Konto dropdown).
+        //
+        // **A native listener via a ref callback, not a React `onClick`**
+        // (Markus caught this: clicking a chip was *also* opening the
+        // TagEditor popup, even with `e.stopPropagation()` on the React
+        // handler) — the exact same race this codebase has hit twice
+        // before (Listbox.jsx's Enter fix; the Ctrl+Enter/AG Grid capture-
+        // phase fix). AG Grid's `singleClickEdit` starts editing via a
+        // plain native click listener attached on the cell/row itself, a
+        // real DOM ancestor of this button — but React 17+ doesn't attach
+        // a real listener on the button at all, it attaches ONE delegated
+        // listener way up at the app's root container and only dispatches
+        // to this component's `onClick` once the raw event has already
+        // bubbled *past* every ancestor in between, AG Grid's own cell
+        // listener included. So AG Grid's closer, real listener always
+        // saw the click and started editing before a React `onClick`
+        // handler's `stopPropagation()` ever got a chance to run. A
+        // native listener assigned directly on this element itself (via
+        // the ref callback, `el.onclick =`) runs at the true target phase
+        // — strictly before the event starts bubbling anywhere — so it
+        // wins the race outright instead of trying to out-run it.
         cellRenderer: (p) => {
           const ids = p.value ?? []
           if (ids.length === 0) return null
@@ -1333,9 +1416,12 @@ export default function Konten() {
                   <button
                     key={id}
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setAccountFilter(id)
+                    ref={(el) => {
+                      if (!el) return
+                      el.onclick = (e) => {
+                        e.stopPropagation()
+                        setAccountFilter(id)
+                      }
                     }}
                     className={
                       'rounded-full px-1.5 py-0.5 text-xs hover:opacity-75 ' +
@@ -1561,6 +1647,27 @@ export default function Konten() {
         >
           + Neue Buchung
         </button>
+
+        {/* Markus: a single "clear everything" action, right-aligned,
+            only shown when there's actually something to clear — covers
+            both accountFilter (an account or a tag, via the Konto select,
+            the pinned panel, or a clicked chip) and any of AG Grid's own
+            column filters (Tags' included, whether set by hand or by the
+            chip-click sync effect above). ml-auto pushes it to the far
+            right of this flex row regardless of how many controls sit
+            before it. */}
+        {(accountFilter || anyColumnFilter) && (
+          <button
+            type="button"
+            onClick={() => {
+              setAccountFilter(null)
+              gridRef.current?.api?.setFilterModel(null)
+            }}
+            className="ml-auto rounded-md border border-[var(--color-border)] px-3 py-1 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]"
+          >
+            Filter zurücksetzen
+          </button>
+        )}
       </div>
 
       {/* Pinned balance panel — Jahresende(selected year) per account,
@@ -1679,6 +1786,13 @@ export default function Konten() {
           theme={themeQuartz}
           rowData={displayRows}
           columnDefs={columnDefs}
+          // Mirrors AG Grid's own column-filter state into React (Markus's
+          // "Filter zurücksetzen" button needs to know this) — also fires
+          // for the Tags column's filter model being set/cleared
+          // programmatically (the tag-chip-click sync effect above), not
+          // just a header icon the user opened by hand, which is exactly
+          // right: either way there's a real active filter to show/clear.
+          onFilterChanged={(e) => setAnyColumnFilter(e.api.isAnyFilterPresent())}
           // suppressMovable (not just per-column, so it also covers the
           // default column menu) keeps the spec'd column order fixed —
           // Markus's request: no accidental drag-reordering or hiding.

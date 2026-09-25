@@ -242,13 +242,17 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
       } else if (e.key === 'Enter') {
         e.preventDefault()
         e.stopPropagation()
-        // Either way this closes: empty input applies whatever's already
-        // selected (same "final Enter closes the popup" convention as
-        // Kategorie/Unterkategorie's own chain); a highlighted option goes
-        // through selectSuggestion, which now also closes immediately
-        // (Markus — below).
-        if (inputText === '') apply()
-        else if (optionCount > 0) selectSuggestion(highlight)
+        // A highlighted suggestion always wins when one exists — including
+        // with an empty input, where index 0 is already highlighted by
+        // default the moment the popup opens (Markus: Enter on "a selected
+        // tag" wasn't applying it, since the previous version treated an
+        // empty input as "just close" regardless of what was visibly
+        // highlighted). Only once there's truly nothing left to select
+        // does Enter fall back to closing with whatever's already applied
+        // — the same "final Enter closes the popup" convention as
+        // Kategorie/Unterkategorie's own chain.
+        if (optionCount > 0) selectSuggestion(highlight)
+        else apply()
       } else if (e.key === 'Escape') {
         e.preventDefault()
         e.stopPropagation()
