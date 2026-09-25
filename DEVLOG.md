@@ -666,3 +666,15 @@ Verified all three via the same Playwright harness pattern (scratchpad): the mer
 `npm run build`, `npm test` (still 23 passing — no pure-function changes this round), `npm run lint` all clean before pushing.
 
 **Next session should probably:** get Markus's confirmation on all three, specifically that clicking/cycling to a tag filter and seeing the plain unfiltered Konto/Betrag display (rather than an attempted re-sign) reads sensibly to him — that was a judgment call (an allocation tag spanning multiple accounts has no single "reference account" to re-sign against), not something he specified.
+
+## Session 35, continued again — 2026-09-25 — Anlage Familie balance bug: Math.abs() flipped a negative line's real contribution
+
+Markus: "Anlage Familie is wrong by 3444,11 euros." Investigated by comparing `tagBalance.js` against `migration/transform-transactions.py`'s own `allocation_tag_delta()` — the reference implementation that already got checked against the real Gsheet totals during the original migration (`verify_tag_sums()`, Session 1). Found a real divergence: `tagBalance()` took `Math.abs(line.amountCents)` before applying the directional sign, the Python reference never does. For most lines this is a no-op (a plain transfer's `amountCents` is already stored as a positive magnitude, §2.6), which is exactly why `balance()`'s own account-position rule gets away with `Math.abs()` — but a *line's* own sign can genuinely differ from its parent's (§2.6's own salary-split example: positive Gehalt / negative Steuern), and forcing `Math.abs()` silently flipped any negative-signed tagged line's real contribution to positive instead of subtracting it.
+
+Fixed: use the line's own signed `amountCents` directly, matching the Python reference exactly. New test (`tagBalance.test.js`, now 24 total) locks in a negative-signed tagged line's contribution explicitly, so this can't quietly regress.
+
+Couldn't independently confirm this actually resolves the full €3444,11 — no live Firebase access in this session to check against Markus's real data, and the exact composition of which historical lines were negative-and-tagged isn't visible from here. Worth Markus re-checking Anlage Familie once Build lands.
+
+`npm run build`, `npm test` (24 passing), `npm run lint` all clean before pushing.
+
+**Next session should probably:** get Markus's confirmation the Anlage Familie figure is now correct (and, while checking, the other allocation-tag rows too — Sparen Familie/Julia/Sophia, Rücklagen/Steuern, Anlage Sophia — since the same bug would have affected any of them wherever a negative-signed tagged line exists in their history, not just Anlage Familie).

@@ -107,6 +107,23 @@ describe('tagBalance()', () => {
   it('returns 0 for an unknown tag id rather than throwing', () => {
     expect(tagBalance('does-not-exist', '2025-12-31', [], [SPAREN_SOPHIA])).toBe(0)
   })
+
+  it('uses a line\'s own signed amountCents directly, not Math.abs() (bug caught by Markus: a negative-signed tagged line, e.g. a fee split out of a contribution, silently flipped positive)', () => {
+    // Single-sided income into Aktien, split into a positive contribution
+    // line and a negative fee line — both tagged, same as a real
+    // salary-split line pair (§2.6's own Gehalt/Steuern example).
+    const tx = {
+      date: '2025-08-01',
+      fromAccountId: null,
+      toAccountId: 'aktien',
+      amountCents: 9000,
+      lines: [
+        { amountCents: 10000, categoryId: null, note: '', tags: ['anlage-familie'] },
+        { amountCents: -1000, categoryId: null, note: '', tags: ['anlage-familie'] },
+      ],
+    }
+    expect(tagBalance('anlage-familie', '2025-12-31', [tx], [ANLAGE_FAMILIE])).toBe(9000)
+  })
 })
 
 describe('tagJahresende()', () => {

@@ -6,14 +6,27 @@
 // portion can carry a tag that doesn't apply to the rest of that
 // transaction.
 //
-// Sign rule, generalizing balance()'s own account-position rule to a tag's
-// *set* of target accounts: a tagged line contributes +|amount| if the
-// parent transaction's toAccountId is one of the tag's targets (money
-// arrived in the pool this tag subdivides), and −|amount| if fromAccountId
-// is one of them (money left it) — both checked independently, not
-// either/or, so a transaction moving money *between* two of a tag's own
-// target accounts (e.g. Aktien -> Crypto, both inside Anlage Familie's
-// combined pool) nets to zero, same as balance()'s own self-transfer case.
+// Sign rule: a tagged line contributes its own *signed* amountCents,
+// applied + if the parent transaction's toAccountId is one of the tag's
+// targets (money arrived in the pool this tag subdivides), and − (i.e.
+// negated) if fromAccountId is one of them (money left it) — both checked
+// independently, not either/or, so a transaction moving money *between*
+// two of a tag's own target accounts (e.g. Aktien -> Crypto, both inside
+// Anlage Familie's combined pool) nets to zero.
+//
+// **Deliberately not Math.abs(line.amountCents) first** (a real bug, caught
+// by Markus: Anlage Familie off by exactly the total of some negative-signed
+// tagged lines) — unlike balance()'s own account-position rule, which
+// always applies a plain magnitude because a transfer's amountCents is
+// itself always stored as a positive magnitude (§2.6), a *line's* own sign
+// can genuinely differ from its parent's (§2.6: "a line can be positive or
+// negative independent of the parent's own sign," e.g. a salary split's
+// positive Gehalt / negative Steuern lines) — forcing abs() first silently
+// flipped a negative line's real contribution to positive. This exactly
+// mirrors `migration/transform-transactions.py`'s own `allocation_tag_delta()`
+// — the reference implementation already checked against the real Gsheet
+// totals during the original migration (`verify_tag_sums()`) — which never
+// takes abs() either, for the same reason.
 //
 // @param {string} tagId
 // @param {string} asOfDate  "YYYY-MM-DD"
@@ -28,9 +41,8 @@ export function tagBalance(tagId, asOfDate, transactions, tags) {
     if (tx.date > asOfDate) continue
     for (const line of tx.lines ?? []) {
       if (!(line.tags ?? []).includes(tagId)) continue
-      const magnitude = Math.abs(line.amountCents)
-      if (targets.has(tx.fromAccountId)) total -= magnitude
-      if (targets.has(tx.toAccountId)) total += magnitude
+      if (targets.has(tx.fromAccountId)) total -= line.amountCents
+      if (targets.has(tx.toAccountId)) total += line.amountCents
     }
   }
   return total
