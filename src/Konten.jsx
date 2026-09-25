@@ -9,7 +9,7 @@ import KontoEditor from './KontoEditor'
 import { jahresende } from './lib/balance'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { withRemainder } from './lib/split'
-import { tagJahresende } from './lib/tagBalance'
+import { tagFilterTotal, tagJahresende } from './lib/tagBalance'
 import { qualifiedTagName, tagColorVar } from './lib/tagStyle'
 import TagEditor, { slugify } from './TagEditor'
 
@@ -189,6 +189,19 @@ function removeLine(tx, lineIndex) {
 // Sept 2026 — they're open claims/loans, not "real accounts" the same way
 // a bank or cash balance is (spec.md §2.2's revision note).
 const REPORTING_GROUPS = ['Barkonten', 'Sparkonten', 'Geldanlage', 'Außenstände']
+
+// Amazon Julia (DE)/(FR), Amazon Markus (DE)/(FR), and Geld verliehen/
+// geliehen collapsed into this one shared receivable account (Markus's
+// design, Sept 2026, spec.md §2.2/§3a) — which specific claim or loan a
+// transaction belongs to is now carried by a tag, not by which of five
+// near-identical placeholder accounts it happened to sit on. CPAM and
+// Reisekosten Airbus stay their own real accounts (Markus: "those will
+// have a specific tracker later"). This id must exist in the live
+// `accounts` collection with exactly this id for any of this to do
+// anything — until Markus creates it (and migrates the historical Amazon/
+// loan transactions onto it), the panel/filter code below simply finds no
+// transactions touching it and stays quietly inert.
+const AUSSENSTAENDE_ACCOUNT_ID = 'aussenstaende'
 
 function centsToEuro(cents) {
   return (cents / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -1558,9 +1571,35 @@ export default function Konten() {
         .filter((t) => t.class === 'allocation')
         .filter((t) => (t.reconciliationTargetAccountIds ?? []).some((id) => groupAccountIds.has(id)))
         .map((t) => ({ id: t.id, name: t.name, cents: tagJahresende(t.id, Number(year), transactions, tags), tag: t }))
+      // Open claims/loans on the shared Außenstände account (Markus's
+      // design, Sept 2026) — unlike the allocation-tag rows above, there's
+      // no stored per-tag target to read (every claim tag here shares the
+      // one same account, tagFilterTotal hardcodes it rather than needing
+      // one), so the candidate tag list itself has to be *discovered*:
+      // every distinct tag used on a line whose transaction touches
+      // Außenstände. "Open" (shown) vs. "settled" (silently drops off the
+      // list, same as the loan mechanism already described in spec.md
+      // §3a) is exactly "does its total come out to zero."
+      if (group === 'Außenstände' && groupAccountIds.has(AUSSENSTAENDE_ACCOUNT_ID)) {
+        const candidateTagIds = new Set()
+        transactions.forEach((t) => {
+          if (t.fromAccountId === AUSSENSTAENDE_ACCOUNT_ID || t.toAccountId === AUSSENSTAENDE_ACCOUNT_ID) {
+            ;(t.lines ?? []).forEach((l) => (l.tags ?? []).forEach((tagId) => candidateTagIds.add(tagId)))
+          }
+        })
+        const claimItems = [...candidateTagIds]
+          .map((tagId) => ({
+            id: tagId,
+            name: tagById[tagId]?.name ?? tagId,
+            cents: tagFilterTotal(tagId, `${year}-12-31`, transactions, AUSSENSTAENDE_ACCOUNT_ID),
+            tag: tagById[tagId],
+          }))
+          .filter((i) => i.cents !== 0)
+        return { group, items, total, tagItems: [...tagItems, ...claimItems] }
+      }
       return { group, items, total, tagItems }
     })
-  }, [accounts, transactions, tags, year])
+  }, [accounts, transactions, tags, tagById, year])
 
   const stillLoading = !(loaded.accounts && loaded.categories && loaded.tags && loaded.transactions)
 
@@ -1574,6 +1613,25 @@ export default function Konten() {
       </p>
     )
   }
+
+  // The tag-filter total (Markus, thought through together before coding):
+  // shown only while filtered by a tag, never an account (the panel
+  // already shows an account's own balance). Branches on the tag's own
+  // class, since they need genuinely different math: an allocation tag
+  // already has a correct, real reconciliation-target-based figure
+  // (tagJahresende, same as the panel's own allocation rows use) — reusing
+  // that here rather than tagFilterTotal's Außenstände-specific rule,
+  // which doesn't know about Anlage Familie's four target accounts and
+  // would just undercount it. Everything else (a grouping tag — a trip,
+  // an expense breakdown, a claim/loan, or an unresolved legacy string)
+  // goes through tagFilterTotal.
+  const filteredTagForSum = accountFilter && !filteredAccountId ? tagById[accountFilter] : null
+  const tagFilterSum =
+    accountFilter && !filteredAccountId
+      ? filteredTagForSum?.class === 'allocation'
+        ? tagJahresende(accountFilter, Number(year), transactions, tags)
+        : tagFilterTotal(accountFilter, `${year}-12-31`, transactions, AUSSENSTAENDE_ACCOUNT_ID)
+      : null
 
   return (
     <div className="flex min-h-full flex-col gap-3 px-4 py-3">
@@ -1648,25 +1706,37 @@ export default function Konten() {
           + Neue Buchung
         </button>
 
-        {/* Markus: a single "clear everything" action, right-aligned,
-            only shown when there's actually something to clear — covers
-            both accountFilter (an account or a tag, via the Konto select,
-            the pinned panel, or a clicked chip) and any of AG Grid's own
-            column filters (Tags' included, whether set by hand or by the
-            chip-click sync effect above). ml-auto pushes it to the far
-            right of this flex row regardless of how many controls sit
-            before it. */}
-        {(accountFilter || anyColumnFilter) && (
-          <button
-            type="button"
-            onClick={() => {
-              setAccountFilter(null)
-              gridRef.current?.api?.setFilterModel(null)
-            }}
-            className="ml-auto rounded-md border border-[var(--color-border)] px-3 py-1 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]"
-          >
-            Filter zurücksetzen
-          </button>
+        {/* Markus: the tag-filter total ("thought through together before
+            coding" — right where you're already looking once you've
+            filtered, not a new panel section, which only makes sense for
+            tags with real account-reconciliation semantics) and the
+            "clear everything" action grouped together, right-aligned as
+            one unit — ml-auto on this wrapper, not on either child
+            individually, so alignment stays correct whichever of the two
+            is actually present (a tag filter with no column filter shows
+            only the sum; a plain column filter with no tag shows only the
+            reset button; either way it's still pinned to the right edge). */}
+        {(tagFilterSum !== null || accountFilter || anyColumnFilter) && (
+          <div className="ml-auto flex items-center gap-3">
+            {tagFilterSum !== null && (
+              <span className="text-sm text-[var(--color-text-muted)]">
+                Summe „{qualifiedTagName(filteredTagForSum, tagById) || accountFilter}“:{' '}
+                <span className="tabular-figure font-medium text-[var(--color-computed)]">{centsToEuro(tagFilterSum)} €</span>
+              </span>
+            )}
+            {(accountFilter || anyColumnFilter) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAccountFilter(null)
+                  gridRef.current?.api?.setFilterModel(null)
+                }}
+                className="rounded-md border border-[var(--color-border)] px-3 py-1 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]"
+              >
+                Filter zurücksetzen
+              </button>
+            )}
+          </div>
         )}
       </div>
 

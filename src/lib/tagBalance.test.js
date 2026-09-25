@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { tagBalance, tagJahresende } from './tagBalance'
+import { tagBalance, tagFilterTotal, tagJahresende } from './tagBalance'
 
 // Synthetic fixtures only — same standing privacy rule as balance.test.js.
 
@@ -137,5 +137,86 @@ describe('tagJahresende()', () => {
     }
     expect(tagJahresende('sparen-sophia', 2025, [tx], [SPAREN_SOPHIA])).toBe(4200)
     expect(tagJahresende('sparen-sophia', 2025, [tx], [SPAREN_SOPHIA])).toBe(tagBalance('sparen-sophia', '2025-12-31', [tx], [SPAREN_SOPHIA]))
+  })
+})
+
+describe('tagFilterTotal()', () => {
+  const AUSSENSTAENDE = 'aussenstaende'
+
+  it('a loan tag nets to zero once fully repaid — the case that motivated this function (a plain signed-line sum would always be zero-by-construction, hiding a real open balance)', () => {
+    const lent = {
+      date: '2026-01-01',
+      fromAccountId: 'bnp-konto',
+      toAccountId: AUSSENSTAENDE,
+      amountCents: 5000,
+      lines: [{ amountCents: 5000, categoryId: null, note: '', tags: ['dirk'] }],
+    }
+    const repaid = {
+      date: '2026-02-01',
+      fromAccountId: AUSSENSTAENDE,
+      toAccountId: 'bnp-konto',
+      amountCents: 5000,
+      lines: [{ amountCents: 5000, categoryId: null, note: '', tags: ['dirk'] }],
+    }
+    expect(tagFilterTotal('dirk', '2026-01-15', [lent], AUSSENSTAENDE)).toBe(5000)
+    expect(tagFilterTotal('dirk', '2026-12-31', [lent, repaid], AUSSENSTAENDE)).toBe(0)
+  })
+
+  it('a partial repayment shows the real remaining amount owed', () => {
+    const lent = {
+      date: '2026-01-01',
+      fromAccountId: 'bnp-konto',
+      toAccountId: AUSSENSTAENDE,
+      amountCents: 5000,
+      lines: [{ amountCents: 5000, categoryId: null, note: '', tags: ['dirk'] }],
+    }
+    const partial = {
+      date: '2026-02-01',
+      fromAccountId: AUSSENSTAENDE,
+      toAccountId: 'bnp-konto',
+      amountCents: 2000,
+      lines: [{ amountCents: 2000, categoryId: null, note: '', tags: ['dirk'] }],
+    }
+    expect(tagFilterTotal('dirk', '2026-12-31', [lent, partial], AUSSENSTAENDE)).toBe(3000)
+  })
+
+  it('a genuinely single-sided expense line contributes its own natural sign (the trip/expense-tag case, e.g. Schottland:Ausgaben)', () => {
+    const hotel = {
+      date: '2026-06-01',
+      fromAccountId: 'bnp-konto',
+      toAccountId: null,
+      amountCents: -30000,
+      lines: [{ amountCents: -30000, categoryId: null, note: '', tags: ['schottland-ausgaben'] }],
+    }
+    const refund = {
+      date: '2026-06-05',
+      fromAccountId: null,
+      toAccountId: 'bnp-konto',
+      amountCents: 5000,
+      lines: [{ amountCents: 5000, categoryId: null, note: '', tags: ['schottland-ausgaben'] }],
+    }
+    expect(tagFilterTotal('schottland-ausgaben', '2026-12-31', [hotel, refund], AUSSENSTAENDE)).toBe(-25000)
+  })
+
+  it('excludes a transfer between two other real accounts entirely, even if tagged', () => {
+    const internal = {
+      date: '2026-03-01',
+      fromAccountId: 'bnp-konto',
+      toAccountId: 'livret-a-sparen',
+      amountCents: 10000,
+      lines: [{ amountCents: 10000, categoryId: null, note: '', tags: ['schottland'] }],
+    }
+    expect(tagFilterTotal('schottland', '2026-12-31', [internal], AUSSENSTAENDE)).toBe(0)
+  })
+
+  it('excludes a line dated after asOfDate', () => {
+    const lent = {
+      date: '2026-06-01',
+      fromAccountId: 'bnp-konto',
+      toAccountId: AUSSENSTAENDE,
+      amountCents: 5000,
+      lines: [{ amountCents: 5000, categoryId: null, note: '', tags: ['dirk'] }],
+    }
+    expect(tagFilterTotal('dirk', '2026-01-01', [lent], AUSSENSTAENDE)).toBe(0)
   })
 })
