@@ -1,14 +1,53 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 
-import { tagColorVar } from './lib/tagStyle'
+import { qualifiedTagName, tagColorVar } from './lib/tagStyle'
 
+// German umlauts/ß transliterated before stripping everything else
+// non-alphanumeric — most tag names here are German (Schottland, Käse-
+// style words are routine), and collapsing "ä" etc. straight to a dash
+// produced ugly, hard-to-read ids (caught: "Fähre" -> "f-hre").
 function slugify(name) {
   return (
     name
       .trim()
       .toLowerCase()
+      .replace(/ä/g, 'ae')
+      .replace(/ö/g, 'oe')
+      .replace(/ü/g, 'ue')
+      .replace(/ß/g, 'ss')
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '') || 'tag'
+  )
+}
+
+// A tag chip, colored when its type is determined (allocation, or a
+// grouping tag with a real groupingType) and a plain neutral dashed
+// outline otherwise — covers both a genuine unspecified grouping tag and
+// an unresolved legacy free-text string (no `tag` object at all) with the
+// exact same look, on purpose: from the user's side, "not yet categorized"
+// and "not a real tracked tag at all" read the same until proven
+// otherwise (Markus, real-usage feedback — a colored fill on a brand new
+// unspecified tag looked inconsistent with how an old free-text tag
+// already rendered next to it).
+function Chip({ label, colorVar, onRemove, title }) {
+  return (
+    <span
+      title={title}
+      className={
+        'flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ' +
+        (colorVar ? '' : 'border border-dashed border-[var(--color-text-muted)] text-[var(--color-text-muted)]')
+      }
+      style={
+        colorVar
+          ? { color: `var(${colorVar})`, backgroundColor: `color-mix(in srgb, var(${colorVar}) 15%, transparent)` }
+          : undefined
+      }
+    >
+      {label}
+      <button type="button" onClick={onRemove} className="leading-none">
+        ×
+      </button>
+    </span>
   )
 }
 
@@ -18,24 +57,42 @@ function slugify(name) {
 // "Tag '<text>' erstellen" when nothing matches (grouping-class tags only
 // — allocation tags are fixed/pre-seeded, never created here, per spec's
 // "a deliberate Settings-area action" note). New tags default to
-// `groupingType: null` (spec's own "unspecified" state, shown same gray
-// as statement) — there's no UI here to pick project/statement/claim/
-// claim-category at creation time; logged in DEVLOG as a real open
-// question, not guessed at silently.
+// `groupingType: null` (spec's own "unspecified" state) — there's no UI
+// here to pick project/statement/claim/claim-category at creation time;
+// logged in DEVLOG as a real open question, not guessed at silently.
 //
-// **Backward compatibility with pre-existing free-text tags:** every tag
-// entered before this mechanism existed is a raw string, not a real tag
-// id — Konten.jsx's old placeholder editor just split comma-separated
-// text with no id/collection behind it at all. Those still show up here
-// as plain dashed-border chips (their literal text, unresolved) rather
-// than being silently upgraded into real tag documents — upgrading them
-// automatically, unsupervised, risked creating near-duplicate tags from
-// typos with no one watching. They stay fully editable/removable; turning
-// one into a real tracked tag is a deliberate re-add (remove the old
-// chip, retype the same text, either pick the real tag if one already
-// matches by name or create it).
+// **"Schottland:Fähre" creates/selects a child tag** (spec.md §2.5's
+// `parentTag` hierarchy) — a colon in the typed text splits into
+// parent/child; `onCreateTag` (Konten.jsx) resolves an existing parent by
+// name or creates one, then creates the child under it. Suggestions and
+// the "already exists" check both match against each tag's *qualified*
+// name (parent-prefixed for a child, plain for a top-level tag), so
+// typing a child's bare name or its full "Parent: Child" form both find
+// it.
+//
+// **Suggestions are usage-derived for grouping tags** (Markus, real-usage
+// feedback): browsing with an empty input only offers grouping tags
+// actually used on at least one line somewhere — a tag nobody's tagged
+// anything with in a while doesn't clutter the list — but typing searches
+// the full collection regardless of current usage, so a real but
+// currently-unused tag is still reachable by name rather than becoming a
+// dead end. Allocation tags are exempt from this filter entirely (fixed/
+// structural, always relevant regardless of whether they're used on the
+// row currently being edited). `usedTagValues` (a Set, computed once in
+// Konten.jsx from every line's `tags[]` across all loaded transactions)
+// also drives the other half of this: a value used somewhere that *isn't*
+// a real tag id at all is a pre-existing free-text string (typed before
+// this mechanism existed) — surfaced here as a plain, colorless,
+// selectable suggestion too, not just as a dashed chip once it's already
+// on the current line. Reusing the exact same string keeps Markus's
+// existing trip/claim labels (e.g. an informal loan's own tag) usable
+// without silently forking into a near-duplicate real tag.
+//
+// Fully removable/editable either way; turning a legacy string into a
+// real tracked tag is a deliberate re-add (remove the old chip, retype —
+// matches the real tag by name if one already exists, or creates it).
 const TagEditor = forwardRef(function TagEditor(props, ref) {
-  const { data, tags, initialTagIds = [], onApply, onCreateTag, api } = props
+  const { data, tags, usedTagValues, initialTagIds = [], onApply, onCreateTag, api } = props
   const [selectedIds, setSelectedIds] = useState(initialTagIds)
   const [inputText, setInputText] = useState('')
   const [highlight, setHighlight] = useState(0)
@@ -50,26 +107,42 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
     inputRef.current?.focus()
   }, [])
 
-  const selectedTags = selectedIds.map((id) => tags.find((t) => t.id === id)).filter(Boolean)
-  const legacyRaw = selectedIds.filter((id) => !tags.some((t) => t.id === id))
+  const tagById = useMemo(() => Object.fromEntries(tags.map((t) => [t.id, t])), [tags])
+  const qName = (t) => qualifiedTagName(t, tagById)
+
+  const selectedChips = selectedIds.map((id) => tagById[id] ?? { id, name: id })
+  const legacyCandidates = useMemo(
+    () => [...usedTagValues].filter((v) => !tagById[v]).map((v) => ({ id: v, name: v })),
+    [usedTagValues, tagById],
+  )
 
   // claim-category tags are only ever offered once a claim tag already
   // sits on this same line (spec.md §2.5's UI sequencing rule — Meal/Taxi
   // aren't meaningful outside some specific trip/claim context).
-  const hasClaimTag = selectedIds.some((id) => tags.find((t) => t.id === id)?.groupingType === 'claim')
+  const hasClaimTag = selectedIds.some((id) => tagById[id]?.groupingType === 'claim')
 
   const suggestions = useMemo(() => {
     const text = inputText.trim().toLowerCase()
-    return tags
+    const groupingCandidates =
+      text === '' ? tags.filter((t) => t.class === 'grouping' && usedTagValues.has(t.id)) : tags.filter((t) => t.class === 'grouping')
+    const candidates = [...tags.filter((t) => t.class === 'allocation'), ...groupingCandidates, ...legacyCandidates]
+    return candidates
       .filter((t) => !t.archived)
       .filter((t) => !selectedIds.includes(t.id))
       .filter((t) => t.groupingType !== 'claim-category' || hasClaimTag)
-      .filter((t) => text === '' || t.name.toLowerCase().includes(text))
+      .filter((t) => text === '' || qName(t).toLowerCase().includes(text))
       .slice(0, 25)
-  }, [tags, selectedIds, inputText, hasClaimTag])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- qName closes over tagById, already covered by `tags`
+  }, [tags, legacyCandidates, usedTagValues, selectedIds, inputText, hasClaimTag])
 
+  // Checked against real tags *and* legacy free-text values in current
+  // use (not just `tags`) — otherwise typing a legacy string's exact name
+  // (e.g. "dirk sept") still offered a redundant "create" option right
+  // next to the real matching suggestion for that same string.
   const canCreate =
-    inputText.trim() !== '' && !tags.some((t) => t.name.toLowerCase() === inputText.trim().toLowerCase())
+    inputText.trim() !== '' &&
+    !tags.some((t) => qName(t).toLowerCase() === inputText.trim().toLowerCase()) &&
+    !legacyCandidates.some((t) => t.name.toLowerCase() === inputText.trim().toLowerCase())
   const optionCount = suggestions.length + (canCreate ? 1 : 0)
 
   function selectSuggestion(idx) {
@@ -146,36 +219,16 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
       style={{ minWidth: 280 }}
     >
       <div className="flex flex-wrap gap-1">
-        {selectedTags.map((t) => (
-          <span
+        {selectedChips.map((t) => (
+          <Chip
             key={t.id}
-            className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs"
-            style={{
-              color: `var(${tagColorVar(t)})`,
-              backgroundColor: `color-mix(in srgb, var(${tagColorVar(t)}) 15%, transparent)`,
-            }}
-          >
-            {t.name}
-            <button type="button" onClick={() => removeChip(t.id)} className="leading-none">
-              ×
-            </button>
-          </span>
+            label={qName(t) || t.id}
+            colorVar={tagColorVar(tagById[t.id])}
+            onRemove={() => removeChip(t.id)}
+            title={tagById[t.id] ? undefined : 'Alter Freitext-Tag — noch nicht mit einem echten Tag verknüpft'}
+          />
         ))}
-        {legacyRaw.map((raw) => (
-          <span
-            key={raw}
-            title="Alter Freitext-Tag — noch nicht mit einem echten Tag verknüpft"
-            className="flex items-center gap-1 rounded-full border border-dashed border-[var(--color-text-muted)] px-2 py-0.5 text-xs text-[var(--color-text-muted)]"
-          >
-            {raw}
-            <button type="button" onClick={() => removeChip(raw)} className="leading-none">
-              ×
-            </button>
-          </span>
-        ))}
-        {selectedTags.length === 0 && legacyRaw.length === 0 && (
-          <span className="text-xs text-[var(--color-text-muted)]">Keine Tags</span>
-        )}
+        {selectedChips.length === 0 && <span className="text-xs text-[var(--color-text-muted)]">Keine Tags</span>}
       </div>
       <input
         ref={inputRef}
@@ -185,29 +238,35 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
           setInputText(e.target.value)
           setHighlight(0)
         }}
-        placeholder="Tag suchen oder neu erstellen…"
+        placeholder="Tag suchen oder neu erstellen… (z.B. Schottland:Fähre)"
         className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-sm"
       />
       {(suggestions.length > 0 || canCreate) && (
         <ul className="max-h-48 overflow-auto rounded border border-[var(--color-border)] text-sm">
-          {suggestions.map((t, idx) => (
-            <li key={t.id}>
-              <button
-                type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault()
-                  selectSuggestion(idx)
-                }}
-                className={
-                  'flex w-full items-center gap-2 px-2 py-1 text-left ' +
-                  (idx === highlight ? 'bg-[var(--color-computed)] text-white' : 'hover:bg-[var(--color-bg)]')
-                }
-              >
-                <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: `var(${tagColorVar(t)})` }} />
-                {t.name}
-              </button>
-            </li>
-          ))}
+          {suggestions.map((t, idx) => {
+            const colorVar = tagColorVar(t)
+            return (
+              <li key={t.id}>
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    selectSuggestion(idx)
+                  }}
+                  className={
+                    'flex w-full items-center gap-2 px-2 py-1 text-left ' +
+                    (idx === highlight ? 'bg-[var(--color-computed)] text-white' : 'hover:bg-[var(--color-bg)]')
+                  }
+                >
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full border border-[var(--color-text-muted)]"
+                    style={colorVar ? { backgroundColor: `var(${colorVar})`, borderColor: `var(${colorVar})` } : undefined}
+                  />
+                  {qName(t)}
+                </button>
+              </li>
+            )
+          })}
           {canCreate && (
             <li>
               <button

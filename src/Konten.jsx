@@ -9,7 +9,8 @@ import KontoEditor from './KontoEditor'
 import { jahresende } from './lib/balance'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { withRemainder } from './lib/split'
-import { tagColorVar } from './lib/tagStyle'
+import { tagJahresende } from './lib/tagBalance'
+import { qualifiedTagName, tagColorVar } from './lib/tagStyle'
 import TagEditor, { slugify } from './TagEditor'
 
 ModuleRegistry.registerModules([AllCommunityModule])
@@ -325,6 +326,19 @@ export default function Konten() {
   const accountById = useMemo(() => Object.fromEntries(accounts.map((a) => [a.id, a])), [accounts])
   const categoryById = useMemo(() => Object.fromEntries(categories.map((c) => [c.id, c])), [categories])
   const tagById = useMemo(() => Object.fromEntries(tags.map((t) => [t.id, t])), [tags])
+  // Every distinct value (real tag id or legacy free-text string alike —
+  // indistinguishable at the data level) currently sitting in some line's
+  // `tags[]`, across every loaded transaction, any year — not scoped to
+  // the selected year, since a tag used at all should stay reachable.
+  // Drives TagEditor's usage-based suggestion list (Markus, real-usage
+  // feedback): an unused grouping tag doesn't clutter the empty-input
+  // browse view, and a pre-existing free-text string becomes a real
+  // reusable suggestion instead of only ever showing up already-applied.
+  const usedTagValues = useMemo(() => {
+    const set = new Set()
+    transactions.forEach((t) => (t.lines ?? []).forEach((l) => (l.tags ?? []).forEach((v) => set.add(v))))
+    return set
+  }, [transactions])
   const accountName = (id) => accountById[id]?.name ?? id
   const categoryName = (id) => categoryById[id]?.name ?? id
   // Grouping tags only, never allocation (spec.md §2.5: allocation tags
@@ -335,19 +349,39 @@ export default function Konten() {
   // a round trip. Collision-checked against currently-loaded tags (a
   // brand new name colliding with an existing slug, e.g. two different
   // "2026-08" style labels) rather than assumed unique.
-  function createTag(name) {
+  function createPlainTag(name, parentTag) {
     let id = slugify(name)
     if (tags.some((t) => t.id === id)) id = `${id}-${Math.random().toString(36).slice(2, 6)}`
     setDoc(doc(db, 'tags', id), {
       id,
       name,
-      parentTag: null,
+      parentTag,
       class: 'grouping',
       reconciliationTargetAccountIds: [],
       groupingType: null,
       archived: false,
     })
     return id
+  }
+  // "Schottland:Fähre" (Markus) creates/reuses a parent tag and a real
+  // child under it (spec.md §2.5's parentTag hierarchy) — the id actually
+  // applied to the line is always the *child's*, never the parent's, per
+  // spec's own breakdown-rollup note ("Real Konten transactions must
+  // still be tagged with the specific child... an untagged child
+  // contributes nothing"). Reuses an existing top-level tag matching the
+  // parent name (case-insensitive) rather than creating a duplicate
+  // "Schottland" every time a new child is added under it.
+  function createTag(name) {
+    const colon = name.indexOf(':')
+    if (colon === -1) return createPlainTag(name, null)
+    const parentName = name.slice(0, colon).trim()
+    const childName = name.slice(colon + 1).trim()
+    if (!parentName || !childName) return createPlainTag(name, null)
+    const existingParent = tags.find(
+      (t) => t.class === 'grouping' && !t.parentTag && t.name.toLowerCase() === parentName.toLowerCase(),
+    )
+    const parentId = existingParent ? existingParent.id : createPlainTag(parentName, null)
+    return createPlainTag(childName, parentId)
   }
   // Kategorie (the parent group, e.g. "Lebenshaltung") is derived/display
   // only — only the leaf Unterkategorie is ever stored (spec.md §2.6/§3a).
@@ -399,7 +433,7 @@ export default function Konten() {
   // pre-tag-mechanism free-text entry that doesn't resolve to any real
   // tag id (TagEditor's own note on this has the full explanation).
   const tagsValue = (t) =>
-    [...new Set((t.lines ?? []).flatMap((l) => l.tags ?? []))].map((id) => tagById[id]?.name ?? id).join(', ')
+    [...new Set((t.lines ?? []).flatMap((l) => l.tags ?? []))].map((id) => qualifiedTagName(tagById[id], tagById) || id).join(', ')
   const tagIdsValue = (t) => [...new Set((t.lines ?? []).flatMap((l) => l.tags ?? []))]
 
   // Persists, then defers to the same pendingFocusIdRef/rows effect addRow
@@ -1198,29 +1232,35 @@ export default function Konten() {
         // the plain array AG Grid actually hands the cellRenderer.
         valueGetter: (p) => (p.data.__isLine ? (p.data.__parent.lines[p.data.__lineIndex]?.tags ?? []) : tagIdsValue(p.data)),
         comparator: glueToParent(tagsValue),
+        // Colored fill only for a tag with a determined type (allocation,
+        // or a grouping tag with a real groupingType); a plain dashed
+        // outline for an unspecified grouping tag *and* an unresolved
+        // legacy free-text string alike — same neutral chip either way
+        // (Markus, real-usage feedback: a colored "unspecified" tag looked
+        // inconsistent right next to an old free-text one). h-full +
+        // items-center vertically centers the chip row within the cell
+        // (Markus) — AG Grid's own cell wrapper doesn't do this by default
+        // for a multi-line-capable custom renderer like this one.
         cellRenderer: (p) => {
           const ids = p.value ?? []
           if (ids.length === 0) return null
           return (
-            <div className="flex flex-wrap gap-1 py-0.5">
+            <div className="flex h-full flex-wrap content-center items-center gap-1 py-0.5">
               {ids.map((id) => {
                 const t = tagById[id]
                 const colorVar = tagColorVar(t)
                 return (
                   <span
                     key={id}
-                    className={'rounded-full px-1.5 py-0.5 text-xs ' + (t ? '' : 'border border-dashed border-[var(--color-text-muted)]')}
+                    className={'rounded-full px-1.5 py-0.5 text-xs ' + (colorVar ? '' : 'border border-dashed border-[var(--color-text-muted)] text-[var(--color-text-muted)]')}
                     style={
-                      t
-                        ? {
-                            color: `var(${colorVar})`,
-                            backgroundColor: `color-mix(in srgb, var(${colorVar}) 15%, transparent)`,
-                          }
+                      colorVar
+                        ? { color: `var(${colorVar})`, backgroundColor: `color-mix(in srgb, var(${colorVar}) 15%, transparent)` }
                         : undefined
                     }
                     title={t ? undefined : 'Alter Freitext-Tag — noch nicht mit einem echten Tag verknüpft'}
                   >
-                    {t?.name ?? id}
+                    {qualifiedTagName(t, tagById) || id}
                   </span>
                 )
               })}
@@ -1235,12 +1275,14 @@ export default function Konten() {
           p.data.__isLine
             ? {
                 tags,
+                usedTagValues,
                 initialTagIds: p.data.__parent.lines[p.data.__lineIndex]?.tags ?? [],
                 onApply: (_data, tagIds) => applyTagsToLine(p.data.__parent, p.data.__lineIndex, tagIds),
                 onCreateTag: createTag,
               }
             : {
                 tags,
+                usedTagValues,
                 initialTagIds: (p.data.lines ?? [])[0]?.tags ?? [],
                 onApply: applyTagsDirect,
                 onCreateTag: createTag,
@@ -1265,7 +1307,10 @@ export default function Konten() {
           return true
         },
         editable: (p) => p.data.__isLine || (p.data.lines ?? []).length <= 1,
-        flex: 1,
+        // Widened (Markus) so two tag chips fit side by side without
+        // immediately wrapping onto a second line for the common case.
+        flex: 1.6,
+        minWidth: 160,
       },
       {
         headerName: '',
@@ -1310,22 +1355,36 @@ export default function Konten() {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps -- accountName/categoryName/groupName/ensureLine/handleDeleteClick/toggleExpanded/createTag close over these
-    [accountById, categoryById, tagById, accountFilter, accounts, categories, tags, confirmDeleteId, year, expandedIds],
+    [accountById, categoryById, tagById, usedTagValues, accountFilter, accounts, categories, tags, confirmDeleteId, year, expandedIds],
   )
 
   const panel = useMemo(() => {
     if (!year) return []
     return REPORTING_GROUPS.map((group) => {
       const groupAccounts = accounts.filter((a) => a.reportingGroup === group && a.tracked !== false)
+      const groupAccountIds = new Set(groupAccounts.map((a) => a.id))
       const items = groupAccounts.map((a) => ({
         id: a.id,
         name: a.name,
         cents: jahresende(a.id, Number(year), transactions),
       }))
       const total = items.reduce((sum, i) => sum + i.cents, 0)
-      return { group, items, total }
+      // Allocation-tag reconciliation, surfaced here per spec.md §3a's own
+      // "Live consistency checks" note ("should surface here, since
+      // Konten's pinned header is one of the natural places for always-on
+      // reconciliation to live") — Markus asked to see these directly,
+      // not just trust the invariant holds invisibly. A tag whose targets
+      // span more than one reportingGroup (none currently do) would show
+      // under each group it touches; Anlage Familie/Sophia (targeting all
+      // four Geldanlage accounts as one combined pool, §2.5) show once,
+      // under Geldanlage, not once per account.
+      const tagItems = tags
+        .filter((t) => t.class === 'allocation')
+        .filter((t) => (t.reconciliationTargetAccountIds ?? []).some((id) => groupAccountIds.has(id)))
+        .map((t) => ({ id: t.id, name: t.name, cents: tagJahresende(t.id, Number(year), transactions, tags), tag: t }))
+      return { group, items, total, tagItems }
     })
-  }, [accounts, transactions, year])
+  }, [accounts, transactions, tags, year])
 
   const stillLoading = !(loaded.accounts && loaded.categories && loaded.tags && loaded.transactions)
 
@@ -1417,7 +1476,7 @@ export default function Konten() {
           balance for that account/year. Each account is also a shortcut
           into the account filter above. */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {panel.map(({ group, items, total }) => (
+        {panel.map(({ group, items, total, tagItems }) => (
           <div key={group} data-group={group} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
             <div className="mb-1 flex items-baseline justify-between">
               {/* The group heading itself is a shortcut back to "Alle
@@ -1494,6 +1553,26 @@ export default function Konten() {
                 </li>
               ))}
             </ul>
+            {/* Allocation tags reconciling against this group's account(s)
+                (Markus) — read-only rows, not another account-filter
+                shortcut: a tag id isn't a valid accountFilter value, so
+                these deliberately don't reuse the account buttons' onClick/
+                keyboard handling above. Colored per the tag's own design
+                (tagColorVar — purple, §1b.4/§2.5), same helper the Tags
+                column itself uses. */}
+            {tagItems.length > 0 && (
+              <ul className="mt-1 flex flex-col gap-0.5 border-t border-[var(--color-border)] pt-1 text-xs">
+                {tagItems.map((i) => {
+                  const colorVar = tagColorVar(i.tag)
+                  return (
+                    <li key={i.id} className="flex justify-between gap-2 px-1" style={colorVar ? { color: `var(${colorVar})` } : undefined}>
+                      <span>{i.name}</span>
+                      <span className="tabular-figure">{centsToEuro(i.cents)} €</span>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
           </div>
         ))}
       </div>
