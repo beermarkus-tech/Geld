@@ -745,3 +745,15 @@ Two real design conversations, both thought through with Markus *before* any cod
 `npm run build`, `npm test` (29 passing), `npm run lint` all clean before pushing.
 
 **Next session should probably:** decide with Markus how to actually perform the account migration, then do it; after that, confirm the panel/toolbar both come alive correctly against his real data. Worth also asking whether he wants a bulk-edit tool built now (it would directly solve this migration) or whether a one-off script is preferred instead.
+
+## Session 35, continued a seventh time — 2026-09-25 — Migration confirmed done; seed file cleaned up
+
+Markus: "transactions cleaned" — he's created the real `aussenstaende` account and reassigned every historical Amazon/loan transaction onto it himself, directly in Firestore (no access from this session, same as always; this was entirely his own action). The pinned panel's dynamic open-claim rows and the toolbar's "Summe" readout (built earlier tonight) should now actually have real data to show.
+
+**Follow-up cleanup, done alongside confirming this:** `migration/seed/accounts.json` — the five superseded accounts (`amazon-julia-de`/`-fr`, `amazon-markus-de`/`-fr`, `geld-verliehen-geliehen`) removed outright rather than left as `tracked: false`. Reasoning: now that they're genuinely gone from live Firestore too (see below), leaving them in the seed file even as inert placeholders was a real, specific risk — a future `ImportScreen` re-run (kept around exactly for "loading more data the same way," per Session 3) upserts every account in the file every time, so a stale entry would have silently recreated a deleted account. spec.md's accounts table (§2.2) and the `reportingGroup` definition (§2.2) updated to match — no more "superseded, kept" language, just gone.
+
+**Next: walking Markus through actually deleting the five old account *documents* from Firestore itself** (the seed file change above doesn't touch live data at all — it only affects a future re-import). Per CLAUDE.md's infrastructure-guidance principle, done step by step in conversation.
+
+`npm run build`, `npm test` (still 29), `npm run lint` all clean before pushing.
+
+**Next session should probably:** confirm with Markus that the Firestore account documents are actually deleted (not just the seed file), and that the pinned panel now correctly shows his real open claims (Dirk, Amazon, Zalando, etc.) with the right totals.
