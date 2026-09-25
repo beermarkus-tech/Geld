@@ -1146,7 +1146,7 @@ export default function Konten() {
         cellClass: (p) => (p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined),
         editable: (p) => !p.data.__isLine,
         cellEditor: KontoEditor,
-        cellEditorParams: { accounts, onApply: applyKontoDirect },
+        cellEditorParams: { accounts, filteredAccountId, onApply: applyKontoDirect },
         cellEditorPopup: true,
         flex: 1.6,
       },

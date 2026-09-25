@@ -74,6 +74,26 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
     }
   }, [startField])
 
+  // Escape cancels outright, discarding whatever's mid-edit (Markus) —
+  // capture phase, not a plain React onKeyDown, for the same reason
+  // KontoEditor.jsx's own Escape fix exists (its comment has the full
+  // explanation): AG Grid's PopupEditorWrapper attaches a native keydown
+  // listener on the popup wrapper itself, and a nested Listbox also claims
+  // Escape natively while its own list is open (to close just that list) —
+  // capture phase runs before either of those, so this always gets first
+  // refusal and a single Escape closes the whole popup immediately, not
+  // just whichever Listbox happened to still be open.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      e.stopPropagation()
+      api.stopEditing(true)
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [api])
+
   // Takes an optional override for the just-committed Unterkategorie
   // value, for the same reason as KontoEditor.jsx's apply(): Listbox's
   // Enter-to-apply fires synchronously right after its own onChange, before
