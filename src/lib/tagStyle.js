@@ -27,6 +27,14 @@ export function tagColorVar(tag) {
   }
 }
 
+// The parent tag object for a child (spec.md §2.5's parentTag hierarchy),
+// or null for a top-level tag — shared by qualifiedTagName() below and the
+// Tags column's own two-part chip split (Konten.jsx), so both agree on
+// what counts as "has a parent" without duplicating the lookup.
+export function tagParent(tag, tagById) {
+  return tag?.parentTag ? tagById[tag.parentTag] : null
+}
+
 // "Fähre" -> "Schottland: Fähre" for a child tag (spec.md §2.5's
 // parentTag hierarchy, e.g. Hotels/Flüge/Auto as real children of a trip
 // tag like Schottland) — a top-level tag's own name, unqualified, is
@@ -34,6 +42,6 @@ export function tagColorVar(tag) {
 // Konten.jsx already keeps.
 export function qualifiedTagName(tag, tagById) {
   if (!tag) return ''
-  const parent = tag.parentTag ? tagById[tag.parentTag] : null
+  const parent = tagParent(tag, tagById)
   return parent ? `${parent.name}: ${tag.name}` : tag.name
 }

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import { tagBalance, tagFilterTotal, tagJahresende } from './tagBalance'
 
+const NO_TAGS = []
+
 // Synthetic fixtures only — same standing privacy rule as balance.test.js.
 
 const SPAREN_SOPHIA = { id: 'sparen-sophia', reconciliationTargetAccountIds: ['livret-a-sparen'] }
@@ -158,8 +160,8 @@ describe('tagFilterTotal()', () => {
       amountCents: 5000,
       lines: [{ amountCents: 5000, categoryId: null, note: '', tags: ['dirk'] }],
     }
-    expect(tagFilterTotal('dirk', '2026-01-15', [lent], AUSSENSTAENDE)).toBe(5000)
-    expect(tagFilterTotal('dirk', '2026-12-31', [lent, repaid], AUSSENSTAENDE)).toBe(0)
+    expect(tagFilterTotal('dirk', '2026-01-15', [lent], AUSSENSTAENDE, NO_TAGS)).toBe(5000)
+    expect(tagFilterTotal('dirk', '2026-12-31', [lent, repaid], AUSSENSTAENDE, NO_TAGS)).toBe(0)
   })
 
   it('a partial repayment shows the real remaining amount owed', () => {
@@ -177,7 +179,7 @@ describe('tagFilterTotal()', () => {
       amountCents: 2000,
       lines: [{ amountCents: 2000, categoryId: null, note: '', tags: ['dirk'] }],
     }
-    expect(tagFilterTotal('dirk', '2026-12-31', [lent, partial], AUSSENSTAENDE)).toBe(3000)
+    expect(tagFilterTotal('dirk', '2026-12-31', [lent, partial], AUSSENSTAENDE, NO_TAGS)).toBe(3000)
   })
 
   it('a genuinely single-sided expense line contributes its own natural sign (the trip/expense-tag case, e.g. Schottland:Ausgaben)', () => {
@@ -195,7 +197,7 @@ describe('tagFilterTotal()', () => {
       amountCents: 5000,
       lines: [{ amountCents: 5000, categoryId: null, note: '', tags: ['schottland-ausgaben'] }],
     }
-    expect(tagFilterTotal('schottland-ausgaben', '2026-12-31', [hotel, refund], AUSSENSTAENDE)).toBe(-25000)
+    expect(tagFilterTotal('schottland-ausgaben', '2026-12-31', [hotel, refund], AUSSENSTAENDE, NO_TAGS)).toBe(-25000)
   })
 
   it('excludes a transfer between two other real accounts entirely, even if tagged', () => {
@@ -206,7 +208,7 @@ describe('tagFilterTotal()', () => {
       amountCents: 10000,
       lines: [{ amountCents: 10000, categoryId: null, note: '', tags: ['schottland'] }],
     }
-    expect(tagFilterTotal('schottland', '2026-12-31', [internal], AUSSENSTAENDE)).toBe(0)
+    expect(tagFilterTotal('schottland', '2026-12-31', [internal], AUSSENSTAENDE, NO_TAGS)).toBe(0)
   })
 
   it('excludes a line dated after asOfDate', () => {
@@ -217,6 +219,62 @@ describe('tagFilterTotal()', () => {
       amountCents: 5000,
       lines: [{ amountCents: 5000, categoryId: null, note: '', tags: ['dirk'] }],
     }
-    expect(tagFilterTotal('dirk', '2026-01-01', [lent], AUSSENSTAENDE)).toBe(0)
+    expect(tagFilterTotal('dirk', '2026-01-01', [lent], AUSSENSTAENDE, NO_TAGS)).toBe(0)
+  })
+
+  it('filtering by a parent tag rolls up every direct child (Markus: "filter for the parent tag, too... show the total: Schottland in Schottland:Whatever")', () => {
+    const SCHOTTLAND_TAGS = [
+      { id: 'schottland', parentTag: null },
+      { id: 'schottland-fahre', parentTag: 'schottland' },
+      { id: 'schottland-ausgaben', parentTag: 'schottland' },
+    ]
+    const ferry = {
+      date: '2026-06-01',
+      fromAccountId: 'bnp-konto',
+      toAccountId: null,
+      amountCents: -5000,
+      lines: [{ amountCents: -5000, categoryId: null, note: '', tags: ['schottland-fahre'] }],
+    }
+    const hotel = {
+      date: '2026-06-02',
+      fromAccountId: 'bnp-konto',
+      toAccountId: null,
+      amountCents: -30000,
+      lines: [{ amountCents: -30000, categoryId: null, note: '', tags: ['schottland-ausgaben'] }],
+    }
+    const untaggedChild = {
+      date: '2026-06-03',
+      fromAccountId: 'bnp-konto',
+      toAccountId: null,
+      amountCents: -1000,
+      lines: [{ amountCents: -1000, categoryId: null, note: '', tags: ['dirk'] }],
+    }
+    expect(
+      tagFilterTotal('schottland', '2026-12-31', [ferry, hotel, untaggedChild], AUSSENSTAENDE, SCHOTTLAND_TAGS),
+    ).toBe(-35000)
+    // Filtering by the child alone still only sees its own line, unchanged.
+    expect(tagFilterTotal('schottland-fahre', '2026-12-31', [ferry, hotel], AUSSENSTAENDE, SCHOTTLAND_TAGS)).toBe(-5000)
+  })
+
+  it('a line tagged with the bare parent directly (not broken into a child) still counts toward the parent\'s rolled-up total', () => {
+    const SCHOTTLAND_TAGS = [
+      { id: 'schottland', parentTag: null },
+      { id: 'schottland-fahre', parentTag: 'schottland' },
+    ]
+    const untypedDay = {
+      date: '2026-06-01',
+      fromAccountId: 'bnp-konto',
+      toAccountId: null,
+      amountCents: -2000,
+      lines: [{ amountCents: -2000, categoryId: null, note: '', tags: ['schottland'] }],
+    }
+    const ferry = {
+      date: '2026-06-02',
+      fromAccountId: 'bnp-konto',
+      toAccountId: null,
+      amountCents: -5000,
+      lines: [{ amountCents: -5000, categoryId: null, note: '', tags: ['schottland-fahre'] }],
+    }
+    expect(tagFilterTotal('schottland', '2026-12-31', [untypedDay, ferry], AUSSENSTAENDE, SCHOTTLAND_TAGS)).toBe(-7000)
   })
 })

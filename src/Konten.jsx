@@ -9,8 +9,8 @@ import KontoEditor from './KontoEditor'
 import { jahresende } from './lib/balance'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { withRemainder } from './lib/split'
-import { tagFilterTotal, tagJahresende } from './lib/tagBalance'
-import { qualifiedTagName, tagColorVar } from './lib/tagStyle'
+import { tagFilterMatchIds, tagFilterTotal, tagJahresende } from './lib/tagBalance'
+import { qualifiedTagName, tagColorVar, tagParent } from './lib/tagStyle'
 import TagEditor, { slugify } from './TagEditor'
 
 ModuleRegistry.registerModules([AllCommunityModule])
@@ -805,7 +805,14 @@ export default function Konten() {
       if (accountFilter && !filteredAccountId) {
         const t = tagById[accountFilter]
         const label = t ? qualifiedTagName(t, tagById) : accountFilter
-        await api.setColumnFilterModel('tags', { filterType: 'text', type: 'equals', filter: label })
+        // 'contains', not 'equals' — a parent-tag filter (Markus) shows a
+        // label like "Schottland", which needs to match a row's own text
+        // like "Schottland: Fähre" rather than the whole cell text, and a
+        // row carrying more than one tag already renders as a joined
+        // "TagA, TagB" list that 'equals' could never match either way;
+        // `rows` above is what actually decides inclusion — this is only
+        // for the header filter icon/box to visibly agree with it.
+        await api.setColumnFilterModel('tags', { filterType: 'text', type: 'contains', filter: label })
       } else {
         await api.setColumnFilterModel('tags', null)
       }
@@ -818,22 +825,26 @@ export default function Konten() {
 
   const rows = useMemo(() => {
     if (!year) return []
+    // A tag filter's own match set — the filtered tag itself plus every
+    // *direct* child under it (Markus: filtering by a parent like
+    // "Schottland" should also catch "Schottland: Fähre" etc., not just
+    // lines tagged with the bare parent) — shared with tagFilterTotal via
+    // tagFilterMatchIds() so the row filter and the toolbar's own total
+    // can't quietly disagree on what counts as a match.
+    const tagMatchIds = accountFilter && !filteredAccountId ? tagFilterMatchIds(accountFilter, tags) : null
     return transactions
       .filter((t) => t.date.startsWith(year))
       .filter((t) => {
         if (!accountFilter) return true
-        // A tag filter (the pinned panel's allocation-tag rows, Markus)
-        // matches any transaction with at least one line carrying it —
-        // an account filter matches by fromAccountId/toAccountId as
-        // before. filteredAccountId can't be used here: it's deliberately
-        // null for a tag filter (see its own comment), which is exactly
-        // the case this needs to still match rows for.
+        // filteredAccountId can't be used here: it's deliberately null for
+        // a tag filter (see its own comment), which is exactly the case
+        // this needs to still match rows for.
         if (filteredAccountId) return t.fromAccountId === filteredAccountId || t.toAccountId === filteredAccountId
-        return (t.lines ?? []).some((l) => (l.tags ?? []).includes(accountFilter))
+        return (t.lines ?? []).some((l) => (l.tags ?? []).some((id) => tagMatchIds.has(id)))
       })
       .slice()
       .sort((a, b) => (a.date === b.date ? a.id.localeCompare(b.id) : a.date.localeCompare(b.date)))
-  }, [transactions, year, accountFilter, filteredAccountId])
+  }, [transactions, year, accountFilter, filteredAccountId, tags])
 
   // Once a pending row (addRow's new row, or a just-edited row that may
   // have moved) actually settles into `rows` — via the Firestore
@@ -1425,6 +1436,55 @@ export default function Konten() {
               {ids.map((id) => {
                 const t = tagById[id]
                 const colorVar = tagColorVar(t)
+                const chipClassName =
+                  'rounded-full px-1.5 py-0.5 text-xs ' +
+                  (colorVar ? '' : 'border border-dashed border-[var(--color-text-muted)] text-[var(--color-text-muted)]')
+                const chipStyle = colorVar
+                  ? { color: `var(${colorVar})`, backgroundColor: `color-mix(in srgb, var(${colorVar}) 15%, transparent)` }
+                  : undefined
+                const parent = tagParent(t, tagById)
+                // A child tag ("Schottland: Fähre") splits into two
+                // independently clickable halves (Markus: "I need to be
+                // able to filter for the parent tag, too, and show the
+                // total"). Clicking "Schottland" filters/sums the parent —
+                // itself plus every direct child, via tagFilterMatchIds —
+                // clicking "Fähre" still filters just that one child,
+                // unchanged. The outer pill is a <span>, not a <button>
+                // (two real buttons live inside it), same colored/dashed
+                // treatment as a plain single-tag chip.
+                if (parent) {
+                  return (
+                    <span key={id} className={chipClassName} style={chipStyle} title="Klicken zum Filtern">
+                      <button
+                        type="button"
+                        ref={(el) => {
+                          if (!el) return
+                          el.onclick = (e) => {
+                            e.stopPropagation()
+                            setAccountFilter(parent.id)
+                          }
+                        }}
+                        className="cursor-pointer hover:underline"
+                      >
+                        {parent.name}
+                      </button>
+                      {': '}
+                      <button
+                        type="button"
+                        ref={(el) => {
+                          if (!el) return
+                          el.onclick = (e) => {
+                            e.stopPropagation()
+                            setAccountFilter(id)
+                          }
+                        }}
+                        className="cursor-pointer hover:underline"
+                      >
+                        {t.name}
+                      </button>
+                    </span>
+                  )
+                }
                 return (
                   <button
                     key={id}
@@ -1436,15 +1496,8 @@ export default function Konten() {
                         setAccountFilter(id)
                       }
                     }}
-                    className={
-                      'rounded-full px-1.5 py-0.5 text-xs hover:opacity-75 ' +
-                      (colorVar ? '' : 'border border-dashed border-[var(--color-text-muted)] text-[var(--color-text-muted)]')
-                    }
-                    style={
-                      colorVar
-                        ? { color: `var(${colorVar})`, backgroundColor: `color-mix(in srgb, var(${colorVar}) 15%, transparent)` }
-                        : undefined
-                    }
+                    className={chipClassName + ' hover:opacity-75'}
+                    style={chipStyle}
                     title={(t ? '' : 'Alter Freitext-Tag — noch nicht mit einem echten Tag verknüpft. ') + 'Klicken zum Filtern'}
                   >
                     {qualifiedTagName(t, tagById) || id}
@@ -1591,7 +1644,7 @@ export default function Konten() {
           .map((tagId) => ({
             id: tagId,
             name: tagById[tagId]?.name ?? tagId,
-            cents: tagFilterTotal(tagId, `${year}-12-31`, transactions, AUSSENSTAENDE_ACCOUNT_ID),
+            cents: tagFilterTotal(tagId, `${year}-12-31`, transactions, AUSSENSTAENDE_ACCOUNT_ID, tags),
             tag: tagById[tagId],
           }))
           .filter((i) => i.cents !== 0)
@@ -1630,7 +1683,7 @@ export default function Konten() {
     accountFilter && !filteredAccountId
       ? filteredTagForSum?.class === 'allocation'
         ? tagJahresende(accountFilter, Number(year), transactions, tags)
-        : tagFilterTotal(accountFilter, `${year}-12-31`, transactions, AUSSENSTAENDE_ACCOUNT_ID)
+        : tagFilterTotal(accountFilter, `${year}-12-31`, transactions, AUSSENSTAENDE_ACCOUNT_ID, tags)
       : null
 
   return (

@@ -90,16 +90,38 @@ export function tagJahresende(tagId, year, transactions, tags) {
 // account), so there's nothing to configure per tag the way allocation
 // tags need.
 //
+// Filtering/summing by a *parent* tag (Markus, Sept 2026 — "I need to be
+// able to filter for the parent tag, too, and show the total: Schottland
+// in Schottland:Whatever") rolls up every direct child alongside the
+// parent itself — only a child id is ever actually applied to a line
+// (Konten.jsx's own createTag comment), so matching the parent id alone
+// would silently match nothing for a transaction tagged only with a
+// child. tagFilterMatchIds() below is the shared "which ids count as this
+// filter" set, used here and by Konten.jsx's own row-level tag filter so
+// the two can't drift apart.
+//
+// @param {string} tagId
+// @param {Array<{id: string, parentTag?: string|null}>} tags
+export function tagFilterMatchIds(tagId, tags) {
+  const ids = new Set([tagId])
+  for (const t of tags) {
+    if (t.parentTag === tagId) ids.add(t.id)
+  }
+  return ids
+}
+
 // @param {string} tagId
 // @param {string} asOfDate  "YYYY-MM-DD"
 // @param {Array} transactions
 // @param {string} aussenstaendeAccountId
-export function tagFilterTotal(tagId, asOfDate, transactions, aussenstaendeAccountId) {
+// @param {Array} tags
+export function tagFilterTotal(tagId, asOfDate, transactions, aussenstaendeAccountId, tags) {
+  const matchIds = tagFilterMatchIds(tagId, tags)
   let total = 0
   for (const tx of transactions) {
     if (tx.date > asOfDate) continue
     for (const line of tx.lines ?? []) {
-      if (!(line.tags ?? []).includes(tagId)) continue
+      if (!(line.tags ?? []).some((id) => matchIds.has(id))) continue
       if (tx.fromAccountId === aussenstaendeAccountId) total -= line.amountCents
       else if (tx.toAccountId === aussenstaendeAccountId) total += line.amountCents
       else if (!tx.fromAccountId || !tx.toAccountId) total += line.amountCents

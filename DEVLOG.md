@@ -771,3 +771,19 @@ Markus, two requests together: "when i have an account filter selected (Gegenkon
 `npm run build`, `npm test` (still 29), `npm run lint` all clean before pushing.
 
 **Next session should probably:** nothing specific pending from this round — same open item as the last several entries (confirming the Außenstände migration and panel against Markus's real Firestore data).
+
+## Session 35, continued a ninth time — 2026-09-25 — Filtering/summing by a parent tag rolls up its children
+
+Markus: "I need to be able to filter for the parent tag, too, and show the total: Schottland in Schottland:Whatever. any idea how to smartly do that?" — an exploratory question, answered with a short proposal before any code (same pattern as this session's other design conversations), confirmed with a plain "great!".
+
+**The idea:** only a *child* tag id is ever actually applied to a line ("Schottland:Fähre" creates/reuses a real "Schottland" parent tag and a real "Fähre" child, but the line only ever gets the child's id — `createTag()`'s own long-standing comment). So filtering by the bare parent needs to mean "this tag itself, plus every direct child" — not a literal id match, which would just silently match nothing. Built as a new shared helper, `tagFilterMatchIds(tagId, tags)` (`src/lib/tagBalance.js`) — returns the parent's own id plus every tag whose `parentTag` equals it (one level deep, matching the app's actual hierarchy). Used in exactly two places so the grid and the total can't disagree: `Konten.jsx`'s `rows` filter predicate (now checks against this id set instead of one literal id), and `tagFilterTotal()` itself, which gained a trailing `tags` parameter to build the same set internally.
+
+**How you actually invoke it, in the UI:** a child tag's chip in the Tags column ("Schottland: Fähre") now splits into two independently clickable halves instead of one — clicking "Schottland" filters/sums the parent (the rollup above), clicking "Fähre" still filters just that one child, unchanged. No new dropdown or button — reuses the exact click-to-filter gesture already there. A plain tag with no parent still renders and behaves as one single chip. New `tagParent(tag, tagById)` in `src/lib/tagStyle.js`, factored out of the existing `qualifiedTagName()` so the chip-split decision and the display-name logic can't quietly disagree about what counts as "has a parent."
+
+**One more fix needed for this to actually work end to end:** the grid's own Tags column header filter — kept in sync with whatever tag is currently selected, purely so the filter icon/box visibly agrees — was using an `'equals'` match against the tag's full qualified name. Filtering by "Schottland" (the parent) produces exactly that label, which would never `'equals'` a row's own text "Schottland: Fähre". Switched to `'contains'`. `rows` itself is what actually decides which rows show; this only keeps the header filter's own display consistent with it — as a side effect this also quietly fixes a pre-existing gap where a row carrying more than one tag could never have matched `'equals'` at all.
+
+**Tests:** 2 new cases in `tagBalance.test.js` (a parent tag rolling up two children's separate lines into one total; a line tagged with the bare parent directly still counting toward that total) — 31 passing total, up from 29. Verified the actual click behavior (parent-half vs. child-half vs. a plain no-parent chip, each setting the right filter id) via a disposable Playwright harness, deleted before commit — same standard practice this session for anything touching the chip-click native-listener mechanism.
+
+`npm run build`, `npm test` (31), `npm run lint` all clean before pushing.
+
+**Next session should probably:** same standing open item as the last several entries — confirming the Außenstände migration and panel against Markus's real Firestore data. Nothing new pending from this round.
