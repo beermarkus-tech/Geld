@@ -107,6 +107,20 @@ function persistTx(tx) {
   setDoc(doc(db, 'transactions', next.id), next)
 }
 
+// Soft-delete (spec.md §2.9a's layer 4) — marks `deletedAt` and goes
+// through persistTx like any other edit, rather than an immediate
+// `deleteDoc`. Excluded from every aggregation (`activeTransactions`,
+// Konten.jsx) but still recoverable via the "Kürzlich gelöscht" toggle for
+// roughly a week, until the purge effect below actually removes it.
+function softDeleteTx(tx) {
+  persistTx({ ...tx, deletedAt: Date.now() })
+}
+// Restore just clears deletedAt — a single click, no arm/confirm step
+// (unlike delete), since undoing a delete isn't itself destructive.
+function restoreTx(tx) {
+  persistTx({ ...tx, deletedAt: null })
+}
+
 // Konto's and Kategorie/Unterkategorie's Übernehmen buttons call these
 // directly and persist immediately, rather than going through AG Grid's
 // own getValue()/valueSetter commit pipeline the way every other column
@@ -250,6 +264,10 @@ export default function Konten() {
   // Grid column filter at all. Drives the "Filter zurücksetzen" button
   // below (Markus): visible whenever *either* kind of filter is active.
   const [anyColumnFilter, setAnyColumnFilter] = useState(false)
+  // "Kürzlich gelöscht" toggle (spec.md §2.9a's layer 4), off by default —
+  // switched on, soft-deleted-but-not-yet-purged rows reappear in `rows`
+  // below, visually distinct, each with its own Wiederherstellen action.
+  const [showDeleted, setShowDeleted] = useState(false)
   // Two-click delete: which row (if any) is currently armed, waiting for a
   // second click to actually confirm. See handleDeleteClick below.
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
@@ -354,6 +372,15 @@ export default function Konten() {
   const tagById = useMemo(() => Object.fromEntries(tags.map((t) => [t.id, t])), [tags])
   // Every distinct value (real tag id or legacy free-text string alike —
   // indistinguishable at the data level) currently sitting in some line's
+  // Every real aggregation/suggestion computation below reads this, not
+  // `transactions` directly — a soft-deleted row (spec.md §2.9a's layer 4)
+  // stays in `transactions` (so it can still be found/restored/purged) but
+  // must never count toward a balance, a tag total, or a "this tag is in
+  // use" suggestion. Only `rows` (the grid's own display list, below) ever
+  // reads `transactions` directly instead, since that's the one place a
+  // soft-deleted row is deliberately allowed back into view.
+  const activeTransactions = useMemo(() => transactions.filter((t) => !t.deletedAt), [transactions])
+
   // `tags[]`, across every loaded transaction, any year — not scoped to
   // the selected year, since a tag used at all should stay reachable.
   // Drives TagEditor's usage-based suggestion list (Markus, real-usage
@@ -362,9 +389,9 @@ export default function Konten() {
   // reusable suggestion instead of only ever showing up already-applied.
   const usedTagValues = useMemo(() => {
     const set = new Set()
-    transactions.forEach((t) => (t.lines ?? []).forEach((l) => (l.tags ?? []).forEach((v) => set.add(v))))
+    activeTransactions.forEach((t) => (t.lines ?? []).forEach((l) => (l.tags ?? []).forEach((v) => set.add(v))))
     return set
-  }, [transactions])
+  }, [activeTransactions])
   // Every used value again, ordered by when it was actually *applied* —
   // each transaction's own `updatedAt` (persistTx, above), not its booking
   // `date` (Markus caught this: tagging an old January row today didn't
@@ -379,7 +406,7 @@ export default function Konten() {
   // worth a per-tag timestamp for.
   const recentTagValues = useMemo(() => {
     const lastUsed = new Map()
-    transactions.forEach((t) => {
+    activeTransactions.forEach((t) => {
       const ts = t.updatedAt ?? 0
       ;(t.lines ?? []).forEach((l) =>
         (l.tags ?? []).forEach((v) => {
@@ -388,7 +415,7 @@ export default function Konten() {
       )
     })
     return [...lastUsed.entries()].sort((a, b) => b[1] - a[1]).map(([v]) => v)
-  }, [transactions])
+  }, [activeTransactions])
   const accountName = (id) => accountById[id]?.name ?? id
   const categoryName = (id) => categoryById[id]?.name ?? id
   // Grouping tags only, never allocation (spec.md §2.5: allocation tags
@@ -703,10 +730,7 @@ export default function Konten() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [accountFilter])
 
-  // Two clicks, not a modal (Markus's call) — hard delete for now, not
-  // §2.9a's planned soft-delete-with-recovery-window (that's Phase 1b).
-  // Firestore's Point-in-Time Recovery (enabled since Phase 0, a 7-day
-  // rolling window) is the real safety net behind this until then.
+  // Two clicks, not a modal (Markus's call).
   function armDelete(id) {
     setConfirmDeleteId(id)
     clearTimeout(confirmTimeoutRef.current)
@@ -718,17 +742,20 @@ export default function Konten() {
   // Firestore document of its own to delete (Markus: a breakdown line's
   // trashcan should behave exactly like a transaction's own, arm/confirm/
   // red-tint included, but what "confirm" actually does differs: removeLine
-  // on the parent, not deleteDoc). confirmDeleteId doesn't care whether the
-  // id it's holding belongs to a parent or a line row — it's just "the
-  // currently armed row's own id" either way.
-  async function handleDeleteClick(row) {
+  // on the parent, not a transaction-level delete). confirmDeleteId doesn't
+  // care whether the id it's holding belongs to a parent or a line row —
+  // it's just "the currently armed row's own id" either way. A whole
+  // transaction's own delete is a soft-delete (spec.md §2.9a's layer 4,
+  // softDeleteTx above), not deleteDoc — recoverable via the "Kürzlich
+  // gelöscht" toggle for roughly a week, not gone the instant this confirms.
+  function handleDeleteClick(row) {
     if (confirmDeleteId === row.id) {
       clearTimeout(confirmTimeoutRef.current)
       setConfirmDeleteId(null)
       if (row.__isLine) {
         removeLine(row.__parent, row.__lineIndex)
       } else {
-        await deleteDoc(doc(db, 'transactions', row.id))
+        softDeleteTx(row)
       }
     } else {
       armDelete(row.id)
@@ -758,6 +785,27 @@ export default function Konten() {
   useEffect(() => {
     gridRef.current?.api?.redrawRows()
   }, [confirmDeleteId])
+
+  // The actual purge behind "a short recovery window" (spec.md §2.9a's
+  // layer 4: "recoverable for roughly a week... before an actual purge") —
+  // without this, a soft-deleted row would just sit there forever, which
+  // isn't what "a short recovery window" means. No backend cron exists in
+  // this app (GitHub Pages + Firestore, no server) to run this on a
+  // schedule, so it runs opportunistically instead, whenever transactions
+  // load or change — "roughly a week" doesn't need tighter precision than
+  // that. purgedIdsRef avoids re-issuing a redundant deleteDoc for a row
+  // this effect already purged, while waiting for Firestore's own
+  // onSnapshot to confirm the previous call and drop it from `transactions`.
+  const purgedIdsRef = useRef(new Set())
+  useEffect(() => {
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000
+    transactions.forEach((t) => {
+      if (t.deletedAt && t.deletedAt < cutoff && !purgedIdsRef.current.has(t.id)) {
+        purgedIdsRef.current.add(t.id)
+        deleteDoc(doc(db, 'transactions', t.id))
+      }
+    })
+  }, [transactions])
 
   const years = useMemo(() => {
     const set = new Set(transactions.map((t) => t.date.slice(0, 4)))
@@ -834,6 +882,12 @@ export default function Konten() {
     const tagMatchIds = accountFilter && !filteredAccountId ? tagFilterMatchIds(accountFilter, tags) : null
     return transactions
       .filter((t) => t.date.startsWith(year))
+      // Soft-deleted rows (spec.md §2.9a's layer 4) stay hidden by default,
+      // same as every other view — the "Kürzlich gelöscht" toggle is the
+      // one deliberate exception that lets them back into the grid itself,
+      // visually distinct (below), while still excluded from every
+      // aggregation (activeTransactions, above).
+      .filter((t) => showDeleted || !t.deletedAt)
       .filter((t) => {
         if (!accountFilter) return true
         // filteredAccountId can't be used here: it's deliberately null for
@@ -844,7 +898,7 @@ export default function Konten() {
       })
       .slice()
       .sort((a, b) => (a.date === b.date ? a.id.localeCompare(b.id) : a.date.localeCompare(b.date)))
-  }, [transactions, year, accountFilter, filteredAccountId, tags])
+  }, [transactions, year, accountFilter, filteredAccountId, tags, showDeleted])
 
   // Once a pending row (addRow's new row, or a just-edited row that may
   // have moved) actually settles into `rows` — via the Firestore
@@ -1581,6 +1635,27 @@ export default function Konten() {
         // instant-remove ✕, which is gone now — one consistent delete
         // affordance instead of two with different confirmation behavior).
         cellRenderer: (p) => {
+          // A soft-deleted transaction (spec.md §2.9a's layer 4), visible
+          // only via the "Kürzlich gelöscht" toggle, shows Wiederherstellen
+          // here instead of the trashcan — a single click, no arm/confirm
+          // step, since undoing a delete isn't itself destructive. Never
+          // true for a line row: a line's own removal (removeLine) doesn't
+          // go through deletedAt at all, only a whole transaction does.
+          if (!p.data.__isLine && p.data.deletedAt) {
+            return (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  restoreTx(p.data)
+                }}
+                title="Wiederherstellen"
+                className="w-full rounded px-1 text-xs text-[var(--color-computed)] hover:opacity-75"
+              >
+                ↺
+              </button>
+            )
+          }
           const armed = confirmDeleteId === p.data.id
           return (
             <button
@@ -1615,7 +1690,7 @@ export default function Konten() {
       const items = groupAccounts.map((a) => ({
         id: a.id,
         name: a.name,
-        cents: jahresende(a.id, Number(year), transactions),
+        cents: jahresende(a.id, Number(year), activeTransactions),
       }))
       const total = items.reduce((sum, i) => sum + i.cents, 0)
       // Allocation-tag reconciliation, surfaced here per spec.md §3a's own
@@ -1630,7 +1705,7 @@ export default function Konten() {
       const tagItems = tags
         .filter((t) => t.class === 'allocation')
         .filter((t) => (t.reconciliationTargetAccountIds ?? []).some((id) => groupAccountIds.has(id)))
-        .map((t) => ({ id: t.id, name: t.name, cents: tagJahresende(t.id, Number(year), transactions, tags), tag: t }))
+        .map((t) => ({ id: t.id, name: t.name, cents: tagJahresende(t.id, Number(year), activeTransactions, tags), tag: t }))
       // Open claims/loans on the shared Außenstände account (Markus's
       // design, Sept 2026) — unlike the allocation-tag rows above, there's
       // no stored per-tag target to read (every claim tag here shares the
@@ -1642,7 +1717,7 @@ export default function Konten() {
       // §3a) is exactly "does its total come out to zero."
       if (group === 'Außenstände' && groupAccountIds.has(AUSSENSTAENDE_ACCOUNT_ID)) {
         const candidateTagIds = new Set()
-        transactions.forEach((t) => {
+        activeTransactions.forEach((t) => {
           if (t.fromAccountId === AUSSENSTAENDE_ACCOUNT_ID || t.toAccountId === AUSSENSTAENDE_ACCOUNT_ID) {
             ;(t.lines ?? []).forEach((l) => (l.tags ?? []).forEach((tagId) => candidateTagIds.add(tagId)))
           }
@@ -1651,7 +1726,7 @@ export default function Konten() {
           .map((tagId) => ({
             id: tagId,
             name: tagById[tagId]?.name ?? tagId,
-            cents: tagFilterTotal(tagId, `${year}-12-31`, transactions, AUSSENSTAENDE_ACCOUNT_ID, tags),
+            cents: tagFilterTotal(tagId, `${year}-12-31`, activeTransactions, AUSSENSTAENDE_ACCOUNT_ID, tags),
             tag: tagById[tagId],
           }))
           .filter((i) => i.cents !== 0)
@@ -1659,7 +1734,7 @@ export default function Konten() {
       }
       return { group, items, total, tagItems }
     })
-  }, [accounts, transactions, tags, tagById, year])
+  }, [accounts, activeTransactions, tags, tagById, year])
 
   const stillLoading = !(loaded.accounts && loaded.categories && loaded.tags && loaded.transactions)
 
@@ -1689,8 +1764,8 @@ export default function Konten() {
   const tagFilterSum =
     accountFilter && !filteredAccountId
       ? filteredTagForSum?.class === 'allocation'
-        ? tagJahresende(accountFilter, Number(year), transactions, tags)
-        : tagFilterTotal(accountFilter, `${year}-12-31`, transactions, AUSSENSTAENDE_ACCOUNT_ID, tags)
+        ? tagJahresende(accountFilter, Number(year), activeTransactions, tags)
+        : tagFilterTotal(accountFilter, `${year}-12-31`, activeTransactions, AUSSENSTAENDE_ACCOUNT_ID, tags)
       : null
 
   return (
@@ -1756,6 +1831,15 @@ export default function Konten() {
             })}
           </select>
         </div>
+
+        {/* spec.md §2.9a's layer 4 recovery mechanism — off by default, so
+            a soft-deleted transaction stays invisible in normal use;
+            switched on, it reappears in `rows` above (greyed) with its own
+            Wiederherstellen action. */}
+        <label className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
+          <input type="checkbox" checked={showDeleted} onChange={(e) => setShowDeleted(e.target.checked)} />
+          Kürzlich gelöscht
+        </label>
 
         <button
           type="button"
@@ -1956,6 +2040,13 @@ export default function Konten() {
           // armed-delete red still wins if a line row is somehow both.
           getRowStyle={(p) => {
             if (confirmDeleteId === p.data.id) return { backgroundColor: 'var(--color-alert-tint)' }
+            // "Visually distinct" for a soft-deleted row surfaced via the
+            // "Kürzlich gelöscht" toggle (spec.md §2.9a's layer 4, "e.g.
+            // struck through/greyed") — a different case from the armed-
+            // delete red above (that's "about to delete," this is "already
+            // deleted, browsing to restore"), so opacity here doesn't
+            // conflict with the "red, not grey" call made for arming.
+            if (!p.data.__isLine && p.data.deletedAt) return { opacity: 0.5 }
             if (p.data.__isLine) return { backgroundColor: 'var(--color-line-row-tint)' }
             return undefined
           }}
