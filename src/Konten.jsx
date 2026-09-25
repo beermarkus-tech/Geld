@@ -349,7 +349,7 @@ export default function Konten() {
   // a round trip. Collision-checked against currently-loaded tags (a
   // brand new name colliding with an existing slug, e.g. two different
   // "2026-08" style labels) rather than assumed unique.
-  function createPlainTag(name, parentTag) {
+  function createPlainTag(name, parentTag, groupingType = null) {
     let id = slugify(name)
     if (tags.some((t) => t.id === id)) id = `${id}-${Math.random().toString(36).slice(2, 6)}`
     setDoc(doc(db, 'tags', id), {
@@ -358,7 +358,7 @@ export default function Konten() {
       parentTag,
       class: 'grouping',
       reconciliationTargetAccountIds: [],
-      groupingType: null,
+      groupingType,
       archived: false,
     })
     return id
@@ -370,18 +370,22 @@ export default function Konten() {
   // still be tagged with the specific child... an untagged child
   // contributes nothing"). Reuses an existing top-level tag matching the
   // parent name (case-insensitive) rather than creating a duplicate
-  // "Schottland" every time a new child is added under it.
-  function createTag(name) {
+  // "Schottland" every time a new child is added under it. `groupingType`
+  // (TagEditor's own create-type picker, Markus) applies to whichever tag
+  // actually gets returned/selected — the child's, for a parent:child
+  // pair, since that's the one being categorized in context; a newly
+  // implied parent always starts unspecified.
+  function createTag(name, groupingType = null) {
     const colon = name.indexOf(':')
-    if (colon === -1) return createPlainTag(name, null)
+    if (colon === -1) return createPlainTag(name, null, groupingType)
     const parentName = name.slice(0, colon).trim()
     const childName = name.slice(colon + 1).trim()
-    if (!parentName || !childName) return createPlainTag(name, null)
+    if (!parentName || !childName) return createPlainTag(name, null, groupingType)
     const existingParent = tags.find(
       (t) => t.class === 'grouping' && !t.parentTag && t.name.toLowerCase() === parentName.toLowerCase(),
     )
     const parentId = existingParent ? existingParent.id : createPlainTag(parentName, null)
-    return createPlainTag(childName, parentId)
+    return createPlainTag(childName, parentId, groupingType)
   }
   // Kategorie (the parent group, e.g. "Lebenshaltung") is derived/display
   // only — only the leaf Unterkategorie is ever stored (spec.md §2.6/§3a).
@@ -400,13 +404,27 @@ export default function Konten() {
     return null
   }
 
+  // accountFilter (below) now holds either a real account id *or* an
+  // allocation tag id — the pinned panel's tag rows are full filter
+  // buttons too now (Markus). The "re-sign relative to the filtered
+  // entity" display Konto/Betrag do below only makes sense for a single
+  // reference *account* — an allocation tag can span several target
+  // accounts at once (Anlage Familie: Aktien/Crypto/Edelmetalle/ESOP
+  // together, §2.5), so there's no one meaningful "the other side" to
+  // show. Tag-filtered rows just show their own plain, unfiltered Konto
+  // arrow and natural amountCents sign instead — filteredAccountId is
+  // null whenever accountFilter is actually a tag, which every place
+  // below that used to read accountFilter directly for this purpose now
+  // reads instead.
+  const filteredAccountId = accountFilter && accountById[accountFilter] ? accountFilter : null
+
   // Each column's "parent-level" comparable/display value, extracted so
   // both its valueGetter (parent-row display) and its comparator (every
   // row, via glueToParent above) compute it exactly the same way — never
   // two parallel implementations that could quietly drift apart.
   const kontoValue = (t) => {
-    if (accountFilter) {
-      const outgoing = t.fromAccountId === accountFilter
+    if (filteredAccountId) {
+      const outgoing = t.fromAccountId === filteredAccountId
       const other = outgoing ? t.toAccountId : t.fromAccountId
       if (!other) return '—'
       return (outgoing ? '→ ' : '← ') + accountName(other)
@@ -416,7 +434,7 @@ export default function Konten() {
     }
     return accountName(t.fromAccountId ?? t.toAccountId)
   }
-  const betragValue = (t) => signedFor(t, accountFilter ?? (t.fromAccountId ?? t.toAccountId))
+  const betragValue = (t) => signedFor(t, filteredAccountId ?? (t.fromAccountId ?? t.toAccountId))
   const kategorieValue = (t) => {
     const ids = [...new Set((t.lines ?? []).map((l) => l.categoryId).filter(Boolean))]
     if (ids.length === 0) return '—'
@@ -473,7 +491,7 @@ export default function Konten() {
     await setDoc(doc(db, 'transactions', id), {
       id,
       date,
-      fromAccountId: accountFilter ?? null,
+      fromAccountId: filteredAccountId,
       toAccountId: null,
       amountCents: 0,
       rawDescription: '',
@@ -627,7 +645,7 @@ export default function Konten() {
       if (gridRef.current?.api?.getEditingCells().length > 0) return
       e.preventDefault()
       const target = accountFilter
-        ? document.querySelector(`[data-account-id="${accountFilter}"]`)
+        ? document.querySelector(`[data-filter-id="${accountFilter}"]`)
         : document.querySelector('[data-group] ul button')
       target?.focus()
     }
@@ -722,10 +740,20 @@ export default function Konten() {
     if (!year) return []
     return transactions
       .filter((t) => t.date.startsWith(year))
-      .filter((t) => !accountFilter || t.fromAccountId === accountFilter || t.toAccountId === accountFilter)
+      .filter((t) => {
+        if (!accountFilter) return true
+        // A tag filter (the pinned panel's allocation-tag rows, Markus)
+        // matches any transaction with at least one line carrying it —
+        // an account filter matches by fromAccountId/toAccountId as
+        // before. filteredAccountId can't be used here: it's deliberately
+        // null for a tag filter (see its own comment), which is exactly
+        // the case this needs to still match rows for.
+        if (filteredAccountId) return t.fromAccountId === filteredAccountId || t.toAccountId === filteredAccountId
+        return (t.lines ?? []).some((l) => (l.tags ?? []).includes(accountFilter))
+      })
       .slice()
       .sort((a, b) => (a.date === b.date ? a.id.localeCompare(b.id) : a.date.localeCompare(b.date)))
-  }, [transactions, year, accountFilter])
+  }, [transactions, year, accountFilter, filteredAccountId])
 
   // Once a pending row (addRow's new row, or a just-edited row that may
   // have moved) actually settles into `rows` — via the Firestore
@@ -965,7 +993,7 @@ export default function Konten() {
         colId: 'date',
       },
       {
-        headerName: accountFilter ? `Gegenkonto (${accountName(accountFilter)})` : 'Konto',
+        headerName: filteredAccountId ? `Gegenkonto (${accountName(filteredAccountId)})` : 'Konto',
         // Blank and non-editable for a line row, same reasoning as Datum —
         // Konto is fixed at the parent level for a split transaction.
         valueGetter: (p) => (p.data.__isLine ? '' : kontoValue(p.data)),
@@ -979,15 +1007,15 @@ export default function Konten() {
           const t = p.data
           if (t.__isLine) return ''
           let other, pointsLeft
-          if (accountFilter) {
-            const outgoing = t.fromAccountId === accountFilter
+          if (filteredAccountId) {
+            const outgoing = t.fromAccountId === filteredAccountId
             other = outgoing ? t.toAccountId : t.fromAccountId
             pointsLeft = !outgoing
           } else if (t.fromAccountId && t.toAccountId) {
             other = null // both names are shown as plain text below, no single "other"
             pointsLeft = false
           }
-          if (accountFilter) {
+          if (filteredAccountId) {
             if (!other) return '—'
             return (
               <span className="inline-flex items-center gap-1">
@@ -1430,7 +1458,11 @@ export default function Konten() {
           <span className="text-sm text-[var(--color-text-muted)]">Konto:</span>
           <select
             ref={accountSelectRef}
-            value={accountFilter ?? ''}
+            // filteredAccountId, not accountFilter directly — when a tag
+            // filter is active this select (accounts only) has no
+            // matching <option> at all; falling back to "Alle Konten"
+            // here reads correctly instead of showing nothing selected.
+            value={filteredAccountId ?? ''}
             onChange={(e) => setAccountFilter(e.target.value || null)}
             className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-sm"
           >
@@ -1494,11 +1526,20 @@ export default function Konten() {
               <span className="tabular-figure text-sm text-[var(--color-computed)]">{centsToEuro(total)} €</span>
             </div>
             <ul className="flex flex-col gap-0.5 text-xs text-[var(--color-text-muted)]">
-              {items.map((i) => (
+              {/* Accounts, then this group's own allocation tags (Markus:
+                  the tag rows must be fully part of the same filter/
+                  cycling, not a separate read-only list) — one combined
+                  <ul> so ArrowUp/Down's `closest('ul').querySelectorAll
+                  ('button')` naturally sweeps through both together, tags
+                  last. accountFilter (the shared state, despite its name)
+                  holds either an account id or a tag id — every consumer
+                  below (`rows`, Ctrl+K's active-button lookup) already
+                  branches on which kind it actually got. */}
+              {[...items.map((i) => ({ ...i, kind: 'account' })), ...tagItems.map((i) => ({ ...i, kind: 'tag' }))].map((i) => (
                 <li key={i.id}>
                   <button
                     type="button"
-                    data-account-id={i.id}
+                    data-filter-id={i.id}
                     onClick={() => setAccountFilter(i.id)}
                     // Up/Down: move within this group's <ul>, listbox-style
                     // (plain <button>s have no built-in arrow-key behavior
@@ -1540,12 +1581,19 @@ export default function Konten() {
                       }
                       if (!target) return
                       target.focus()
-                      setAccountFilter(target.dataset.accountId)
+                      setAccountFilter(target.dataset.filterId)
                     }}
                     className={
                       'flex w-full justify-between gap-2 rounded px-1 text-left hover:bg-[var(--color-bg)] ' +
-                      (i.id === accountFilter ? 'text-[var(--color-computed)]' : 'text-[var(--color-text-muted)]')
+                      (i.kind === 'tag'
+                        ? i.id === accountFilter
+                          ? 'font-semibold'
+                          : ''
+                        : i.id === accountFilter
+                          ? 'text-[var(--color-computed)]'
+                          : 'text-[var(--color-text-muted)]')
                     }
+                    style={i.kind === 'tag' && tagColorVar(i.tag) ? { color: `var(${tagColorVar(i.tag)})` } : undefined}
                   >
                     <span>{i.name}</span>
                     <span className="tabular-figure">{centsToEuro(i.cents)} €</span>
@@ -1553,26 +1601,6 @@ export default function Konten() {
                 </li>
               ))}
             </ul>
-            {/* Allocation tags reconciling against this group's account(s)
-                (Markus) — read-only rows, not another account-filter
-                shortcut: a tag id isn't a valid accountFilter value, so
-                these deliberately don't reuse the account buttons' onClick/
-                keyboard handling above. Colored per the tag's own design
-                (tagColorVar — purple, §1b.4/§2.5), same helper the Tags
-                column itself uses. */}
-            {tagItems.length > 0 && (
-              <ul className="mt-1 flex flex-col gap-0.5 border-t border-[var(--color-border)] pt-1 text-xs">
-                {tagItems.map((i) => {
-                  const colorVar = tagColorVar(i.tag)
-                  return (
-                    <li key={i.id} className="flex justify-between gap-2 px-1" style={colorVar ? { color: `var(${colorVar})` } : undefined}>
-                      <span>{i.name}</span>
-                      <span className="tabular-figure">{centsToEuro(i.cents)} €</span>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
           </div>
         ))}
       </div>

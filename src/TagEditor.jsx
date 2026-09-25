@@ -51,15 +51,28 @@ function Chip({ label, colorVar, onRemove, title }) {
   )
 }
 
+// New tag creation offers a type to assign at the same time (Markus asked
+// directly: "how can i create a new travel tag or statement tag etc?" —
+// resolves the open question logged Session 34). One row per groupingType
+// (plus "Unbestimmt", first/default so a plain Enter with nothing
+// highlighted still creates unspecified exactly as before — no behavior
+// change for the fast/default path, arrowing down is purely additive).
+// claim-category is only offered here under the same sequencing rule as
+// everywhere else (a claim tag already on the line).
+const CREATE_TYPES = [
+  { groupingType: null, label: 'Unbestimmt' },
+  { groupingType: 'project', label: 'Reise/Projekt' },
+  { groupingType: 'statement', label: 'Abrechnung' },
+  { groupingType: 'claim', label: 'Anspruch' },
+  { groupingType: 'claim-category', label: 'Anspruchsart' },
+]
+
 // The real inline tag mechanism (spec.md §2.5) — replaces the earlier
 // plain comma-separated-text placeholder. Multi-select autocomplete: type
 // to filter existing tags, Enter/click to add one as a removable chip,
-// "Tag '<text>' erstellen" when nothing matches (grouping-class tags only
-// — allocation tags are fixed/pre-seeded, never created here, per spec's
-// "a deliberate Settings-area action" note). New tags default to
-// `groupingType: null` (spec's own "unspecified" state) — there's no UI
-// here to pick project/statement/claim/claim-category at creation time;
-// logged in DEVLOG as a real open question, not guessed at silently.
+// one create row per type (above) when nothing matches (grouping-class
+// tags only — allocation tags are fixed/pre-seeded, never created here,
+// per spec's "a deliberate Settings-area action" note).
 //
 // **"Schottland:Fähre" creates/selects a child tag** (spec.md §2.5's
 // `parentTag` hierarchy) — a colon in the typed text splits into
@@ -123,8 +136,15 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
 
   const suggestions = useMemo(() => {
     const text = inputText.trim().toLowerCase()
-    const groupingCandidates =
-      text === '' ? tags.filter((t) => t.class === 'grouping' && usedTagValues.has(t.id)) : tags.filter((t) => t.class === 'grouping')
+    // Usage always gates a grouping tag (Markus, real-usage feedback: an
+    // unused one still showed up while typing, since the original version
+    // only applied this filter to the empty-input browse case) — the one
+    // exception is an exact qualified-name match, so a real-but-currently-
+    // unused tag never becomes a true dead end (can't create a duplicate
+    // of it, but also couldn't otherwise reach it at all).
+    const groupingCandidates = tags.filter(
+      (t) => t.class === 'grouping' && (usedTagValues.has(t.id) || qName(t).toLowerCase() === text),
+    )
     const candidates = [...tags.filter((t) => t.class === 'allocation'), ...groupingCandidates, ...legacyCandidates]
     return candidates
       .filter((t) => !t.archived)
@@ -143,13 +163,15 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
     inputText.trim() !== '' &&
     !tags.some((t) => qName(t).toLowerCase() === inputText.trim().toLowerCase()) &&
     !legacyCandidates.some((t) => t.name.toLowerCase() === inputText.trim().toLowerCase())
-  const optionCount = suggestions.length + (canCreate ? 1 : 0)
+  const createTypeOptions = canCreate ? CREATE_TYPES.filter((o) => o.groupingType !== 'claim-category' || hasClaimTag) : []
+  const optionCount = suggestions.length + createTypeOptions.length
 
   function selectSuggestion(idx) {
     if (idx < suggestions.length) {
       setSelectedIds((prev) => [...prev, suggestions[idx].id])
-    } else if (canCreate) {
-      setSelectedIds((prev) => [...prev, onCreateTag(inputText.trim())])
+    } else {
+      const opt = createTypeOptions[idx - suggestions.length]
+      if (opt) setSelectedIds((prev) => [...prev, onCreateTag(inputText.trim(), opt.groupingType)])
     }
     setInputText('')
     setHighlight(0)
@@ -211,7 +233,7 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
     }
     el.addEventListener('keydown', onKeyDown)
     return () => el.removeEventListener('keydown', onKeyDown)
-  }, [inputText, highlight, optionCount, suggestions, canCreate, selectedIds])
+  }, [inputText, highlight, optionCount, suggestions, createTypeOptions, selectedIds])
 
   return (
     <div
@@ -241,7 +263,7 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
         placeholder="Tag suchen oder neu erstellen… (z.B. Schottland:Fähre)"
         className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-sm"
       />
-      {(suggestions.length > 0 || canCreate) && (
+      {(suggestions.length > 0 || createTypeOptions.length > 0) && (
         <ul className="max-h-48 overflow-auto rounded border border-[var(--color-border)] text-sm">
           {suggestions.map((t, idx) => {
             const colorVar = tagColorVar(t)
@@ -267,23 +289,31 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
               </li>
             )
           })}
-          {canCreate && (
-            <li>
-              <button
-                type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault()
-                  selectSuggestion(suggestions.length)
-                }}
-                className={
-                  'block w-full px-2 py-1 text-left italic ' +
-                  (suggestions.length === highlight ? 'bg-[var(--color-computed)] text-white' : 'hover:bg-[var(--color-bg)]')
-                }
-              >
-                Tag „{inputText.trim()}“ erstellen
-              </button>
-            </li>
-          )}
+          {createTypeOptions.map((opt, i) => {
+            const idx = suggestions.length + i
+            const colorVar = opt.groupingType ? tagColorVar({ class: 'grouping', groupingType: opt.groupingType }) : null
+            return (
+              <li key={opt.groupingType ?? 'null'}>
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    selectSuggestion(idx)
+                  }}
+                  className={
+                    'flex w-full items-center gap-2 px-2 py-1 text-left italic ' +
+                    (idx === highlight ? 'bg-[var(--color-computed)] text-white' : 'hover:bg-[var(--color-bg)]')
+                  }
+                >
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full border border-[var(--color-text-muted)]"
+                    style={colorVar ? { backgroundColor: `var(${colorVar})`, borderColor: `var(${colorVar})` } : undefined}
+                  />
+                  Neu „{inputText.trim()}“ — {opt.label}
+                </button>
+              </li>
+            )
+          })}
         </ul>
       )}
       {/* Explicit Übernehmen/Abbrechen (same convention as Konto/Category) —
