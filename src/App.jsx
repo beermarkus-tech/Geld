@@ -7,6 +7,7 @@ import Konten from './Konten'
 import { waitForInitialAuthState } from './lib/authReady'
 import NavShell, { ALL_ITEMS } from './NavShell'
 import PlaceholderScreen from './PlaceholderScreen'
+import Verlauf from './Verlauf'
 
 export default function App() {
   const [user, setUser] = useState(null)
@@ -93,13 +94,14 @@ export default function App() {
       onSignOut={() => signOut(auth)}
     >
       {view === 'konten' && <Konten year={year} onYearChange={setYear} onYearsChange={setYears} />}
+      {view === 'verlauf' && <Verlauf year={year} />}
       {view === 'importexport' && <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} />}
-      {/* Every other nav item (Dashboard, Verlauf, Planung, Quickview,
-          Fortschritt, Monatsabschluss, Außenstände, Settings) isn't built
-          yet — resolved Sept 2026 (Markus): a real nav entry exists for
-          each from the start anyway, landing on a plain placeholder rather
-          than being left out until its own phase ships. */}
-      {!['konten', 'importexport'].includes(view) && (
+      {/* Every other nav item (Dashboard, Planung, Quickview, Fortschritt,
+          Monatsabschluss, Außenstände, Settings) isn't built yet —
+          resolved Sept 2026 (Markus): a real nav entry exists for each
+          from the start anyway, landing on a plain placeholder rather than
+          being left out until its own phase ships. */}
+      {!['konten', 'verlauf', 'importexport'].includes(view) && (
         <PlaceholderScreen title={ALL_ITEMS.find((i) => i.id === view)?.label ?? view} />
       )}
     </NavShell>

@@ -343,6 +343,7 @@ This header follows the **same mirror-then-lock-in rule as every other Prog valu
 ```
 id (== year)
 minCashBufferCents: integer   // the "hidden" minimum year-end cash target the user plans against (currently 8k); can change year to year, entered inline where relevant (Planung view)
+closedMonths: integer[]       // resolved Sept 2026 (gap found while building Verlauf — §3b's manual month-close "ok" switch was never given a storage location): month numbers (1-12) the user has manually marked closed for this year, via Verlauf's own switch. Drives §3b's Actuals-vs-Prognose split, the year-progression "current month" marker (§3e), and is read (never written) by Monatsabschluss's auto-derived checklist items (§3h) later. Absent/missing months are open (prognosis), matching the natural default for a year that hasn't happened yet — no explicit "false" entries needed.
 ```
 
 ### 2.7b `categorizationRules` collection (missing from the schema until now — caught in external review, Sept 2026)

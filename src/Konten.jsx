@@ -7,6 +7,7 @@ import CategoryEditor from './CategoryEditor'
 import { db } from './firebase'
 import KontoEditor from './KontoEditor'
 import { jahresende } from './lib/balance'
+import { centsToEuro } from './lib/format'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { withRemainder } from './lib/split'
 import { tagFilterMatchIds, tagFilterTotal, tagJahresende } from './lib/tagBalance'
@@ -236,10 +237,6 @@ const REPORTING_GROUPS = ['Barkonten', 'Sparkonten', 'Geldanlage', 'Außenständ
 // loan transactions onto it), the panel/filter code below simply finds no
 // transactions touching it and stays quietly inert.
 const AUSSENSTAENDE_ACCOUNT_ID = 'aussenstaende'
-
-function centsToEuro(cents) {
-  return (cents / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
 
 // Keeps a split transaction's line rows glued to their parent under
 // *any* column's sort, not just Datum (Markus: sorting by a different
