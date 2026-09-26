@@ -1061,3 +1061,7 @@ Markus caught this from a real screenshot on his tablet: Kategorie's rotated tex
 `npm run build`, `npm test` (still 42), `npm run lint` all clean before pushing.
 
 **Next session:** same standing items as before. Given two real "looked right in isolation, wrong in the actual render" bugs in one screen this session, worth remembering going forward: for Verlauf specifically (or any dense custom-cellStyle AG Grid work), a screenshot is the verification, not a substitute for one saved for when a screenshot is inconvenient.
+
+## Session 36, continued a sixteenth time — 2026-09-26 — Label column dropped again
+
+Markus confirmed he's done checking: "then hide the prog/plan0/plan1 column again." Row-total column back to just the € figure (`valueGetter`, no `cellRenderer`) — the brief restore earlier this session was only for him to compare something while the spanRows bug was being diagnosed. `npm run build`, `npm test` (still 42), `npm run lint` all clean before pushing. Low-risk revert to a configuration already verified via harness earlier the same session, so no fresh Playwright round for this one.

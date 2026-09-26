@@ -254,6 +254,7 @@ export default function Verlauf({ year }) {
         colId: 'label',
         pinned: 'left',
         width: 170,
+        cellClass: 'text-right tabular-figure',
         // The yearly total mixes closed and open months, so it doesn't get
         // the same per-month grey/black toggle the month columns do (that
         // rule is only meaningful per-month) — Plan0 stays grey (it's
@@ -263,18 +264,11 @@ export default function Verlauf({ year }) {
           color: `var(${p.data.rowLabel === 'Plan0' ? '--color-text-muted' : '--color-text'})`,
           ...blockBorderStyle(p.data),
         }),
-        // Prog/Plan1/Plan0 text label temporarily brought back (Markus,
-        // Sept 2026: "show column plan0/1/prog again for a moment so i can
-        // check something") — was dropped once font color told the three
-        // rows apart, but restored on request; remove again once he
-        // confirms he's done checking. The Jahr figure always carries the
-        // € sign, unlike every month column.
-        cellRenderer: (p) => (
-          <span className="flex w-full justify-between gap-2">
-            <span>{p.data.rowLabel}</span>
-            <span className="tabular-figure">{p.data.yearTotal === 0 ? '' : `${centsToEuro(p.data.yearTotal)} €`}</span>
-          </span>
-        ),
+        // Just the yearly € figure (Markus, Sept 2026: back to this after
+        // briefly restoring the Prog/Plan1/Plan0 text label to check
+        // something) — font color already tells the three rows apart. The
+        // Jahr figure always carries the € sign, unlike every month column.
+        valueGetter: (p) => (p.data.yearTotal === 0 ? '' : `${centsToEuro(p.data.yearTotal)} €`),
       },
       ...monthCols,
     ]
