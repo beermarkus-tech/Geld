@@ -58,6 +58,11 @@ function NavButton({ item, active, onClick, className = '' }) {
 export default function NavShell({ activeView, onNavigate, year, years, onYearChange, userEmail, usingCachedSession, onSignOut, children }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed)
   const [moreOpen, setMoreOpen] = useState(false)
+  // Sign-out gets a real confirmation modal, not the two-click arm/confirm
+  // pattern Konten's own delete uses elsewhere (Markus's explicit call for
+  // this one) — a stray tap here is a real "did I just get logged out"
+  // moment, not something a second tap in the same spot quietly fixes.
+  const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false)
 
   useEffect(() => {
     try {
@@ -80,6 +85,15 @@ export default function NavShell({ activeView, onNavigate, year, years, onYearCh
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [moreOpen])
+
+  useEffect(() => {
+    if (!signOutConfirmOpen) return
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setSignOutConfirmOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [signOutConfirmOpen])
 
   const activeItem = ALL_ITEMS.find((i) => i.id === activeView)
 
@@ -136,11 +150,42 @@ export default function NavShell({ activeView, onNavigate, year, years, onYearCh
               {usingCachedSession && ' (zwischengespeichert)'}
             </span>
           )}
-          <button type="button" onClick={onSignOut} className="text-sm text-[var(--color-text-muted)]">
+          <button type="button" onClick={() => setSignOutConfirmOpen(true)} className="text-sm text-[var(--color-text-muted)]">
             Abmelden
           </button>
         </div>
       </header>
+
+      {signOutConfirmOpen && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center" onClick={() => setSignOutConfirmOpen(false)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div
+            className="relative flex w-full max-w-sm flex-col gap-4 rounded-lg bg-[var(--color-surface)] p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-sm">Wirklich abmelden?</p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setSignOutConfirmOpen(false)}
+                className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]"
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSignOutConfirmOpen(false)
+                  onSignOut()
+                }}
+                className="rounded-md bg-[var(--color-alert)] px-3 py-1.5 text-sm font-medium text-white"
+              >
+                Abmelden
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         {/* Tablet sidebar — hidden entirely below md, hidden entirely (not

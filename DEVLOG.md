@@ -986,3 +986,9 @@ Re-read spec.md §1b.2/§1b.2a/§1b.3/§1b.7 in full, reported findings back to 
 `npm run build`, `npm test` (still 31 — no new pure-function surface, this is UI/routing plumbing), `npm run lint` all clean before pushing.
 
 **Next session should probably:** start on Dashboard, Verlauf, or Planung's real content — the shell around them now exists. Standing items (Ctrl+H device confirmation, Außenstände migration/panel check) are still open. Worth a look before Verlauf specifically: the `years`-reporting duplication flagged in CODEMAP.md above.
+
+## Session 36, continued an eleventh time — 2026-09-26 — Sign-out confirmation modal
+
+Markus: "abmelden should we wired to a confirmation modal" — a real modal for this one action specifically, not the two-click arm/confirm pattern Konten's own delete already uses elsewhere in the app.
+
+`NavShell.jsx`'s "Abmelden" button now opens a small centered confirmation modal (Abmelden/Abbrechen) instead of calling `onSignOut` directly — dismissible by backdrop click or Escape, same conventions the rest of the app's modals already use. `npm run build`, `npm test` (still 31), `npm run lint` all clean before pushing. Plain React state/click-handler change, no AG Grid interaction or race condition involved, so no Playwright harness run for this one — visually straightforward enough to trust directly.
