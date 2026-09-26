@@ -80,6 +80,24 @@ body {
   touch-action: pan-y;
 }
 
+/* Verlauf's month column headers (Jan, Feb, ...), centered (Markus) — AG
+   Grid's own header label is a flex container with no justify-content set
+   (left-aligned by default), and there's no built-in "centered header"
+   class the way there's a built-in .ag-right-aligned-header one. */
+.verlauf-month-header .ag-header-cell-label {
+  justify-content: center;
+}
+
+/* Suppresses AG Grid's own default per-row border, which is real (not
+   transparent) and lives on an internal per-row wrapper no colDef or row
+   style can reach (see Verlauf.jsx's blockBorderStyle() for the full
+   story) — Verlauf draws its own block-boundary border per cell instead,
+   which only actually becomes visible once this default one is out of the
+   way. */
+.verlauf-grid {
+  --ag-row-border-color: transparent;
+}
+
 .tabular-figure {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-variant-numeric: tabular-nums;

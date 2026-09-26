@@ -13,6 +13,30 @@ syncAgGridColorScheme()
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
 
+// The month-close "ok" switch, embedded directly in that month's own
+// column header (Markus: "include the months check boxes into the column
+// headers") — AG Grid supports a fully custom React header component via
+// `headerComponent`, receiving whatever `headerComponentParams` passes
+// through as plain props. Replaces the separate checkbox row that used to
+// sit above the grid (spec.md §3b's own mockup had them as their own
+// header row anyway — this is closer to that, not further from it).
+// stopPropagation on click: the header cell itself has its own click
+// handling (would otherwise fire for a plain header click too, e.g. any
+// future sort/menu behavior), and the checkbox shouldn't trigger it.
+function MonthHeader({ displayName, month, closedMonths, onToggle }) {
+  return (
+    <div className="flex h-full w-full flex-col items-center justify-center gap-0.5">
+      <span>{displayName}</span>
+      <input
+        type="checkbox"
+        checked={closedMonths.includes(month)}
+        onChange={() => onToggle(month)}
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>
+  )
+}
+
 // Fixed group order (spec.md §2.4's own transcription order — not
 // alphabetical, so there's no substitute for spelling it out) — Einnahmen
 // first, then every expense group in the Gsheet's own order.
@@ -85,15 +109,24 @@ function monthTextColorVar(rowLabel, isClosed) {
 
 // No gridline between the three sibling rows (Prog/Plan1/Plan0) of one
 // block (spec.md §3b) — they read as one visual unit; the line between one
-// block and the next stays. AG Grid's own default cell styling already
-// gives every cell a 1px *transparent* border (reserved space, not an
-// actual visible line) — a plain row-level override can't remove or add a
-// real line on top of that, so this has to happen per cell instead: zero
-// out the border entirely for a non-last row (no reserved gap = no seam),
-// and give the actual last row of a block a real, visible border color
-// instead of the default transparent one. Kategorie/Unterkategorie don't
-// need this — they're genuinely merged into one spanned cell per block via
-// `spanRows`, so there's no seam between sibling rows there to begin with.
+// block and the next stays.
+//
+// **Found the real source of the line only after it was still visible,
+// thinner, past two earlier attempts (Markus's own report) — neither
+// `getRowStyle` nor a `cellStyle` override on `.ag-cell` was ever touching
+// the right element.** AG Grid's default per-row border isn't drawn by
+// `.ag-row` or `.ag-cell` at all for an ordinary row — it's
+// `.ag-grid-scrolling-cells`/`.ag-grid-pinned-left-cells` (an internal
+// per-row wrapper around every cell in that row-section) that carries a
+// real `border-bottom: var(--ag-row-border-style) var(--ag-row-border-color)
+// var(--ag-row-border-width)`, with no colDef- or row-level hook able to
+// reach it. The actual fix (see the `verlauf-grid` CSS rule in index.css)
+// is to suppress that default at the grid level entirely
+// (`--ag-row-border-color: transparent`), leaving this function's own
+// per-cell border as the *only* one ever drawn — so it can finally be
+// exactly where it's wanted. Kategorie/Unterkategorie don't need this —
+// they're genuinely merged into one spanned cell per block via `spanRows`,
+// so there's no seam between sibling rows there to begin with.
 function blockBorderStyle(rowData) {
   if (rowData.isLastOfBlock) return { borderBottom: '1px solid var(--color-border)' }
   return { borderBottom: '0px none' }
@@ -203,6 +236,11 @@ export default function Verlauf({ year }) {
     const monthCols = MONTH_LABELS.map((label, i) => ({
       headerName: label,
       colId: `m${i + 1}`,
+      // Centered header label (Markus) — see the matching CSS rule in
+      // index.css; AG Grid has no built-in "centered header" class.
+      headerClass: 'verlauf-month-header',
+      headerComponent: MonthHeader,
+      headerComponentParams: { month: i + 1, closedMonths, onToggle: toggleMonthClosed },
       valueGetter: (p) => p.data.months[i],
       valueFormatter: (p) => formatMonthCell(p.value),
       cellClass: 'text-right tabular-figure',
@@ -253,7 +291,13 @@ export default function Verlauf({ year }) {
         headerName: '',
         colId: 'label',
         pinned: 'left',
-        width: 170,
+        // Narrower now that this column only holds the € figure (Markus —
+        // it was still reserving width for the Prog/Plan1/Plan0 text label
+        // dropped earlier) — a little wider than the month columns rather
+        // than exactly matching, since this one's own figure always has a
+        // trailing " €" the month columns never carry (spec.md §3b), which
+        // clipped at the exact same width.
+        width: 128,
         cellClass: 'text-right tabular-figure',
         // The yearly total mixes closed and open months, so it doesn't get
         // the same per-month grey/black toggle the month columns do (that
@@ -282,23 +326,19 @@ export default function Verlauf({ year }) {
           <input type="checkbox" checked={showPlan0} onChange={(e) => setShowPlan0(e.target.checked)} />
           Plan0 anzeigen
         </label>
-        {/* Month-close "ok" switches (spec.md §3b) — visually a separate
-            row above the grid rather than merged into AG Grid's own header
-            row directly under the month labels (a custom AG Grid header
-            component, deferred — functionally identical, not yet
-            pixel-matched to the mockup). */}
-        <div className="flex items-center gap-3 text-sm text-[var(--color-text-muted)]">
-          <span>Abgeschlossen:</span>
-          {MONTH_LABELS.map((label, i) => (
-            <label key={label} className="flex items-center gap-1">
-              <input type="checkbox" checked={closedMonths.includes(i + 1)} onChange={() => toggleMonthClosed(i + 1)} />
-              {label}
-            </label>
-          ))}
-        </div>
+        {/* Month-close "ok" switches now live in each month's own column
+            header (MonthHeader, above) — moved there per Markus's request,
+            closer to spec.md §3b's own mockup ("their own header row...
+            directly under the month labels") than the separate toolbar row
+            this replaces. */}
       </div>
 
-      <div className="min-h-0 flex-1">
+      {/* verlauf-grid: see the matching CSS rule in index.css — it
+          suppresses AG Grid's own default per-row border (see the long
+          comment on blockBorderStyle() above for why that border can't be
+          reached from a cellStyle/getRowStyle override at all), leaving
+          blockBorderStyle()'s own per-cell border as the only one drawn. */}
+      <div className="verlauf-grid min-h-0 flex-1">
         <AgGridReact
           theme={themeQuartz}
           rowData={rowData}
@@ -311,7 +351,9 @@ export default function Verlauf({ year }) {
           // overflowing into its neighbors, since `spanRows` alone never
           // took effect without this).
           enableCellSpan
-          headerHeight={36}
+          // Taller than the usual single-line header (Markus, above) — a
+          // month header now stacks its label and the close-month checkbox.
+          headerHeight={52}
           rowHeight={30}
         />
       </div>
