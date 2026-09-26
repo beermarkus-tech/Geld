@@ -870,3 +870,7 @@ Markus sent a screenshot flagging a real layout bug, plus two small polish reque
 `npm run build`, `npm test` (still 31), `npm run lint` all clean before pushing.
 
 **Next session should probably, per Markus's own question:** tell him what's next on `PLAN.md` — Phase 1b's last remaining item, the basic export/restore script, plus the standing Ctrl+H confirmation and Außenstände migration checks from previous entries.
+
+### Addendum — same day, Unterkategorie's own "– wählen –" wasn't actually fine either
+
+Markus, on trying it: "the -- wählen -- entry still exists in the subcategory drop down and now get's selected first, please remove it there, too" — the previous entry's belief that Unterkategorie's placeholder "already gets filtered out correctly" turned out wrong once actually exercised after the Kategorie fix. Same removal applied to `subcatOptions` in `CategoryEditor.jsx`. Verified via harness: picking a group now highlights a real subcategory (e.g. "Restaurant"), no "– wählen –" in the list at all. `npm run build`/`test`/`lint` clean.

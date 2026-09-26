@@ -48,11 +48,11 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
     () => categories.filter((c) => c.parentCategoryId === null).map((g) => ({ id: g.id, name: g.name })),
     [categories],
   )
+  // Same removal as groupOptions above, and for the same reason (Markus,
+  // follow-up: this one turned out to have the identical problem — "gets
+  // selected first" — not actually fine as first reported).
   const subcatOptions = useMemo(
-    () => [
-      { id: '', name: '– wählen –' },
-      ...categories.filter((c) => c.parentCategoryId === groupId).map((c) => ({ id: c.id, name: c.name })),
-    ],
+    () => categories.filter((c) => c.parentCategoryId === groupId).map((c) => ({ id: c.id, name: c.name })),
     [categories, groupId],
   )
 
