@@ -268,6 +268,9 @@ export default function Konten() {
   // switched on, soft-deleted-but-not-yet-purged rows reappear in `rows`
   // below, visually distinct, each with its own Wiederherstellen action.
   const [showDeleted, setShowDeleted] = useState(false)
+  // Keyboard-shortcuts help popover (Markus) — hover the (i) icon to show
+  // it, Ctrl+I toggles the same state without hovering, Escape closes it.
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
   // Two-click delete: which row (if any) is currently armed, waiting for a
   // second click to actually confirm. See handleDeleteClick below.
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
@@ -418,6 +421,15 @@ export default function Konten() {
   }, [activeTransactions])
   const accountName = (id) => accountById[id]?.name ?? id
   const categoryName = (id) => categoryById[id]?.name ?? id
+  // A soft-deleted transaction (spec.md §2.9a's layer 4) should not be
+  // touchable in any way except restoring it (Markus: "i should not be
+  // able to create split rows on a deleted item or interact in any way
+  // with it... except undelete it") — every column's own `editable` below
+  // checks this, and the split column's add/expand buttons check it
+  // directly. Works for a line row too, via its `__parent` — a line of an
+  // already-split, now-deleted transaction is exactly as locked as its
+  // parent, not a separate case.
+  const isRowDeleted = (data) => Boolean((data.__isLine ? data.__parent : data)?.deletedAt)
   // Grouping tags only, never allocation (spec.md §2.5: allocation tags
   // are fixed/pre-seeded, "a deliberate Settings-area action," never
   // created inline while entering a transaction). Fire-and-forget, same
@@ -699,6 +711,10 @@ export default function Konten() {
       if (!row) return
       e.preventDefault()
       e.stopPropagation()
+      // No further splitting on an already-deleted transaction (Markus) —
+      // still swallows the keypress above rather than falling through to
+      // it, same as every other case where a row is focused.
+      if (isRowDeleted(row)) return
       const tx = row.__isLine ? row.__parent : row
       addSplitLine(tx)
       setExpandedIds((prev) => new Set(prev).add(tx.id))
@@ -730,6 +746,53 @@ export default function Konten() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [accountFilter])
 
+  // Ctrl/Cmd+H toggles "Kürzlich gelöscht" (Markus). **Real risk, flagged
+  // to Markus rather than silently assumed away:** Ctrl+H is Chrome's own
+  // "Show History" shortcut on Windows/Linux (Cmd+H is macOS's "Hide
+  // window") — both are reserved at the browser/OS chrome level in an
+  // ordinary tab, the same category of conflict already hit and accepted
+  // for Ctrl+T above, and no in-page preventDefault can reach a keypress
+  // the browser chrome already claimed before it reaches this code. An
+  // installed PWA's standalone window (no address bar/History UI at all)
+  // *may* not reserve it the same way, but that's genuinely untested here
+  // — needs confirming on Markus's own devices, both as an installed PWA
+  // and in an ordinary browser tab.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!e.ctrlKey && !e.metaKey) return
+      if (e.key.toLowerCase() !== 'h') return
+      if (gridRef.current?.api?.getEditingCells().length > 0) return
+      e.preventDefault()
+      setShowDeleted((v) => !v)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
+  // Ctrl/Cmd+I toggles the keyboard-shortcuts help popover (Markus) — same
+  // shown/hidden state the (i) icon's hover uses, so either path opens and
+  // closes the identical popover. Capture phase + a conditional
+  // stopPropagation on Escape specifically while open, so this reliably
+  // wins over whatever else might otherwise claim Escape (an open cell
+  // editor's own cancel, the armed-delete discharge above) rather than
+  // silently losing that race the way a plain bubble-phase listener has
+  // before elsewhere in this file.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i') {
+        e.preventDefault()
+        setShortcutsOpen((v) => !v)
+        return
+      }
+      if (e.key === 'Escape' && shortcutsOpen) {
+        e.stopPropagation()
+        setShortcutsOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [shortcutsOpen])
+
   // Two clicks, not a modal (Markus's call).
   function armDelete(id) {
     setConfirmDeleteId(id)
@@ -748,12 +811,20 @@ export default function Konten() {
   // transaction's own delete is a soft-delete (spec.md §2.9a's layer 4,
   // softDeleteTx above), not deleteDoc — recoverable via the "Kürzlich
   // gelöscht" toggle for roughly a week, not gone the instant this confirms.
+  // A soft-deleted row (only ever a whole transaction, never a line — see
+  // above) arms/confirms *restore* through this exact same two-click path
+  // instead of delete (Markus: "assign the same DEL button shortcut to the
+  // deleted row in order to undelete it... deleting and undeleting the same
+  // row takes 4 presses of DEL"), so a full delete-then-undelete round trip
+  // is symmetric: arm, confirm, arm, confirm — not delete-then-single-click.
   function handleDeleteClick(row) {
     if (confirmDeleteId === row.id) {
       clearTimeout(confirmTimeoutRef.current)
       setConfirmDeleteId(null)
       if (row.__isLine) {
         removeLine(row.__parent, row.__lineIndex)
+      } else if (row.deletedAt) {
+        restoreTx(row)
       } else {
         softDeleteTx(row)
       }
@@ -1048,7 +1119,11 @@ export default function Konten() {
           // starting or continuing a split: type how much this piece is.
           if (row.__isLine) {
             const isLast = row.__lineIndex === row.__parent.lines.length - 1
-            if (!isLast) return null
+            // No further splitting on an already-deleted transaction
+            // (Markus: "i should not be able to create split rows on a
+            // deleted item") — the chevron/expand view above this branch
+            // is unaffected, only the *creating new lines* affordance is.
+            if (!isLast || isRowDeleted(row)) return null
             return (
               <button
                 type="button"
@@ -1081,6 +1156,9 @@ export default function Konten() {
               </button>
             )
           }
+          // Same "no split rows on a deleted item" rule as the line-row
+          // branch above, for the unsplit-parent case.
+          if (isRowDeleted(row)) return null
           return (
             <button
               type="button"
@@ -1106,7 +1184,7 @@ export default function Konten() {
         // exactly one date, at the parent level; only the economic
         // breakdown (category/tags/note/amount) splits across lines.
         valueGetter: (p) => (p.data.__isLine ? '' : p.data.date),
-        editable: (p) => !p.data.__isLine,
+        editable: (p) => !p.data.__isLine && !isRowDeleted(p.data),
         // Explicitly false, not left to infer — AG Grid samples this
         // column's own data to auto-detect a "cellDataType" when none is
         // set, and a plain ISO string like "2026-04-03" matches its own
@@ -1209,7 +1287,7 @@ export default function Konten() {
           return true
         },
         cellClass: (p) => (p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined),
-        editable: (p) => !p.data.__isLine,
+        editable: (p) => !p.data.__isLine && !isRowDeleted(p.data),
         cellEditor: KontoEditor,
         cellEditorParams: { accounts, filteredAccountId, onApply: applyKontoDirect },
         cellEditorPopup: true,
@@ -1240,7 +1318,7 @@ export default function Konten() {
         // prefix actually reads, so filtering a line row searches the same
         // text that's actually shown for it.
         filter: 'agTextColumnFilter',
-        editable: true,
+        editable: (p) => !isRowDeleted(p.data),
         flex: 1.4,
       },
       {
@@ -1303,7 +1381,8 @@ export default function Konten() {
         // recomputes it on every save), never typed into directly — "the
         // live, auto-generated remaining amount line" (§3a).
         editable: (p) =>
-          p.data.__isLine ? p.data.__lineIndex !== p.data.__parent.lines.length - 1 : (p.data.lines ?? []).length <= 1,
+          !isRowDeleted(p.data) &&
+          (p.data.__isLine ? p.data.__lineIndex !== p.data.__parent.lines.length - 1 : (p.data.lines ?? []).length <= 1),
         width: 130,
       },
       {
@@ -1344,7 +1423,7 @@ export default function Konten() {
         // line, which "can... be categorized/tagged directly as the final
         // line" (§3a) — a parent row only while unsplit (≤1 line); once
         // split, per-line category editing happens on the expanded rows.
-        editable: (p) => p.data.__isLine || (p.data.lines ?? []).length <= 1,
+        editable: (p) => (p.data.__isLine || (p.data.lines ?? []).length <= 1) && !isRowDeleted(p.data),
         cellEditor: CategoryEditor,
         // A per-row function, not a static object: a line row needs its
         // own onApply (writing to that specific line, not
@@ -1393,7 +1472,7 @@ export default function Konten() {
           return true
         },
         cellClass: (p) => (p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined),
-        editable: (p) => p.data.__isLine || (p.data.lines ?? []).length <= 1,
+        editable: (p) => (p.data.__isLine || (p.data.lines ?? []).length <= 1) && !isRowDeleted(p.data),
         cellEditor: CategoryEditor,
         // startField: 'category' — opening from Unterkategorie directly
         // (Markus) leaves Kategorie as already set and jumps straight to
@@ -1430,7 +1509,7 @@ export default function Konten() {
           return true
         },
         filter: 'agTextColumnFilter',
-        editable: (p) => !p.data.__isLine,
+        editable: (p) => !p.data.__isLine && !isRowDeleted(p.data),
         flex: 1.3,
       },
       {
@@ -1609,7 +1688,7 @@ export default function Konten() {
           line.tags = tagIds
           return true
         },
-        editable: (p) => p.data.__isLine || (p.data.lines ?? []).length <= 1,
+        editable: (p) => (p.data.__isLine || (p.data.lines ?? []).length <= 1) && !isRowDeleted(p.data),
         // Widened (Markus) so two tag chips fit side by side without
         // immediately wrapping onto a second line for the common case.
         flex: 1.6,
@@ -1637,26 +1716,25 @@ export default function Konten() {
         cellRenderer: (p) => {
           // A soft-deleted transaction (spec.md §2.9a's layer 4), visible
           // only via the "Kürzlich gelöscht" toggle, shows Wiederherstellen
-          // here instead of the trashcan — a single click, no arm/confirm
-          // step, since undoing a delete isn't itself destructive. Never
-          // true for a line row: a line's own removal (removeLine) doesn't
-          // go through deletedAt at all, only a whole transaction does.
-          if (!p.data.__isLine && p.data.deletedAt) {
-            return (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  restoreTx(p.data)
-                }}
-                title="Wiederherstellen"
-                className="w-full rounded px-1 text-xs text-[var(--color-computed)] hover:opacity-75"
-              >
-                ↺
-              </button>
-            )
-          }
+          // (↺) here instead of the trashcan — same two-click arm/confirm
+          // as delete, through the very same handleDeleteClick (Markus:
+          // "assign the same DEL button shortcut... two clicks, charge =>
+          // undelete" — deleting and undeleting the same row is symmetric,
+          // 4 presses of DEL/clicks total, not delete-then-single-click).
+          // Never true for a line row: a line's own removal (removeLine)
+          // doesn't go through deletedAt at all, only a whole transaction
+          // does.
+          const deleted = !p.data.__isLine && p.data.deletedAt
           const armed = confirmDeleteId === p.data.id
+          const title = armed
+            ? deleted
+              ? 'Nochmal klicken zum Wiederherstellen'
+              : 'Nochmal klicken zum Löschen'
+            : deleted
+              ? 'Wiederherstellen'
+              : p.data.__isLine
+                ? 'Position löschen'
+                : 'Buchung löschen'
           return (
             <button
               type="button"
@@ -1664,15 +1742,17 @@ export default function Konten() {
                 e.stopPropagation()
                 handleDeleteClick(p.data)
               }}
-              title={armed ? 'Nochmal klicken zum Löschen' : p.data.__isLine ? 'Position löschen' : 'Buchung löschen'}
+              title={title}
               className={
                 'w-full rounded px-1 text-xs ' +
                 (armed
                   ? 'font-semibold text-[var(--color-alert)]'
-                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-alert)]')
+                  : deleted
+                    ? 'text-[var(--color-computed)] hover:opacity-75'
+                    : 'text-[var(--color-text-muted)] hover:text-[var(--color-alert)]')
               }
             >
-              {armed ? '⚠︎' : '🗑'}
+              {armed ? '⚠︎' : deleted ? '↺' : '🗑'}
             </button>
           )
         },
@@ -1771,6 +1851,53 @@ export default function Konten() {
   return (
     <div className="flex min-h-full flex-col gap-3 px-4 py-3">
       <div className="flex flex-wrap items-center gap-4">
+        {/* Keyboard-shortcuts help (Markus): hover shows the list; Ctrl+I
+            toggles the same popover without needing the mouse; Escape (or
+            Ctrl+I again) closes it — see the two effects above for the
+            actual key handling. */}
+        <div className="relative">
+          <button
+            type="button"
+            onMouseEnter={() => setShortcutsOpen(true)}
+            onMouseLeave={() => setShortcutsOpen(false)}
+            title="Tastenkürzel (Strg+I)"
+            className="flex h-6 w-6 items-center justify-center rounded-full border border-[var(--color-border)] text-xs font-medium text-[var(--color-text-muted)] hover:text-[var(--color-computed)]"
+          >
+            i
+          </button>
+          {shortcutsOpen && (
+            <div className="absolute left-0 top-full z-10 mt-1 w-80 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-xs text-[var(--color-text)] shadow-lg">
+              <div className="mb-1.5 font-medium">Tastenkürzel</div>
+              <ul className="space-y-1">
+                <li>
+                  <b>Strg+N</b> / <b>Strg++</b> — Neue Buchung
+                </li>
+                <li>
+                  <b>Strg+T</b> — Aufteilen / weiter aufteilen
+                </li>
+                <li>
+                  <b>Strg+K</b> — Sprung ins Konto-Panel (Pfeiltasten, Enter übernimmt, Escape setzt zurück)
+                </li>
+                <li>
+                  <b>Strg+H</b> — Kürzlich gelöscht ein-/ausblenden
+                </li>
+                <li>
+                  <b>Entf</b> — Löschen (zweimal); auf einer gelöschten Buchung: Wiederherstellen (zweimal)
+                </li>
+                <li>
+                  <b>Escape</b> — vorgemerkte Löschung/Wiederherstellung abbrechen; offene Bearbeitung schließen
+                </li>
+                <li>
+                  <b>Tab</b> / <b>Pfeiltasten</b> — zwischen Zellen wechseln
+                </li>
+                <li>
+                  <b>Strg+I</b> — diese Übersicht ein-/ausblenden
+                </li>
+              </ul>
+            </div>
+          )}
+        </div>
+
         <div className="flex items-center gap-2">
           <span className="text-sm text-[var(--color-text-muted)]">Jahr:</span>
           {years.map((y) => (
@@ -1836,7 +1963,10 @@ export default function Konten() {
             a soft-deleted transaction stays invisible in normal use;
             switched on, it reappears in `rows` above (greyed) with its own
             Wiederherstellen action. */}
-        <label className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
+        <label
+          className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]"
+          title="Strg+H — auf manchen Geräten evtl. vom Browser belegt, bitte testen"
+        >
           <input type="checkbox" checked={showDeleted} onChange={(e) => setShowDeleted(e.target.checked)} />
           Kürzlich gelöscht
         </label>
@@ -2057,7 +2187,31 @@ export default function Konten() {
           // wherever arrow keys left the cursor, not only the last click.
           onCellFocused={(p) => {
             if (p.rowIndex == null) return
-            p.api.getDisplayedRowAtIndex(p.rowIndex)?.setSelected(true, true)
+            const node = p.api.getDisplayedRowAtIndex(p.rowIndex)
+            node?.setSelected(true, true)
+            // Real focus movement (Tab/arrow/click), not our own settle
+            // effect's setFocusedCell call below, supersedes any claim for
+            // a *different* target the moment it happens — otherwise a
+            // Firestore round-trip landing after the user has already
+            // tabbed away yanks focus back to the cell they just left
+            // (Markus: hitting Tab right after an edit "jumps back to the
+            // edited cell," needing a second Tab press). Matches this claim
+            // by the exact same identity the settle effect itself uses
+            // (transaction id + column + line index), so our *own*
+            // programmatic refocus onto the still-pending target never
+            // trips this — only a genuinely different cell does.
+            const data = node?.data
+            const targetId = data?.__isLine ? data.__parent.id : data?.id
+            const targetLineIndex = data?.__isLine ? data.__lineIndex : null
+            const stillPending =
+              pendingFocusIdRef.current != null &&
+              pendingFocusIdRef.current === targetId &&
+              pendingFocusColRef.current === p.column?.getColId() &&
+              pendingFocusLineIndexRef.current === targetLineIndex
+            if (!stillPending) {
+              pendingFocusIdRef.current = null
+              focusClaimRef.current += 1
+            }
           }}
           // The keyboard Delete key does the same thing as clicking the
           // trashcan (Markus's request) — same two-click-style arm/confirm
