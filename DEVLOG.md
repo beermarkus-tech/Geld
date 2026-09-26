@@ -891,3 +891,20 @@ Markus asked what's next (answered: the basic export/restore script, Phase 1b's 
 **PLAN.md Phase 1b is now fully done** — split transactions, the full tag mechanism, soft-delete with recovery, and this basic export/restore safety net are all built.
 
 **Next session should probably:** start PLAN.md Phase 2 (CSV import pipeline, auto-categorization, transfer-leg matching, Konten's filter/search bar — though a fair amount of the filter/search piece already exists from this session's own work). The standing Ctrl+H device confirmation and Außenstände migration checks from earlier entries are also still open.
+
+## Session 36, continued a fifth time — 2026-09-26 — Tab on Tags adds a new row
+
+Markus: "when i hit tab on the tags field or while within the tags drop down, i want a new empty row to be created below the current one" — a fast-entry gesture (fill a row out to Tags, hit Tab, get a blank row ready for the next transaction) rather than AG Grid's own default Tab-to-next-cell/row navigation.
+
+Two separate fixes were needed, since "Tab pressed while the Tags cell is merely focused" and "Tab pressed while its popup is actually open" reach completely different code:
+
+- **Not editing** — a new capture-phase `window` listener in `Konten.jsx` (same reasoning as the existing Ctrl+T one: Tab is a key AG Grid's own core keyboard service claims natively, so only capture phase reliably wins) checks the currently focused cell's colId (`'tags'`, now an explicit `colId` on that column instead of an auto-generated one) and calls `addRow()` directly.
+- **Editing, popup open** — added directly inside `TagEditor.jsx`'s own existing native keydown listener (alongside its Enter/Escape/Backspace handling), not centralized in `Konten.jsx`: it needs to `apply()` — committing whichever tags are already added as chips — *before* triggering the new row, and only `TagEditor` itself has that state. A new `onTabAddRow` prop, wired to `addRow` from both of the Tags column's `cellEditorParams` branches (parent row and line row alike).
+
+Doesn't also commit whatever's still typed but unconfirmed in the search box — same as Enter's own existing fallback rule, typing without pressing Enter first was never a commit path.
+
+**Verified via a disposable Playwright harness:** Tab on a focused-but-not-editing Tags cell adds a row (row count 1 → 2); Tab from inside the open dropdown, right after picking "Urlaub" via Enter and reopening, both applies the tag and adds another row (2 → 3), with the tag correctly still present on the original row afterward and the popup closing cleanly.
+
+`npm run build`, `npm test` (still 31), `npm run lint` all clean before pushing.
+
+**Next session should probably:** same standing items as the last several entries — PLAN.md Phase 2 (CSV import, auto-categorization, transfer-leg matching), the Ctrl+H device confirmation, and the Außenstände migration/panel check.

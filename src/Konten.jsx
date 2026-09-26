@@ -686,6 +686,30 @@ export default function Konten() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- addRow closes over year/accountFilter, both already current each render
   }, [year, accountFilter])
 
+  // Tab on the Tags cell adds a new row instead of AG Grid's own default
+  // Tab-to-next-cell navigation (Markus: "when i hit tab on the tags
+  // field... i want a new empty row to be created below the current one")
+  // — covers the *not currently editing* case only; TagEditor's own native
+  // listener handles the same key while its popup is actually open (it has
+  // direct access to the tags just picked, to apply them first). Capture
+  // phase, same reason as Ctrl+T above: Tab is a key AG Grid's own core
+  // keyboard service claims natively for cell-to-cell navigation, so a
+  // plain bubble-phase listener would lose that race outright.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key !== 'Tab') return
+      const api = gridRef.current?.api
+      if (!api || api.getEditingCells().length > 0) return
+      if (api.getFocusedCell()?.column?.getColId() !== 'tags') return
+      e.preventDefault()
+      e.stopPropagation()
+      addRow()
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- addRow closes over year/accountFilter, both already current each render
+  }, [year, accountFilter])
+
   // Ctrl/Cmd+T ("Teilen") triggers the split column's own ✚ (Markus) for
   // whichever transaction the cursor is currently on — a parent row
   // (starts the first split) or any of its own line rows (splits
@@ -1565,6 +1589,11 @@ export default function Konten() {
       },
       {
         headerName: 'Tags',
+        // Explicit colId, not left auto-generated — the Tab-adds-a-row
+        // handling below (Markus) needs to identify this exact column
+        // reliably from both onCellKeyDown (cell focused, not editing) and
+        // TagEditor's own native listener (mid-edit).
+        colId: 'tags',
         // The value is the raw tag-id array (or, for a legacy pre-mechanism
         // line, whatever raw strings are still sitting there) — cellRenderer
         // resolves each to a name+color chip; the comparator below uses its
@@ -1711,6 +1740,7 @@ export default function Konten() {
                 initialTagIds: p.data.__parent.lines[p.data.__lineIndex]?.tags ?? [],
                 onApply: (_data, tagIds) => applyTagsToLine(p.data.__parent, p.data.__lineIndex, tagIds),
                 onCreateTag: createTag,
+                onTabAddRow: addRow,
               }
             : {
                 tags,
@@ -1718,6 +1748,7 @@ export default function Konten() {
                 recentTagValues,
                 initialTagIds: (p.data.lines ?? [])[0]?.tags ?? [],
                 onApply: applyTagsDirect,
+                onTabAddRow: addRow,
                 onCreateTag: createTag,
               },
         cellEditorPopup: true,

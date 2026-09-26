@@ -105,7 +105,7 @@ const CREATE_TYPES = [
 // real tracked tag is a deliberate re-add (remove the old chip, retype —
 // matches the real tag by name if one already exists, or creates it).
 const TagEditor = forwardRef(function TagEditor(props, ref) {
-  const { data, tags, usedTagValues, recentTagValues = [], initialTagIds = [], onApply, onCreateTag, api } = props
+  const { data, tags, usedTagValues, recentTagValues = [], initialTagIds = [], onApply, onCreateTag, onTabAddRow, api } = props
   const [selectedIds, setSelectedIds] = useState(initialTagIds)
   const [inputText, setInputText] = useState('')
   const [highlight, setHighlight] = useState(0)
@@ -262,6 +262,18 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
         e.preventDefault()
         e.stopPropagation()
         setSelectedIds((prev) => prev.slice(0, -1))
+      } else if (e.key === 'Tab') {
+        // Markus: "when i hit tab on the tags field or while within the
+        // tags drop down, i want a new empty row to be created below the
+        // current one" — applies whatever's already been added as a chip
+        // (not whatever's still typed in the search box, unapplied — same
+        // as Enter's own fallback), closes this popup, and immediately
+        // adds a new blank transaction row, in place of AG Grid's own
+        // default Tab-to-next-cell/row navigation.
+        e.preventDefault()
+        e.stopPropagation()
+        apply()
+        onTabAddRow()
       }
     }
     el.addEventListener('keydown', onKeyDown)
