@@ -8,7 +8,7 @@ import { db } from './firebase'
 // back into Firestore" — deliberately not §3k's full design (a separate
 // parent/child transactions CSV plus this same JSON dump, its own nav
 // slot, a documented restore procedure) — that stays Phase 7. This exists
-// so a real mistake (a bad CSV import, an app bug, Phase 2's destructive
+// so a real mistake (a bad CSV import, an app bug, Phase 7's destructive
 // Settings operations later) has *something* to recover from before then,
 // not so Markus has to trust nothing will ever go wrong in the meantime.
 //

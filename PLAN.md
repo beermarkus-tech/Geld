@@ -40,23 +40,15 @@ See `CLAUDE.md` for how this fits alongside `spec.md` and `DEVLOG.md`.
 - Tags (allocation, grouping, claim, breakdown) wired into Konten.
 - **Test suite addition:** the split-transaction invariant (§2.6 — parent always equals Σ lines).
 - Soft-delete with a recovery window (§2.9a) for transaction deletion in Konten — the one layer AG Grid's cell-edit undo doesn't cover.
-- **Basic export — moved up from much later in the plan (external review, Sept 2026):** a rough, unpolished raw JSON dump of every collection, plus a rough script that reads it back into Firestore. Not §3k's full design (that stays in Phase 7) — just a real safety net that exists *before* Phase 2's CSV import and Phase 7's destructive Settings operations (merge, archive, restructure) start touching real data with no undo.
+- **Basic export — moved up from much later in the plan (external review, Sept 2026):** a rough, unpolished raw JSON dump of every collection, plus a rough script that reads it back into Firestore. Not §3k's full design (that stays in Phase 7) — just a real safety net that exists *before* Phase 3's CSV import and Phase 7's destructive Settings operations (merge, archive, restructure) start touching real data with no undo.
 
 **Testable deliverable:** Markus splits a real transaction (e.g. the Airbus salary line) into multiple tagged lines, watches the live remainder recalculate correctly as lines are added, and confirms the parent/line totals reconcile exactly. Separately: runs the basic export, deletes a test transaction, runs the restore script, and confirms it's back.
 
 ---
 
-## Phase 2 — Konten import & automation
+## Phase 2 — Verlauf & Planung
 
-- CSV import pipeline, auto-categorization by keyword (~70% target, `categorizationRules` collection, §2.7b), duplicate detection.
-- Automatic transfer-leg matching (§3a) — the suggest-and-confirm mechanism.
-- Konten's filter/search bar (quick-filter, per-field filters, date presets, saved filters).
-
-**Testable deliverable:** Markus imports a real BNP CSV export, sees auto-categorization apply to roughly 70% of rows, manually categorizes the rest, and enters two transfer legs (one BNP, one Livret A, different days) that correctly get suggested as a match.
-
----
-
-## Phase 3 — Verlauf & Planung
+**Swapped with the old Phase 2/CSV-import order (Sept 2026, Markus's call): "get budget and verlauf right first in order to test the mechanics of everything before i focus on importing the next bunch of real data."** Nothing in this phase actually depends on the CSV import pipeline below — Konten's manual entry (Phase 1a/1b) already feeds it everything it needs — so the swap is a pure reordering, not a dependency fix.
 
 - **Real navigation shell (§1b.2)** — added here (gap found Sept 2026: spec.md fully designs this but no phase had ever actually scheduled building it), since this is the first phase where a third real destination screen exists. Before now, `App.jsx`'s plain Konten/Datenimport toggle was sufficient; it stops being sufficient once Verlauf and Planung both need to be reachable too. Bottom nav bar (phone, 5 items) / left sidebar (tablet, all items) per §1b.2 — the full item list there also includes several screens not built until later phases (Dashboard, Quickview, Fortschritt, etc.); those links can exist and simply lead nowhere yet, or be added incrementally as each phase builds its screen — Markus's call when this phase starts.
 - `budgets` collection wired up; Verlauf's grid (category/subcategory × month, Prog/Plan1/Plan0 rows, breakdown-line mechanism, parent-tag automated rollup). AG Grid's Undo/Redo (§2.9a) enabled here too, same as Konten.
@@ -64,6 +56,16 @@ See `CLAUDE.md` for how this fits alongside `spec.md` and `DEVLOG.md`.
 - **Test suite addition:** the §3c `Budget` formula, against the real 2025/2026 figures already in spec.md — ready-made expected values, no fixture data needed.
 
 **Testable deliverable:** with 2025's real Plan0 fully migrated, Verlauf and Planung reproduce 2025's actual numbers exactly as they read in the Gsheet. Markus then enters a Plan1 budget for one real 2026 category in Verlauf, sees Planung reflect the identical numbers as a report, and sees Prog auto-computed correctly once a few real Konten transactions land in that category. Separately: Markus navigates between Konten, Verlauf, and Planung using the real nav shell on both phone and tablet, confirming the layout switches correctly at the breakpoint.
+
+---
+
+## Phase 3 — Konten import & automation
+
+- CSV import pipeline, auto-categorization by keyword (~70% target, `categorizationRules` collection, §2.7b), duplicate detection.
+- Automatic transfer-leg matching (§3a) — the suggest-and-confirm mechanism.
+- Konten's filter/search bar (quick-filter, per-field filters, date presets, saved filters) — largely already built (Sept 2026, during Phase 1b's real-usage feedback rounds): account/tag filtering, header filters on every column but Konto, and the "Kürzlich gelöscht" toggle all exist. Date-range presets and saved filters are what's actually left here.
+
+**Testable deliverable:** Markus imports a real BNP CSV export, sees auto-categorization apply to roughly 70% of rows, manually categorizes the rest, and enters two transfer legs (one BNP, one Livret A, different days) that correctly get suggested as a match.
 
 ---
 

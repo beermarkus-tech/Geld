@@ -922,3 +922,15 @@ Both columns got an explicit `colId` (`'kategorie'`/`'unterkategorie'`, previous
 Markus also asked what's after Phase 2, wondering whether Phase 2 itself should move later — answered in chat, not logged here since it's a planning discussion, not a code change; see PLAN.md if that conversation leads to an actual reordering.
 
 **Next session should probably:** same standing items — the Ctrl+H device confirmation, the Außenstände migration/panel check, and whichever phase Markus decides to start after that conversation.
+
+## Session 36, continued a seventh time — 2026-09-26 — PLAN.md: Verlauf/Planung swapped ahead of CSV import
+
+The planning conversation from last entry landed on an answer: "yes, i want to get budget and verlauf right first in order to test the mechanics of everything before i focus on importing the next bunch of real data. please lets swap phases 3 and 2."
+
+**PLAN.md revised** (real change, not routine progress — same discipline as always): Verlauf & Planung is now **Phase 2**, Konten's CSV import/auto-categorization/transfer-leg-matching is now **Phase 3** — content unchanged, just reordered and renumbered, plus a short note in the new Phase 2 explaining the swap and confirming nothing in it actually depended on Phase 3 (Konten's manual entry already feeds it everything it needs, so this was a pure reordering, not a dependency fix). Phase 3's own filter/search-bar bullet updated too — largely already built during this session's own real-usage rounds (account/tag filtering, per-column header filters, "Kürzlich gelöscht"), only date-range presets and saved filters genuinely remain there.
+
+**Every other cross-reference to the old numbering updated to match** — `CODEMAP.md` (three spots: `App.jsx`'s nav-shell note, `BackupScreen.jsx`'s safety-net note, the year-selector-duplication note), `spec.md` §3c's Jahresanfang flag (now reads "Phase 2/6," and calls out that Planung specifically needs its own re-check *soon*, not eventually, now that it's next). Also fixed a real pre-existing typo caught along the way, unrelated to the swap itself: `BackupScreen.jsx`'s own comment said "Phase 2's destructive Settings operations" when it always meant Phase 7's (Settings CRUD has never been Phase 2, under either numbering).
+
+`npm run build`, `npm test` (still 31), `npm run lint` all clean before pushing.
+
+**Next session should probably:** start Phase 2 (Verlauf & Planung) — the real nav shell, `budgets` wired up, Verlauf's grid, Planung as its read-only mirror, and the §3c `Budget` formula test suite. Worth resolving spec.md §3c's flagged Jahresanfang re-check (Barkonten's narrower post-Außenstände-consolidation definition) before or during that work, since it's no longer a someday item. Standing items (Ctrl+H device confirmation, Außenstände migration/panel check) are still open too.
