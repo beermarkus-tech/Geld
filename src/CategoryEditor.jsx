@@ -24,7 +24,7 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
   // which line (or none) it's editing and passes the right id directly,
   // rather than this component guessing from a `data` shape that differs
   // between the two cases.
-  const { data, categories, onApply, api, startField = 'group', initialCategoryId = null } = props
+  const { data, categories, onApply, onClear, api, startField = 'group', initialCategoryId = null } = props
   const currentGroupId = initialCategoryId
     ? (categories.find((c) => c.id === initialCategoryId)?.parentCategoryId ?? initialCategoryId)
     : null
@@ -74,6 +74,40 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
     }
   }, [startField])
 
+  // Advancing to Unterkategorie once a *new* group is actually picked
+  // (Markus: picking a category should directly close its list and shift
+  // to Unterkategorie — "it does but only after the second time"). The bug:
+  // Kategorie's own `onEnter` below calls `subcatRef.current?.focus()`
+  // synchronously, in the same tick as the `setGroupId` call that changed
+  // it — but React hasn't re-rendered yet at that point, so the
+  // Unterkategorie Listbox's `focus()` a moment later still runs against
+  // its *previous* render's closure, where `disabled={!groupId}` was still
+  // true for the old (pre-change) groupId and `subcatOptions` still listed
+  // the old group's own children. `openList()` (Listbox.jsx) checks
+  // `disabled` and silently no-ops, and the disabled button can't receive
+  // real DOM focus either — so nothing visibly happens on the first pick.
+  // Re-opening Kategorie and picking again works, because by then the
+  // *previous* pick's state update has already landed, so Unterkategorie's
+  // own closures are current. Fixed by moving the actual advance into a
+  // `groupId`-keyed effect instead — guaranteed to run only after React
+  // has committed the new render, so `disabled`/`subcatOptions` are always
+  // fresh. `prevGroupIdRef` (initialized to the *current* groupId, not
+  // reset on every render) distinguishes "groupId actually just changed via
+  // a pick" from "this is just the initial mount value" — otherwise opening
+  // an already-categorized row would spuriously auto-advance to
+  // Unterkategorie before the user has touched anything. Kategorie's own
+  // `onEnter` (below) stays as-is for the *other*, already-working case —
+  // re-confirming the same group unchanged via Enter (the normal case when
+  // arrowing through an already-categorized row) — since nothing is stale
+  // there and both would otherwise fire redundantly; this effect simply
+  // doesn't trigger a second time when groupId didn't actually change.
+  const prevGroupIdRef = useRef(groupId)
+  useEffect(() => {
+    const changed = prevGroupIdRef.current !== groupId
+    prevGroupIdRef.current = groupId
+    if (changed && groupId) subcatRef.current?.focus()
+  }, [groupId])
+
   // Escape cancels outright, discarding whatever's mid-edit (Markus) —
   // capture phase, not a plain React onKeyDown, for the same reason
   // KontoEditor.jsx's own Escape fix exists (its comment has the full
@@ -83,16 +117,35 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
   // capture phase runs before either of those, so this always gets first
   // refusal and a single Escape closes the whole popup immediately, not
   // just whichever Listbox happened to still be open.
+  // Delete clears the whole category assignment and closes (Markus: "i
+  // need to be able to delete a category setting... hitting DEL should
+  // close the modal and empty the category and subcat") — same capture-
+  // phase reasoning as Escape above. Only when there's no actual search
+  // text to delete first, though: the Kategorie/Unterkategorie Listboxes
+  // are searchable (below), and their search box auto-focuses the instant
+  // this popup opens, so a plain DOM check on the live input value (not
+  // Listbox's own internal state, which this component has no access to)
+  // is what tells "nothing typed yet, DEL means clear the categorization"
+  // apart from "there's a query here, DEL means delete a character of it"
+  // — the ordinary text-editing behavior a capture-phase intercept would
+  // otherwise permanently break.
   useEffect(() => {
     const onKeyDown = (e) => {
-      if (e.key !== 'Escape') return
-      e.preventDefault()
-      e.stopPropagation()
-      api.stopEditing(true)
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        api.stopEditing(true)
+      } else if (e.key === 'Delete') {
+        if (e.target.tagName === 'INPUT' && e.target.value !== '') return
+        e.preventDefault()
+        e.stopPropagation()
+        onClear()
+        api.stopEditing(true)
+      }
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [api])
+  }, [api, onClear])
 
   // Takes an optional override for the just-committed Unterkategorie
   // value, for the same reason as KontoEditor.jsx's apply(): Listbox's
@@ -131,6 +184,7 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
           onEnter={(id) => id && subcatRef.current?.focus()}
           options={groupOptions}
           placeholder="– wählen –"
+          searchable
         />
       </label>
       <label className="text-xs text-[var(--color-text-muted)]">
@@ -143,6 +197,7 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
           options={subcatOptions}
           disabled={!groupId}
           placeholder="– wählen –"
+          searchable
         />
       </label>
       {/* Explicit Übernehmen/Abbrechen (Markus's request) for mouse/touch

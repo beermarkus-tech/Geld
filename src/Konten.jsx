@@ -154,6 +154,26 @@ function applyCategoryToLine(tx, lineIndex, categoryId) {
   next.lines = next.lines.map((l, i) => (i === lineIndex ? { ...l, categoryId } : l))
   persistTx(next)
 }
+// A deliberate clear (Markus: "i need to be able to delete a category
+// setting... hitting DEL should... empty the category and subcat") — a
+// separate function, not a null categoryId threaded through
+// applyCategoryDirect/applyCategoryToLine above, since those two
+// deliberately refuse a falsy categoryId (guarding against an accidental
+// empty commit from the normal apply path) and shouldn't have that guard
+// weakened just to let a genuine clear through. Kategorie has no field of
+// its own to also clear (§2.6 — always derived from categoryId), so
+// nulling categoryId here already clears both cells at once.
+function clearCategoryDirect(data) {
+  const tx = { ...data }
+  const line = ensureLine(tx)
+  tx.lines = [{ ...line, categoryId: null }]
+  persistTx(tx)
+}
+function clearCategoryToLine(tx, lineIndex) {
+  const next = { ...tx }
+  next.lines = next.lines.map((l, i) => (i === lineIndex ? { ...l, categoryId: null } : l))
+  persistTx(next)
+}
 // Same direct-write pattern as applyCategoryDirect/applyCategoryToLine
 // above, for TagEditor's own Übernehmen — unlike category, an empty
 // tagIds array is a perfectly valid commit (a line can carry zero tags),
@@ -268,6 +288,13 @@ export default function Konten() {
   // switched on, soft-deleted-but-not-yet-purged rows reappear in `rows`
   // below, visually distinct, each with its own Wiederherstellen action.
   const [showDeleted, setShowDeleted] = useState(false)
+  // Manual "empty the trash" (Markus: "i need a function to permanently
+  // delete all 'kürzlich gelöscht' rows... in case i have to delete a
+  // large number of rows for any reason") — distinct from the automatic
+  // ~week-later purge effect above, which only ever catches up on its own
+  // schedule. A real, irreversible deleteDoc per row, gated behind this
+  // confirmation modal rather than firing straight from the trashcan click.
+  const [confirmPurgeOpen, setConfirmPurgeOpen] = useState(false)
   // Keyboard-shortcuts help popover (Markus) — hover the (i) icon to show
   // it, Ctrl+I toggles the same state without hovering, Escape closes it.
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
@@ -641,16 +668,15 @@ export default function Konten() {
   // happen harmlessly, but it may not be fully reliable everywhere for
   // reasons outside the app's control. '=' is included since '+' usually
   // requires Shift, and keyboards/browsers report that combination either
-  // way depending on layout. Ctrl/Cmd+N added alongside it (Markus) — same
-  // caveat as Ctrl+T/'+' before it: 'N' is the browser's own "new window"
-  // shortcut nearly everywhere, so it carries the same real risk of being
-  // swallowed before the page ever sees it, worth Markus confirming on his
-  // own device same as the others. Skipped while a cell is being edited,
-  // so neither fires in the middle of typing a category/tag/etc.
+  // way depending on layout. **Ctrl/Cmd+N removed again (Markus, Sept
+  // 2026): "'+' is enough"** — it had the same real browser-reservation
+  // risk as Ctrl+T/H anyway ("new window," nearly everywhere), and wasn't
+  // worth keeping alongside '+' once asked. Skipped while a cell is being
+  // edited, so this doesn't fire in the middle of typing a category/tag/etc.
   useEffect(() => {
     const onKeyDown = (e) => {
       if (!e.ctrlKey && !e.metaKey) return
-      if (e.key !== '+' && e.key !== '=' && e.key.toLowerCase() !== 'n') return
+      if (e.key !== '+' && e.key !== '=') return
       if (gridRef.current?.api?.getEditingCells().length > 0) return
       e.preventDefault()
       addRow()
@@ -833,6 +859,17 @@ export default function Konten() {
     }
   }
 
+  // Real, irreversible deletes — every currently soft-deleted transaction,
+  // not just the ones in the selected year (Markus wants to clean up "a
+  // large number of rows," which could span years) — gated behind
+  // confirmPurgeOpen's modal, not fired directly from a click.
+  function purgeAllDeleted() {
+    transactions.forEach((t) => {
+      if (t.deletedAt) deleteDoc(doc(db, 'transactions', t.id))
+    })
+    setConfirmPurgeOpen(false)
+  }
+
   // Escape discharges an armed delete (Markus) regardless of where focus
   // currently is — arming can start from either the trashcan click or the
   // keyboard Delete key on a focused cell, so this listens globally rather
@@ -848,6 +885,16 @@ export default function Konten() {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [confirmDeleteId])
+
+  // Same, for the purge-confirmation modal above.
+  useEffect(() => {
+    if (!confirmPurgeOpen) return
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setConfirmPurgeOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [confirmPurgeOpen])
 
   // getRowStyle alone doesn't get re-evaluated for already-rendered rows
   // just because confirmDeleteId changed elsewhere in React state — force
@@ -1436,12 +1483,14 @@ export default function Konten() {
                 categories,
                 initialCategoryId: p.data.__parent.lines[p.data.__lineIndex]?.categoryId ?? null,
                 onApply: (_data, categoryId) => applyCategoryToLine(p.data.__parent, p.data.__lineIndex, categoryId),
+                onClear: () => clearCategoryToLine(p.data.__parent, p.data.__lineIndex),
                 startField: 'group',
               }
             : {
                 categories,
                 initialCategoryId: (p.data.lines ?? [])[0]?.categoryId ?? null,
                 onApply: applyCategoryDirect,
+                onClear: () => clearCategoryDirect(p.data),
                 startField: 'group',
               },
         cellEditorPopup: true,
@@ -1485,12 +1534,14 @@ export default function Konten() {
                 categories,
                 initialCategoryId: p.data.__parent.lines[p.data.__lineIndex]?.categoryId ?? null,
                 onApply: (_data, categoryId) => applyCategoryToLine(p.data.__parent, p.data.__lineIndex, categoryId),
+                onClear: () => clearCategoryToLine(p.data.__parent, p.data.__lineIndex),
                 startField: 'category',
               }
             : {
                 categories,
                 initialCategoryId: (p.data.lines ?? [])[0]?.categoryId ?? null,
                 onApply: applyCategoryDirect,
+                onClear: () => clearCategoryDirect(p.data),
                 startField: 'category',
               },
         cellEditorPopup: true,
@@ -1851,53 +1902,6 @@ export default function Konten() {
   return (
     <div className="flex min-h-full flex-col gap-3 px-4 py-3">
       <div className="flex flex-wrap items-center gap-4">
-        {/* Keyboard-shortcuts help (Markus): hover shows the list; Ctrl+I
-            toggles the same popover without needing the mouse; Escape (or
-            Ctrl+I again) closes it — see the two effects above for the
-            actual key handling. */}
-        <div className="relative">
-          <button
-            type="button"
-            onMouseEnter={() => setShortcutsOpen(true)}
-            onMouseLeave={() => setShortcutsOpen(false)}
-            title="Tastenkürzel (Strg+I)"
-            className="flex h-6 w-6 items-center justify-center rounded-full border border-[var(--color-border)] text-xs font-medium text-[var(--color-text-muted)] hover:text-[var(--color-computed)]"
-          >
-            i
-          </button>
-          {shortcutsOpen && (
-            <div className="absolute left-0 top-full z-10 mt-1 w-80 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-xs text-[var(--color-text)] shadow-lg">
-              <div className="mb-1.5 font-medium">Tastenkürzel</div>
-              <ul className="space-y-1">
-                <li>
-                  <b>Strg+N</b> / <b>Strg++</b> — Neue Buchung
-                </li>
-                <li>
-                  <b>Strg+T</b> — Aufteilen / weiter aufteilen
-                </li>
-                <li>
-                  <b>Strg+K</b> — Sprung ins Konto-Panel (Pfeiltasten, Enter übernimmt, Escape setzt zurück)
-                </li>
-                <li>
-                  <b>Strg+H</b> — Kürzlich gelöscht ein-/ausblenden
-                </li>
-                <li>
-                  <b>Entf</b> — Löschen (zweimal); auf einer gelöschten Buchung: Wiederherstellen (zweimal)
-                </li>
-                <li>
-                  <b>Escape</b> — vorgemerkte Löschung/Wiederherstellung abbrechen; offene Bearbeitung schließen
-                </li>
-                <li>
-                  <b>Tab</b> / <b>Pfeiltasten</b> — zwischen Zellen wechseln
-                </li>
-                <li>
-                  <b>Strg+I</b> — diese Übersicht ein-/ausblenden
-                </li>
-              </ul>
-            </div>
-          )}
-        </div>
-
         <div className="flex items-center gap-2">
           <span className="text-sm text-[var(--color-text-muted)]">Jahr:</span>
           {years.map((y) => (
@@ -1963,18 +1967,28 @@ export default function Konten() {
             a soft-deleted transaction stays invisible in normal use;
             switched on, it reappears in `rows` above (greyed) with its own
             Wiederherstellen action. */}
-        <label
-          className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]"
-          title="Strg+H — auf manchen Geräten evtl. vom Browser belegt, bitte testen"
-        >
+        <label className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
           <input type="checkbox" checked={showDeleted} onChange={(e) => setShowDeleted(e.target.checked)} />
           Kürzlich gelöscht
         </label>
+        {/* Manual "empty the trash" (Markus), only reachable while browsing
+            the deleted rows — a real, irreversible delete, so it opens a
+            confirmation modal (below) rather than firing on click alone. */}
+        {showDeleted && (
+          <button
+            type="button"
+            onClick={() => setConfirmPurgeOpen(true)}
+            title="Alle gelöschten Buchungen endgültig entfernen"
+            className="rounded px-1 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-alert)]"
+          >
+            🗑
+          </button>
+        )}
 
         <button
           type="button"
           onClick={addRow}
-          title="Fügt eine leere Zeile direkt unter der markierten Zeile ein (mit deren Datum) (Ctrl+N oder Ctrl+'+')"
+          title="Fügt eine leere Zeile direkt unter der markierten Zeile ein (mit deren Datum) (Ctrl+'+')"
           className="rounded-md bg-[var(--color-computed)] px-3 py-1 text-sm font-medium text-white"
         >
           + Neue Buchung
@@ -1994,7 +2008,7 @@ export default function Konten() {
           <div className="ml-auto flex items-center gap-3">
             {tagFilterSum !== null && (
               <span className="text-sm text-[var(--color-text-muted)]">
-                Summe „{qualifiedTagName(filteredTagForSum, tagById) || accountFilter}“:{' '}
+                Angezeigt:{' '}
                 <span className="tabular-figure font-medium text-[var(--color-computed)]">{centsToEuro(tagFilterSum)} €</span>
               </span>
             )}
@@ -2012,6 +2026,46 @@ export default function Konten() {
             )}
           </div>
         )}
+
+        {/* Keyboard-shortcuts help (Markus): hover shows the list; Ctrl+I
+            toggles the same popover without needing the mouse; Escape (or
+            Ctrl+I again) closes it — see the two effects above for the
+            actual key handling. Always the very last/rightmost item in the
+            toolbar (Markus) — its own `ml-auto` pushes it there even when
+            the Summe/Filter-zurücksetzen block above isn't rendered at all. */}
+        <div className="relative ml-auto">
+          <button
+            type="button"
+            onMouseEnter={() => setShortcutsOpen(true)}
+            onMouseLeave={() => setShortcutsOpen(false)}
+            title="Tastenkürzel (Strg+I)"
+            className="flex h-6 w-6 items-center justify-center rounded-full border border-[var(--color-border)] text-xs font-medium text-[var(--color-text-muted)] hover:text-[var(--color-computed)]"
+          >
+            i
+          </button>
+          {shortcutsOpen && (
+            <div className="absolute right-0 top-full z-10 mt-1 w-72 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-xs text-[var(--color-text)] shadow-lg">
+              <div className="mb-1.5 font-medium">Tastenkürzel</div>
+              <ul className="space-y-1">
+                <li>
+                  <b>Strg++</b> — Neue Buchung
+                </li>
+                <li>
+                  <b>Strg+T</b> — Aufteilen / weiter aufteilen
+                </li>
+                <li>
+                  <b>Strg+K</b> — Sprung ins Konto-Panel
+                </li>
+                <li>
+                  <b>Strg+H</b> — Kürzlich gelöscht ein-/ausblenden
+                </li>
+                <li>
+                  <b>Strg+I</b> — diese Übersicht ein-/ausblenden
+                </li>
+              </ul>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Pinned balance panel — Jahresende(selected year) per account,
@@ -2236,6 +2290,42 @@ export default function Konten() {
           initialState={{ sort: { sortModel: [{ colId: 'date', sort: 'asc' }] } }}
         />
       </div>
+      {/* Confirmation for purgeAllDeleted (Markus) — a real, irreversible
+          delete, unlike everything else this trashcan icon does elsewhere
+          in this file, so it gets its own explicit confirmation step rather
+          than the grid's own click-twice pattern. `position: fixed` renders
+          as a full-viewport overlay regardless of nesting depth, so this
+          can live right here rather than needing a portal. */}
+      {confirmPurgeOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setConfirmPurgeOpen(false)}>
+          <div
+            className="w-80 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-2 text-sm font-medium">Gelöschte Buchungen endgültig entfernen?</div>
+            <p className="mb-4 text-sm text-[var(--color-text-muted)]">
+              {transactions.filter((t) => t.deletedAt).length} gelöschte Buchung(en) werden unwiderruflich entfernt, nicht nur aus der
+              Ansicht.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmPurgeOpen(false)}
+                className="rounded px-3 py-1 text-sm text-[var(--color-text-muted)]"
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                onClick={purgeAllDeleted}
+                className="rounded bg-[var(--color-alert)] px-3 py-1 text-sm font-medium text-white"
+              >
+                Endgültig löschen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
