@@ -965,3 +965,24 @@ Markus, quick follow-up: "in the (i) hover text, remove the details in brackets"
 `npm run build`, `npm run lint` clean before pushing.
 
 **Next session:** unchanged from the last entry — the nav shell is still the next real piece of work (spec.md §1b.2 needs a full re-read first, given Markus's tablet-collapsible-sidebar requirement).
+
+## Session 36, continued a tenth time — 2026-09-26 — Real nav shell (PLAN.md Phase 2's first deliverable)
+
+Re-read spec.md §1b.2/§1b.2a/§1b.3/§1b.7 in full, reported findings back to Markus, and got two open questions resolved before building (both flagged by PLAN.md itself as "Markus's call when this phase starts"):
+- **Every nav item gets a real entry from the start**, including screens not built until later phases — a plain "kommt noch" placeholder, not left out or added incrementally.
+- **The global year selector (§1b.2a) moves into the shared header now**, not deferred until Verlauf needs it — `Konten.jsx`'s own year buttons come out of its toolbar.
+
+**spec.md §1b.2 updated** with Markus's own addition on top of what was already there: the tablet sidebar is collapsible via a burger button top-left next to "Geld," collapsing hides it *entirely* (not an icon rail) so content gets the full width back; collapsed/expanded is a per-device convenience, not synced data. **PLAN.md Phase 2's nav-shell bullet updated** to record both resolved decisions above, so a future session doesn't find the same "Markus's call" note and re-ask something already answered.
+
+**Four new/changed files:**
+- **`src/NavShell.jsx`** (new) — the shell chrome: header (burger, "Geld", active screen title, year selector, sign-out), a tablet sidebar (`ALL_ITEMS`, hidden below Tailwind's `md` breakpoint — 768px, my own default choice, not spec-mandated), a phone bottom nav (`PRIMARY_ITEMS` + "More", hidden at `md`+). One CSS breakpoint switches layout, never two code paths, per spec.md §1's own requirement. `PRIMARY_ITEMS`/`MORE_ITEMS`/`ALL_ITEMS` (exported) are the one source of truth for the item list — `App.jsx`'s routing reads the same ids rather than a second hand-maintained list. Collapsed state persists via `localStorage` (wrapped in try/catch). "More" (phone) opens a dismissible bottom sheet with the same 6 items the tablet sidebar shows inline.
+- **`src/PlaceholderScreen.jsx`** (new) — the "kommt noch" stand-in for every not-yet-built destination.
+- **`src/ImportExportScreen.jsx`** (new) — `ImportScreen`/`BackupScreen` as two tabs under spec's one "Import/Export" nav item, replacing their old independent header toggles.
+- **`src/App.jsx`** (rewritten) — owns `view` (which nav item, not a URL) and the lifted `year`/`years` state; renders `NavShell` with the right screen as its child.
+- **`src/Konten.jsx`** — `year`/`setYear` local state removed; now takes `year`/`onYearChange`/`onYearsChange` as props. Still computes `years` itself (the only screen that currently loads `transactions`) and reports it up via `onYearsChange` — flagged in CODEMAP.md as worth a deliberate look once Verlauf needs the same list, rather than letting both screens grow independent copies of "which years have data."
+
+**Verified via a disposable Playwright harness**, both at a tablet width (1024×768) and a phone width (390×844): tablet shows the sidebar (all 10 items, correct order) with the bottom nav hidden and vice versa on phone; burger collapses/expands the sidebar and the collapsed state survives a reload; phone's "More" sheet lists exactly the other 6 items, closes on Escape or after picking one, and highlights "More" itself while on one of its destinations; the year selector populates from Konten's own data and correctly drives which year's transactions the grid shows; navigating to an unbuilt screen shows the placeholder and the header's own screen-title suffix updates; Import/Export's two tabs both render. No console/page errors in any of it.
+
+`npm run build`, `npm test` (still 31 — no new pure-function surface, this is UI/routing plumbing), `npm run lint` all clean before pushing.
+
+**Next session should probably:** start on Dashboard, Verlauf, or Planung's real content — the shell around them now exists. Standing items (Ctrl+H device confirmation, Außenstände migration/panel check) are still open. Worth a look before Verlauf specifically: the `years`-reporting duplication flagged in CODEMAP.md above.

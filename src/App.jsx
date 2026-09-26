@@ -2,21 +2,28 @@ import { useEffect, useState } from 'react'
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth'
 
 import { auth } from './firebase'
-import BackupScreen from './BackupScreen'
-import ImportScreen from './ImportScreen'
+import ImportExportScreen from './ImportExportScreen'
 import Konten from './Konten'
 import { waitForInitialAuthState } from './lib/authReady'
+import NavShell, { ALL_ITEMS } from './NavShell'
+import PlaceholderScreen from './PlaceholderScreen'
 
 export default function App() {
   const [user, setUser] = useState(null)
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [usingCachedSession, setUsingCachedSession] = useState(false)
   const [signInError, setSignInError] = useState(null)
-  // No real nav shell yet (§1b.2 — that's a later phase). Konten is the
-  // main screen now that Phase 1a's data is imported; the import screen
-  // stays reachable (kept for later re-use, Markus's call) via this toggle
-  // instead of always occupying the main content.
+  // The real nav shell (spec.md §1b.2), replacing the old flat Konten/
+  // Datenimport/Sicherung toggle row — `view` is one of NavShell's own
+  // item ids (`ALL_ITEMS`), not tied to a URL (§1b.1: one static page,
+  // navigation handled entirely in React state).
   const [view, setView] = useState('konten')
+  // The single global year selector (§1b.2a) — lives in the shell's own
+  // header now, not inside Konten. `years` starts empty until Konten (the
+  // one screen that currently loads transactions) reports up what it
+  // actually has data for.
+  const [year, setYear] = useState(null)
+  const [years, setYears] = useState([])
 
   useEffect(() => {
     let active = true
@@ -75,58 +82,26 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3">
-        <h1 className="text-lg font-semibold">Geld</h1>
-        <div className="flex items-center gap-4">
-          {/* Stopgap until §1b.2's real nav shell exists. Konten (build 27's
-              actual deliverable) is the default; the import screen is kept
-              reachable rather than deleted, per Markus's call, in case more
-              data ever needs (re-)loading the same way. */}
-          <button
-            type="button"
-            onClick={() => setView(view === 'import' ? 'konten' : 'import')}
-            className="text-sm text-[var(--color-text-muted)] underline"
-          >
-            {view === 'import' ? 'Zurück zu Konten' : 'Datenimport'}
-          </button>
-          {/* PLAN.md Phase 1b's basic safety net — a rough JSON export/
-              restore, not §3k's polished version (own nav slot, transactions
-              CSV, documented procedure), which stays Phase 7. Each of these
-              two toggles independently, not tied to whichever one happens
-              to be active, so their own labels never both read "Zurück zu
-              Konten" at once. */}
-          <button
-            type="button"
-            onClick={() => setView(view === 'backup' ? 'konten' : 'backup')}
-            className="text-sm text-[var(--color-text-muted)] underline"
-          >
-            {view === 'backup' ? 'Zurück zu Konten' : 'Sicherung'}
-          </button>
-          <button type="button" onClick={() => signOut(auth)} className="text-sm text-[var(--color-text-muted)]">
-            Abmelden
-          </button>
-        </div>
-      </header>
-
-      {/* overflow-y-auto, not overflow-hidden: Konten's own content (the
-          pinned panel especially, which stacks to four tall blocks on a
-          narrow phone screen) can be taller than the viewport, and the page
-          itself needs to be able to scroll to reach what's below it —
-          overflow-hidden here previously trapped that content unreachably. */}
-      <main className="flex flex-1 flex-col overflow-y-auto">
-        {view === 'import' && (
-          <div>
-            <p className="px-6 pt-4 text-center text-sm text-[var(--color-text-muted)]">
-              Angemeldet als {user.email}
-              {usingCachedSession && ' (aus zwischengespeicherter Sitzung, noch nicht online bestätigt)'}
-            </p>
-            <ImportScreen />
-          </div>
-        )}
-        {view === 'backup' && <BackupScreen />}
-        {view === 'konten' && <Konten />}
-      </main>
-    </div>
+    <NavShell
+      activeView={view}
+      onNavigate={setView}
+      year={year}
+      years={years}
+      onYearChange={setYear}
+      userEmail={user.email}
+      usingCachedSession={usingCachedSession}
+      onSignOut={() => signOut(auth)}
+    >
+      {view === 'konten' && <Konten year={year} onYearChange={setYear} onYearsChange={setYears} />}
+      {view === 'importexport' && <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} />}
+      {/* Every other nav item (Dashboard, Verlauf, Planung, Quickview,
+          Fortschritt, Monatsabschluss, Außenstände, Settings) isn't built
+          yet — resolved Sept 2026 (Markus): a real nav entry exists for
+          each from the start anyway, landing on a plain placeholder rather
+          than being left out until its own phase ships. */}
+      {!['konten', 'importexport'].includes(view) && (
+        <PlaceholderScreen title={ALL_ITEMS.find((i) => i.id === view)?.label ?? view} />
+      )}
+    </NavShell>
   )
 }

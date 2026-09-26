@@ -80,9 +80,13 @@ The user is a non-programmer ("vibe coder") directing AI-assisted development, a
 ### 1b.2 Navigation shell
 
 **Phone (bottom nav bar, 5 items):** Dashboard, Konten, Verlauf, Planung, More.
-**Tablet (left sidebar, all items visible, no "More" collapsing needed):** Dashboard, Konten, Verlauf, Planung, Quickview, Fortschritt (§3j — working name), Monatsabschluss (§3h), Außenstände (§3g — generalized: replaces the earlier separate Reisekosten/CPAM/loan-tracker items), Import/Export, Settings.
+**Tablet (left sidebar, all items visible):** Dashboard, Konten, Verlauf, Planung, Quickview, Fortschritt (§3j — working name), Monatsabschluss (§3h), Außenstände (§3g — generalized: replaces the earlier separate Reisekosten/CPAM/loan-tracker items), Import/Export, Settings.
 
 "More" (phone) / the extra sidebar items (tablet) resolve to the same destinations — this is a layout difference, not a capability difference, consistent with the "no phone-only or tablet-only functions" principle already established for Konten (§3a) and generalized here to the whole app.
+
+**Tablet sidebar is collapsible (added Sept 2026, Markus)** — a burger button lives top-left in the header, directly next to the "Geld" wordmark, and toggles the sidebar between fully expanded (all items, labeled) and collapsed (icons only, or hidden entirely — an implementation choice, not a design one) so the content area can reclaim the full screen width when the sidebar isn't needed. Collapsed/expanded is a per-device UI convenience, not synced app data — remembered locally on that device, not written to Firestore.
+
+**Screens not yet built get a real nav entry from the start, not added incrementally (Markus, Sept 2026, deciding the open question below)** — tapping one shows a plain "kommt noch" placeholder rather than leading nowhere, so the nav's shape is visibly complete even while most of it is still under construction.
 
 **Dashboard — corrected/finalized structure: individual cards, each opening its own detail view.** Prognose and Status have no mockups and no separate nav-reachable screens of their own (confirmed) — their content *is* what Dashboard shows; there is no "open Prognose" destination beyond what's described here. Structure:
 - **Alerts band, pinned above the card grid, not itself a card** — surfaces open Außenstände, allocation-tag mismatches, and anything else from the live-check family, since these need to be seen immediately, not discovered by tapping into something. Unchanged from before.

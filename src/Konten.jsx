@@ -261,7 +261,14 @@ function glueToParent(getValue) {
   }
 }
 
-export default function Konten() {
+// `year`/`onYearChange` are controlled from the app shell's own header now
+// (spec.md §1b.2a: "a single year selector lives in the app shell header,
+// not per-screen") — Konten still owns computing *which* years actually
+// have data (from its own `transactions`, below) and reports that list
+// back up via `onYearsChange`, since it's the one screen that currently
+// loads transactions at all; the shell just renders whatever list it's
+// told about.
+export default function Konten({ year, onYearChange, onYearsChange }) {
   const [accounts, setAccounts] = useState([])
   const [categories, setCategories] = useState([])
   const [tags, setTags] = useState([])
@@ -271,7 +278,6 @@ export default function Konten() {
   // stays trivial to hold in memory even as more years accumulate.
   const [transactions, setTransactions] = useState([])
   const [loaded, setLoaded] = useState({ accounts: false, categories: false, tags: false, transactions: false })
-  const [year, setYear] = useState(null)
   // Account filter: a distinct mechanism from a plain column filter (spec.md
   // §3a's filtering section) — Konto's own display is derived per row, so
   // the same account can show up on either side depending on that
@@ -1081,11 +1087,18 @@ export default function Konten() {
     return [...set].sort()
   }, [transactions])
 
+  // Reports the computed list up to the shell's own header selector
+  // (above) whenever it changes — not every render, so a parent state
+  // update this triggers doesn't itself re-trigger this effect pointlessly.
+  useEffect(() => {
+    onYearsChange?.(years)
+  }, [years, onYearsChange])
+
   // Default to the most recent year once data has loaded; a manual pick
   // (below) always overrides this.
   useEffect(() => {
-    if (year === null && years.length > 0) setYear(years[years.length - 1])
-  }, [years, year])
+    if (year === null && years.length > 0) onYearChange(years[years.length - 1])
+  }, [years, year, onYearChange])
 
   // AG Grid's own change detection is keyed on row-data identity, not on
   // "did some external value a valueGetter closes over change" — Konto and
@@ -2062,25 +2075,6 @@ export default function Konten() {
   return (
     <div className="flex min-h-full flex-col gap-3 px-4 py-3">
       <div className="flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-[var(--color-text-muted)]">Jahr:</span>
-          {years.map((y) => (
-            <button
-              key={y}
-              type="button"
-              onClick={() => setYear(y)}
-              className={
-                'rounded-md px-3 py-1 text-sm ' +
-                (y === year
-                  ? 'bg-[var(--color-computed)] text-white'
-                  : 'bg-[var(--color-surface)] text-[var(--color-text-muted)]')
-              }
-            >
-              {y}
-            </button>
-          ))}
-        </div>
-
         {/* The account filter from spec.md §3a's filtering section — not the
             same as a column filter on Konto (see the note there): this shows
             every transaction touching the chosen account, either side, from
