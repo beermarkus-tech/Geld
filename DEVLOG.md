@@ -1101,3 +1101,15 @@ A batch spanning all three areas (Verlauf, Konten, general shell), from Markus's
 `npm run build`, `npm test` (still 42 — no new pure-function surface this round), `npm run lint` all clean before pushing.
 
 **Next session should probably:** the Verlauf gridline bug is the one standing item worth a fresh angle rather than another guess at the same CSS variable — actual ground-truth pixel sampling (screenshot → canvas `getImageData`) was underway when this got deferred, and is probably the right next step rather than more DOM/CSS property reasoning. Otherwise, standing items are unchanged from prior entries: breakdown-line UI in Verlauf, the parent-tag "(automatisch)" rollup header, Plan0/Plan1 editing with its soft confirm-to-edit lock, phone's one-month-card Verlauf layout, the "account totals" Verlauf section ambiguity, Ctrl+H device confirmation, and the Außenstände migration/panel check.
+
+## Session 36, continued a nineteenth time — 2026-09-26 — Fix: Betrag's sign didn't follow the allocation-tag Konto reordering
+
+Markus caught this from a real screenshot: filtering by "Sparen Sophia" showed each contribution row as "Livret A Sparen ← BNP Konto" (arrow correctly pointing into the savings account) but Betrag as a negative, amber `-100,00` — reading as an outflow *from* Livret A Sparen, the opposite of what the arrow showed.
+
+**Root cause:** last round's `allocationSideOrder()` reorders Konto's display (and mirrors the arrow) to always show the tag's target account first, but `betragValue` was never updated to match — it still signed the amount via `t.fromAccountId ?? t.toAccountId` (the "natural," pre-reordering perspective), so a negative sign kept meaning "outflow from `fromAccountId`" even on rows where Konto no longer showed `fromAccountId` first. Fixed: `betragValue` now branches on the same `allocationOrder` (and `filteredAccountId`) `kontoValue` already does, signing relative to whichever account is actually shown first/left — the same "never two implementations that could disagree" rule already applied to `kontoValue`'s own plain-text/cellRenderer split.
+
+**Verified via a disposable Playwright harness** (a contribution and a withdrawal, both tagged Sparen Sophia): the contribution now shows a mirrored arrow *and* a positive `100,00`; the withdrawal shows a normal arrow *and* a negative, amber `-50,00` — arrow and sign agree in both directions now, confirmed via screenshot, not just computed style/text checks.
+
+`npm run build`, `npm test` (still 42), `npm run lint` all clean before pushing.
+
+**Next session:** no new standing items — this was a scoped bugfix on last round's own feature. Everything else unchanged from the prior entry.

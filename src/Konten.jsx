@@ -600,7 +600,18 @@ export default function Konten({ year, onYearChange, onYearsChange }) {
     }
     return accountName(t.fromAccountId ?? t.toAccountId)
   }
-  const betragValue = (t) => signedFor(t, filteredAccountId ?? (t.fromAccountId ?? t.toAccountId))
+  // Signed relative to whichever account kontoValue/the arrow actually
+  // shows first/left — never independently derived, or the two can
+  // disagree on direction (Markus, screenshot: arrow and sign contradicted
+  // each other once allocation-tag filtering started reordering Konto
+  // without Betrag following). Falls through the exact same three cases
+  // kontoValue does, in the same order, for the same reason.
+  const betragValue = (t) => {
+    if (filteredAccountId) return signedFor(t, filteredAccountId)
+    const allocationOrder = allocationSideOrder(t, filteredAllocationTargets)
+    if (allocationOrder) return signedFor(t, allocationOrder.left)
+    return signedFor(t, t.fromAccountId ?? t.toAccountId)
+  }
   const kategorieValue = (t) => {
     const ids = [...new Set((t.lines ?? []).map((l) => l.categoryId).filter(Boolean))]
     if (ids.length === 0) return '—'
