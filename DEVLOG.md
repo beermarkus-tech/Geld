@@ -1143,3 +1143,19 @@ Phase 2's next real slice, per PLAN.md — Verlauf was read-only until now. Scop
 `npm run build`, `npm test` (still 43), `npm run lint` all clean before pushing.
 
 **Next session should probably:** breakdown-line rows themselves (rendering, the parent-tag "(automatisch)" rollup header) are the natural next slice — they unlock both a genuinely complete Verlauf display and breakdown-line editing after that. Standing items unchanged: the Verlauf gridline bug (deferred), phone's one-month-card layout, the "account totals" section ambiguity, Ctrl+H device confirmation, Außenstände migration/panel check.
+
+## Session 36, continued a twenty-second time — 2026-09-26 — Fix: editing scrolled the Verlauf grid back to the top
+
+Markus, immediately after trying the new editing feature: "when i edit a cell the grid snaps weirdly back to the top."
+
+**Root cause:** Verlauf's `<AgGridReact>` never had a `getRowId` — Konten.jsx's own grid already does (`p.data.id`), but Verlauf's `rowData` useMemo builds a brand-new array of brand-new row objects on every recompute anyway, and it never mattered while the screen was read-only. Once editing writes to Firestore, the `budgets` onSnapshot listener fires and `rowData` recomputes — without `getRowId`, AG Grid has no way to match the new array back to the rows it already had (only row *index*, which doesn't help once anything shifts), so it treated every edit as an entirely new dataset and reset scroll to the top.
+
+**Fixed:** `getRowId={(p) => \`${p.data.targetKey}:${p.data.targetId}:${p.data.rowLabel}\`}` — unique and stable per category/allocation-tag + plan-line, regardless of how many times `rowData` itself gets rebuilt.
+
+**Verified via a disposable Playwright harness** with enough seeded categories to force a real scrollbar: scrolled the grid down, edited a currently-visible cell, and confirmed the scroll position (`scrollTop`) was bit-for-bit identical before and after the edit's Firestore round-trip settled — previously this would have reset to 0.
+
+`npm run build`, `npm test` (still 43), `npm run lint` all clean before pushing.
+
+**Also confirmed by Markus:** negative Plan1/Plan0 values ("-8000") work correctly, matching the earlier `parseWholeEuroInput()` design (a leading "-" is preserved through the parse).
+
+**Next session:** no new standing items — same as last entry (breakdown-line rows are the natural next slice).

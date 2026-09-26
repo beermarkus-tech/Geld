@@ -470,6 +470,22 @@ export default function Verlauf({ year }) {
         <AgGridReact
           theme={themeQuartz}
           rowData={rowData}
+          // Every plan-line row is uniquely identified by which category/
+          // allocation tag it belongs to plus which of the three lines it
+          // is — stable across re-renders even though `rowData` itself is a
+          // brand-new array of brand-new objects every time (built fresh in
+          // the useMemo above, not object-identity-preserved). **Missing
+          // until now, unlike Konten.jsx's own grid — real bug, Markus:
+          // "when i edit a cell the grid snaps weirdly back to the top."**
+          // Without getRowId, AG Grid has no way to match a new rowData
+          // array back to the rows it already had (it can only fall back to
+          // row *index*, which breaks the moment sibling rows above shift
+          // at all), so every Firestore round-trip that updates `budgets`
+          // (i.e. every edit) looked like an entirely new dataset and reset
+          // scroll position — the exact same class of "the grid's real
+          // behavior isn't what the public API most obviously suggests"
+          // lesson this file's own gridline saga already hit twice.
+          getRowId={(p) => `${p.data.targetKey}:${p.data.targetId}:${p.data.rowLabel}`}
           columnDefs={columnDefs}
           defaultColDef={{ suppressMovable: true, sortable: false, filter: false, resizable: true }}
           // A colDef's own `spanRows: true` does nothing on its own — this
