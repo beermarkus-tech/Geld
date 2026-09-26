@@ -854,3 +854,19 @@ Nine real-usage requests from Markus, all small on their own, together a fairly 
 `npm run build`, `npm test` (still 31), `npm run lint` all clean before pushing.
 
 **Next session should probably:** same standing items — Markus's confirmation on Ctrl+H against his real devices, the basic export/restore script (Phase 1b's last piece), and the Außenstände migration/panel confirmation.
+
+## Session 36, continued a third time — 2026-09-26 — Real toolbar layout bug, Kategorie search fix, green undelete tint
+
+Markus sent a screenshot flagging a real layout bug, plus two small polish requests, all in `Konten.jsx`/`CategoryEditor.jsx`/`index.css`:
+
+**1. A large empty gap between "Filter zurücksetzen" and the (i) icon (screenshot).** A genuine CSS bug from last round's "move the (i) icon to the far right" change: both the Summe/Filter-zurücksetzen block and the (i) icon had their own separate `ml-auto` — but flexbox splits a row's free space *evenly across every auto-margin item present*, not collapsed together, so two auto-margin siblings end up with real visible space between them rather than hugging the right edge as one group. Fixed: one shared wrapper, always rendered, single `ml-auto`, with the conditional Summe/Filter content and the (i) icon both inside it as ordinary children using the wrapper's own `gap-3`. Confirmed the gap is now exactly 12px (matching `gap-3`), not the large empty span in the screenshot.
+
+**2. Kategorie's search didn't land on the first real match — "– wählen –" stayed on top instead.** Markus's own diagnosis and fix request: remove the "– wählen –" placeholder entry from Kategorie's own option list entirely (Unterkategorie's stays — he confirmed that one already filters out correctly once you start typing). Removing it from `groupOptions` was a clean fix rather than a workaround: the DEL-to-clear feature from last round already gives a strictly better way to blank out a category assignment than picking an empty placeholder ever did, so nothing was actually lost. Confirmed via harness: typing "e" now highlights "Lebenshaltung" (the real first match) directly, no "– wählen –" in the results at all.
+
+**3. Armed-for-undelete now tints green, not red.** A second press of Delete/the trashcan on an already-deleted row restores it — a positive action, not a destructive one, so it shouldn't share the same warning-red tint as an actual armed delete. New `--color-income-tint` token in `index.css` (light `#dcfce7`/dark `#1c3324`, same pattern as the existing `--color-alert-tint`), and `getRowStyle` now branches on `p.data.deletedAt` at the moment of arming to pick which one applies. Confirmed both colors render correctly (`rgb(254, 226, 226)` for delete, `rgb(220, 252, 231)` for restore) and screenshotted the green tint mid-arm.
+
+**Verified end to end against a mocked `firebase/firestore`**, same disposable-harness approach as every round this session (temporary `vite.config.js` alias behind an env var, reverted before commit).
+
+`npm run build`, `npm test` (still 31), `npm run lint` all clean before pushing.
+
+**Next session should probably, per Markus's own question:** tell him what's next on `PLAN.md` — Phase 1b's last remaining item, the basic export/restore script, plus the standing Ctrl+H confirmation and Außenstände migration checks from previous entries.

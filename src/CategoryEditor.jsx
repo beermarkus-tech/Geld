@@ -34,11 +34,18 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
   const groupRef = useRef(null)
   const subcatRef = useRef(null)
 
+  // No "– wählen –" placeholder here (removed Sept 2026, Markus) — with it
+  // present, typing a search always left it sitting in the list (id: '',
+  // matching nothing typed, but still first before the fix below) and the
+  // highlight/auto-select logic could land on it instead of the actual
+  // first real match. Clearing the whole category assignment now has its
+  // own dedicated action (Delete, above) — DEL already covers "I want no
+  // category" better than picking an empty placeholder ever did, so this
+  // isn't a lost capability, just a redundant one removed. Unterkategorie's
+  // own placeholder (below) stays — Markus confirmed it already filters out
+  // correctly once you start typing there, so no reason to touch it too.
   const groupOptions = useMemo(
-    () => [
-      { id: '', name: '– wählen –' },
-      ...categories.filter((c) => c.parentCategoryId === null).map((g) => ({ id: g.id, name: g.name })),
-    ],
+    () => categories.filter((c) => c.parentCategoryId === null).map((g) => ({ id: g.id, name: g.name })),
     [categories],
   )
   const subcatOptions = useMemo(

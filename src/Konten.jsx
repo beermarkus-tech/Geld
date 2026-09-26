@@ -1994,77 +1994,83 @@ export default function Konten() {
           + Neue Buchung
         </button>
 
-        {/* Markus: the tag-filter total ("thought through together before
-            coding" — right where you're already looking once you've
-            filtered, not a new panel section, which only makes sense for
-            tags with real account-reconciliation semantics) and the
-            "clear everything" action grouped together, right-aligned as
-            one unit — ml-auto on this wrapper, not on either child
-            individually, so alignment stays correct whichever of the two
-            is actually present (a tag filter with no column filter shows
-            only the sum; a plain column filter with no tag shows only the
-            reset button; either way it's still pinned to the right edge). */}
-        {(tagFilterSum !== null || accountFilter || anyColumnFilter) && (
-          <div className="ml-auto flex items-center gap-3">
-            {tagFilterSum !== null && (
-              <span className="text-sm text-[var(--color-text-muted)]">
-                Angezeigt:{' '}
-                <span className="tabular-figure font-medium text-[var(--color-computed)]">{centsToEuro(tagFilterSum)} €</span>
-              </span>
-            )}
-            {(accountFilter || anyColumnFilter) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setAccountFilter(null)
-                  gridRef.current?.api?.setFilterModel(null)
-                }}
-                className="rounded-md border border-[var(--color-border)] px-3 py-1 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]"
-              >
-                Filter zurücksetzen
-              </button>
+        {/* Everything right-aligned lives in one shared wrapper with a
+            single `ml-auto` — Markus caught a real layout bug from an
+            earlier version of this that gave the Summe/Filter-zurücksetzen
+            group *and* the (i) icon each their own `ml-auto`: flexbox
+            splits the row's free space evenly across every auto-margin
+            item present, which opened a large visible gap between the two
+            instead of pushing them snugly together. One wrapper, always
+            rendered (so the (i) icon still lands at the far right even
+            when the Summe/Filter-zurücksetzen content isn't), with its own
+            internal `gap-3` handling the spacing between whichever of its
+            children are actually present. */}
+        <div className="ml-auto flex items-center gap-3">
+          {/* Markus: the tag-filter total ("thought through together before
+              coding" — right where you're already looking once you've
+              filtered, not a new panel section, which only makes sense for
+              tags with real account-reconciliation semantics) and the
+              "clear everything" action grouped together (a tag filter with
+              no column filter shows only the sum; a plain column filter
+              with no tag shows only the reset button; either way both stay
+              pinned to the right edge, next to the (i) icon below). */}
+          {tagFilterSum !== null && (
+            <span className="text-sm text-[var(--color-text-muted)]">
+              Angezeigt:{' '}
+              <span className="tabular-figure font-medium text-[var(--color-computed)]">{centsToEuro(tagFilterSum)} €</span>
+            </span>
+          )}
+          {(accountFilter || anyColumnFilter) && (
+            <button
+              type="button"
+              onClick={() => {
+                setAccountFilter(null)
+                gridRef.current?.api?.setFilterModel(null)
+              }}
+              className="rounded-md border border-[var(--color-border)] px-3 py-1 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]"
+            >
+              Filter zurücksetzen
+            </button>
+          )}
+
+          {/* Keyboard-shortcuts help (Markus): hover shows the list; Ctrl+I
+              toggles the same popover without needing the mouse; Escape (or
+              Ctrl+I again) closes it — see the two effects above for the
+              actual key handling. Always the very last/rightmost item in
+              the toolbar (Markus). */}
+          <div className="relative">
+            <button
+              type="button"
+              onMouseEnter={() => setShortcutsOpen(true)}
+              onMouseLeave={() => setShortcutsOpen(false)}
+              title="Tastenkürzel (Strg+I)"
+              className="flex h-6 w-6 items-center justify-center rounded-full border border-[var(--color-border)] text-xs font-medium text-[var(--color-text-muted)] hover:text-[var(--color-computed)]"
+            >
+              i
+            </button>
+            {shortcutsOpen && (
+              <div className="absolute right-0 top-full z-10 mt-1 w-72 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-xs text-[var(--color-text)] shadow-lg">
+                <div className="mb-1.5 font-medium">Tastenkürzel</div>
+                <ul className="space-y-1">
+                  <li>
+                    <b>Strg++</b> — Neue Buchung
+                  </li>
+                  <li>
+                    <b>Strg+T</b> — Aufteilen / weiter aufteilen
+                  </li>
+                  <li>
+                    <b>Strg+K</b> — Sprung ins Konto-Panel
+                  </li>
+                  <li>
+                    <b>Strg+H</b> — Kürzlich gelöscht ein-/ausblenden
+                  </li>
+                  <li>
+                    <b>Strg+I</b> — diese Übersicht ein-/ausblenden
+                  </li>
+                </ul>
+              </div>
             )}
           </div>
-        )}
-
-        {/* Keyboard-shortcuts help (Markus): hover shows the list; Ctrl+I
-            toggles the same popover without needing the mouse; Escape (or
-            Ctrl+I again) closes it — see the two effects above for the
-            actual key handling. Always the very last/rightmost item in the
-            toolbar (Markus) — its own `ml-auto` pushes it there even when
-            the Summe/Filter-zurücksetzen block above isn't rendered at all. */}
-        <div className="relative ml-auto">
-          <button
-            type="button"
-            onMouseEnter={() => setShortcutsOpen(true)}
-            onMouseLeave={() => setShortcutsOpen(false)}
-            title="Tastenkürzel (Strg+I)"
-            className="flex h-6 w-6 items-center justify-center rounded-full border border-[var(--color-border)] text-xs font-medium text-[var(--color-text-muted)] hover:text-[var(--color-computed)]"
-          >
-            i
-          </button>
-          {shortcutsOpen && (
-            <div className="absolute right-0 top-full z-10 mt-1 w-72 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-xs text-[var(--color-text)] shadow-lg">
-              <div className="mb-1.5 font-medium">Tastenkürzel</div>
-              <ul className="space-y-1">
-                <li>
-                  <b>Strg++</b> — Neue Buchung
-                </li>
-                <li>
-                  <b>Strg+T</b> — Aufteilen / weiter aufteilen
-                </li>
-                <li>
-                  <b>Strg+K</b> — Sprung ins Konto-Panel
-                </li>
-                <li>
-                  <b>Strg+H</b> — Kürzlich gelöscht ein-/ausblenden
-                </li>
-                <li>
-                  <b>Strg+I</b> — diese Übersicht ein-/ausblenden
-                </li>
-              </ul>
-            </div>
-          )}
         </div>
       </div>
 
@@ -2215,15 +2221,22 @@ export default function Konten() {
           undoRedoCellEditingLimit={20}
           // Tints a row pale red while its delete is armed, waiting for
           // the confirming second click/Delete/trashcan tap (Markus: red,
-          // not grey — an earlier version used opacity/grayscale) —
-          // paired with the redrawRows() effect above, since getRowStyle
+          // not grey — an earlier version used opacity/grayscale) — pale
+          // green instead when the armed action is actually an *undelete*
+          // (Markus: "instead of turning red, turn the row in a green tint
+          // when staged for undeletion") — the second delete-key/click on
+          // an already-deleted row restores it, a positive action, not a
+          // destructive one, so it shouldn't read as the same warning red.
+          // Paired with the redrawRows() effect above, since getRowStyle
           // alone isn't re-evaluated for existing rows just because React
           // state changed elsewhere. A split transaction's own line rows
           // get a distinct subtle tint too (Markus), so they read as
           // visually separate from ordinary transaction rows at a glance —
-          // armed-delete red still wins if a line row is somehow both.
+          // armed red/green still wins if a line row is somehow both.
           getRowStyle={(p) => {
-            if (confirmDeleteId === p.data.id) return { backgroundColor: 'var(--color-alert-tint)' }
+            if (confirmDeleteId === p.data.id) {
+              return { backgroundColor: p.data.deletedAt ? 'var(--color-income-tint)' : 'var(--color-alert-tint)' }
+            }
             // "Visually distinct" for a soft-deleted row surfaced via the
             // "Kürzlich gelöscht" toggle (spec.md §2.9a's layer 4, "e.g.
             // struck through/greyed") — a different case from the armed-

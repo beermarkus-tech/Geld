@@ -23,6 +23,7 @@
   --color-needs-attention: #eab308; /* yellow — incomplete, needs categorization */
   --color-alert: #dc2626; /* red — alerts only, always */
   --color-alert-tint: #fee2e2; /* pale red row background — an armed delete (Konten), not the alert red itself */
+  --color-income-tint: #dcfce7; /* pale green row background — an armed *undelete* (Konten), the positive counterpart to alert-tint's armed delete */
   --color-line-row-tint: #eef0f4; /* subtle grey row background — a split transaction's own line rows (Konten), distinguishing them from ordinary transaction rows */
 
   /* Tag class/groupingType color layer (spec.md §2.5) — extends the
@@ -52,6 +53,7 @@
     --color-needs-attention: #fde047;
     --color-alert: #f87171;
     --color-alert-tint: #3f1d1d;
+    --color-income-tint: #1c3324;
     --color-line-row-tint: #1c2330;
 
     --color-tag-project: #2dd4bf;
