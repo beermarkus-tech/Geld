@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth'
 
 import { auth } from './firebase'
+import BackupScreen from './BackupScreen'
 import ImportScreen from './ImportScreen'
 import Konten from './Konten'
 import { waitForInitialAuthState } from './lib/authReady'
@@ -84,10 +85,23 @@ export default function App() {
               data ever needs (re-)loading the same way. */}
           <button
             type="button"
-            onClick={() => setView(view === 'konten' ? 'import' : 'konten')}
+            onClick={() => setView(view === 'import' ? 'konten' : 'import')}
             className="text-sm text-[var(--color-text-muted)] underline"
           >
-            {view === 'konten' ? 'Datenimport' : 'Zurück zu Konten'}
+            {view === 'import' ? 'Zurück zu Konten' : 'Datenimport'}
+          </button>
+          {/* PLAN.md Phase 1b's basic safety net — a rough JSON export/
+              restore, not §3k's polished version (own nav slot, transactions
+              CSV, documented procedure), which stays Phase 7. Each of these
+              two toggles independently, not tied to whichever one happens
+              to be active, so their own labels never both read "Zurück zu
+              Konten" at once. */}
+          <button
+            type="button"
+            onClick={() => setView(view === 'backup' ? 'konten' : 'backup')}
+            className="text-sm text-[var(--color-text-muted)] underline"
+          >
+            {view === 'backup' ? 'Zurück zu Konten' : 'Sicherung'}
           </button>
           <button type="button" onClick={() => signOut(auth)} className="text-sm text-[var(--color-text-muted)]">
             Abmelden
@@ -110,6 +124,7 @@ export default function App() {
             <ImportScreen />
           </div>
         )}
+        {view === 'backup' && <BackupScreen />}
         {view === 'konten' && <Konten />}
       </main>
     </div>
