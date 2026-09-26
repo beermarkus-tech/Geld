@@ -951,3 +951,17 @@ Markus, as part of a larger five-item message (the rest — the nav shell — is
 `npm run build`, `npm run lint` clean before pushing. No new pure-function surface (this is all AG Grid API/keyboard-event plumbing), so `npm test` wasn't rerun for this round specifically — nothing here touches code the existing suite covers.
 
 **Next session:** the nav shell (Markus, same message) — a phone bottom-nav bar and a tablet **collapsible sidebar reachable via a burger button top-left next to "Geld"** (his explicit new requirement, to give full content width back when collapsed), replacing `App.jsx`'s current flat toggle-button-row stopgap. Needs re-reading spec.md §1b.2 in full first (not re-read this round), and a decision — not yet asked — on whether not-yet-built screens get dead/disabled links now or get added incrementally as each phase actually ships. Markus also explicitly deferred the Barkonten/Außenstände definition question to when Planung itself starts (step 3 of Phase 2) — nothing to act on there yet. Standing items (Ctrl+H device confirmation, Außenstände migration/panel check) are still open too.
+
+## Session 36, continued a ninth time — 2026-09-26 — Ctrl+Shift+F reset shortcut, popover cleanup
+
+Markus, quick follow-up: "in the (i) hover text, remove the details in brackets" and "add a shortcut ctrl+shift+f and assign it to filter zurücksetzen."
+
+- **Popover bracket removed**: the just-added Strg+F line had picked up a parenthetical ("Enter übernimmt, Esc verwirft") that broke the house style set back in Session 36's fifth round (bracketed explanations were deliberately stripped from every other line there) — caught immediately since it was the newest line, not an old regression.
+- **`resetFilters()`** — pulled the toolbar "Filter zurücksetzen" button's two-line `onClick` (`setAccountFilter(null)` + `api.setFilterModel(null)`) out into its own named function, called by both the button and a new Ctrl/Cmd+Shift+F global effect. The existing Ctrl/Cmd+F effect got one line added — `!e.shiftKey` — so a Shift+F keypress never also opens the per-column filter popup; the two listeners would otherwise both react to the same event, since capture-phase `window` listeners all see it regardless of which `useEffect` registered them.
+- (i) popover: Strg+F/Strg+S lines shortened to plain one-liners (no more bracketed detail), new `Strg+Umschalt+F` — Filter zurücksetzen line added.
+
+**Verified via the same disposable-Playwright-harness pattern**: Ctrl+F → type → Enter narrows to one row; Ctrl+Shift+F clears back to both rows without ever opening the filter popup; plain Ctrl+F confirmed still opening normally right after, proving the Shift exclusion didn't leak into the unshifted key.
+
+`npm run build`, `npm run lint` clean before pushing.
+
+**Next session:** unchanged from the last entry — the nav shell is still the next real piece of work (spec.md §1b.2 needs a full re-read first, given Markus's tablet-collapsible-sidebar requirement).

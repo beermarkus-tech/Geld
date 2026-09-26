@@ -284,6 +284,13 @@ export default function Konten() {
   // Grid column filter at all. Drives the "Filter zurücksetzen" button
   // below (Markus): visible whenever *either* kind of filter is active.
   const [anyColumnFilter, setAnyColumnFilter] = useState(false)
+  // Shared by the "Filter zurücksetzen" button and its Ctrl/Cmd+Shift+F
+  // shortcut (Markus) — clears both kinds of filter at once, same as the
+  // button always has.
+  function resetFilters() {
+    setAccountFilter(null)
+    gridRef.current?.api?.setFilterModel(null)
+  }
   // "Kürzlich gelöscht" toggle (spec.md §2.9a's layer 4), off by default —
   // switched on, soft-deleted-but-not-yet-purged rows reappear in `rows`
   // below, visually distinct, each with its own Wiederherstellen action.
@@ -889,7 +896,7 @@ export default function Konten() {
     const onKeyDown = (e) => {
       const api = gridRef.current?.api
       if (!api) return
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'f') {
         if (api.getEditingCells().length > 0) return
         const column = api.getFocusedCell()?.column
         if (!column || !column.isFilterAllowed()) return
@@ -942,6 +949,22 @@ export default function Konten() {
       if (!column || !column.isSortable()) return
       const nextSort = column.getSort() === 'asc' ? 'desc' : 'asc'
       api.applyColumnState({ state: [{ colId: column.getColId(), sort: nextSort }], defaultState: { sort: null } })
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [])
+
+  // Ctrl/Cmd+Shift+F triggers the same "Filter zurücksetzen" the button
+  // does (Markus) — clears both the account/tag filter and every AG Grid
+  // column filter at once, keyboard-reachable without hunting for the
+  // button. Plain Ctrl/Cmd+F above explicitly excludes Shift so the two
+  // never both fire off the same keypress.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || !e.shiftKey || e.key.toLowerCase() !== 'f') return
+      if (gridRef.current?.api?.getEditingCells().length > 0) return
+      e.preventDefault()
+      resetFilters()
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
@@ -2160,10 +2183,7 @@ export default function Konten() {
           {(accountFilter || anyColumnFilter) && (
             <button
               type="button"
-              onClick={() => {
-                setAccountFilter(null)
-                gridRef.current?.api?.setFilterModel(null)
-              }}
+              onClick={resetFilters}
               className="rounded-md border border-[var(--color-border)] px-3 py-1 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]"
             >
               Filter zurücksetzen
@@ -2202,10 +2222,13 @@ export default function Konten() {
                     <b>Strg+H</b> — Kürzlich gelöscht ein-/ausblenden
                   </li>
                   <li>
-                    <b>Strg+F</b> — Spalte filtern (Enter übernimmt, Esc verwirft)
+                    <b>Strg+F</b> — Spalte filtern
                   </li>
                   <li>
-                    <b>Strg+S</b> — Spalte sortieren (auf-/absteigend)
+                    <b>Strg+S</b> — Spalte sortieren
+                  </li>
+                  <li>
+                    <b>Strg+Umschalt+F</b> — Filter zurücksetzen
                   </li>
                   <li>
                     <b>Strg+I</b> — diese Übersicht ein-/ausblenden
