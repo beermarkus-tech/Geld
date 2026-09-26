@@ -52,7 +52,11 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
   // follow-up: this one turned out to have the identical problem — "gets
   // selected first" — not actually fine as first reported).
   const subcatOptions = useMemo(
-    () => categories.filter((c) => c.parentCategoryId === groupId).map((c) => ({ id: c.id, name: c.name })),
+    // "Erstattungen" excluded (spec.md §2.4, Sept 2026: "I do not recognize
+    // Erstattungen, please remove it from the app") — the Firestore
+    // document itself isn't reachable from this session to actually
+    // delete, so it's filtered out of every picker instead.
+    () => categories.filter((c) => c.parentCategoryId === groupId && c.name !== 'Erstattungen').map((c) => ({ id: c.id, name: c.name })),
     [categories, groupId],
   )
 

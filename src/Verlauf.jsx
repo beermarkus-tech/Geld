@@ -18,16 +18,41 @@ const MONTH_LABELS = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', '
 // first, then every expense group in the Gsheet's own order.
 const GROUP_ORDER = ['Einnahmen', 'Wohnen', 'Kommunikation', 'Mobilität', 'Lebenshaltung', 'Gesundheit', 'Hobbys', 'Sonstiges']
 
+// Fixed subcategory order within each group (spec.md §3b, Sept 2026,
+// Markus's own literal list — not alphabetical, an earlier, now-corrected
+// assumption). "Erstattungen" is deliberately absent — see spec.md §2.4's
+// own note on why it's filtered out everywhere, not just here.
+const SUBCAT_ORDER = [
+  'Gehalt Markus', 'Gehalt Julia', 'Sonderzahlungen', 'Kindergeld', 'Sonstige Einnahmen',
+  'Hauskredit', 'Nebenkosten', 'Instandhaltung', 'Einrichtung', 'Garten',
+  'Internet', 'Fernsehen', 'Telefon',
+  'Firmenwagen', 'Autoversicherung', 'Wartung', 'Tanken', 'Gebühren',
+  'Lebensmittel & Haushalt', 'Kantine', 'Ausgehen', 'Klamotten Markus', 'Klamotten Julia', 'Klamotten Sophia',
+  'Ausstattung Sophia', 'Allgemein', 'Haustiere', 'Versicherungen',
+  'Medizin', 'Arztkosten', 'Krankenkasse',
+  'Hobbys Julia', 'Hobbys Markus', 'Hobbys Sophia',
+  'Urlaube', 'Geschenke', 'Sonderausgaben', 'Steuerausgaben', 'Rente', 'Sonstige Ausgaben',
+]
+
+// A category not in SUBCAT_ORDER is filtered out entirely, not shown at an
+// arbitrary position — "Erstattungen" (spec.md §2.4) is the deliberate
+// case today, but this also means a genuinely new category silently has
+// no home here until someone adds it to the list above, rather than
+// popping up in a random spot.
+function isKnownSubcat(name) {
+  return SUBCAT_ORDER.includes(name)
+}
+
 // Same reasoning for the Rücklagen section's own fixed order (spec.md
-// §2.5's own listing) — alphabetical would scramble Sparen Familie/
+// §2.5/§3b's own listing) — alphabetical would scramble Sparen Familie/
 // Sophia/Julia away from each other.
 const ALLOCATION_TAG_ORDER = [
   'sparen-familie',
   'sparen-sophia',
   'sparen-julia',
-  'ruecklagen-steuern',
   'anlage-familie',
   'anlage-sophia',
+  'ruecklagen-steuern',
   'tagesgeld',
 ]
 
@@ -35,6 +60,27 @@ const ALLOCATION_TAG_ORDER = [
 // across every numeric cell, month columns and Jahr alike.
 function formatMonthCell(cents) {
   return cents === 0 ? '' : centsToEuro(cents)
+}
+
+// Section background tint (spec.md §1b.4's one explicit red exception,
+// §3b) — Kategorie/Unterkategorie/row-total columns only, never the month
+// columns themselves.
+const SECTION_TINT_VAR = {
+  einnahmen: '--color-income-tint',
+  ausgaben: '--color-alert-tint',
+  ruecklagen: '--color-savings-tint',
+}
+
+// Font color by row and by that month's own open/closed state (spec.md
+// §3b, Sept 2026): Plan0 is always grey. Plan1 is black while its month is
+// still open (the actively relevant forecast), grey once closed
+// (superseded by the real actual). Prog is the mirror image — grey while
+// open (a placeholder echo of Plan1), black once closed (now the real
+// number).
+function monthTextColorVar(rowLabel, isClosed) {
+  if (rowLabel === 'Plan0') return '--color-text-muted'
+  if (rowLabel === 'Plan1') return isClosed ? '--color-text-muted' : '--color-text'
+  return isClosed ? '--color-text' : '--color-text-muted' // Prog
 }
 
 export default function Verlauf({ year }) {
@@ -79,7 +125,7 @@ export default function Verlauf({ year }) {
   // month mirrors Plan1 for that same month ("if nothing changes, this is
   // what will happen"). Same rule for a category and an allocation tag,
   // just via the matching actual-computation function for each.
-  function progMonths(targetKey, targetId, plan1Months, isAllocation) {
+  function progMonths(targetId, plan1Months, isAllocation) {
     return plan1Months.map((plan1Value, i) => {
       const month = i + 1
       if (!closedMonths.includes(month)) return plan1Value
@@ -93,15 +139,15 @@ export default function Verlauf({ year }) {
   // (spec.md §3b) — breakdown lines aren't rendered yet (deferred, see
   // CODEMAP.md), so every subcategory/allocation tag gets exactly these
   // three rows for now.
-  function planLineRows(groupName, subcatName, targetKey, targetId, isAllocation) {
+  function planLineRows(groupName, section, subcatName, targetKey, targetId, isAllocation) {
     const plan1 = budgetTopLineMonths(targetKey, targetId, 'plan1', yearNum, budgets)
     const plan0 = budgetTopLineMonths(targetKey, targetId, 'plan0', yearNum, budgets)
-    const prog = progMonths(targetKey, targetId, plan1.months, isAllocation)
+    const prog = progMonths(targetId, plan1.months, isAllocation)
     const progTotal = prog.reduce((a, b) => a + b, 0)
     const rows = [
-      { groupName, subcatName, rowLabel: 'Prog', months: prog, yearTotal: progTotal },
-      { groupName, subcatName, rowLabel: 'Plan1', months: plan1.months, yearTotal: plan1.yearTotal },
-      { groupName, subcatName, rowLabel: 'Plan0', months: plan0.months, yearTotal: plan0.yearTotal, isPlan0: true },
+      { groupName, section, subcatName, rowLabel: 'Prog', months: prog, yearTotal: progTotal },
+      { groupName, section, subcatName, rowLabel: 'Plan1', months: plan1.months, yearTotal: plan1.yearTotal },
+      { groupName, section, subcatName, rowLabel: 'Plan0', months: plan0.months, yearTotal: plan0.yearTotal, isPlan0: true },
     ]
     return showPlan0 ? rows : rows.filter((r) => !r.isPlan0)
   }
@@ -111,9 +157,12 @@ export default function Verlauf({ year }) {
     const sortedGroups = [...groups].sort((a, b) => GROUP_ORDER.indexOf(a.name) - GROUP_ORDER.indexOf(b.name))
     const out = []
     for (const group of sortedGroups) {
-      const subcats = categories.filter((c) => c.parentCategoryId === group.id).sort((a, b) => a.name.localeCompare(b.name))
+      const section = group.name === 'Einnahmen' ? 'einnahmen' : 'ausgaben'
+      const subcats = categories
+        .filter((c) => c.parentCategoryId === group.id && isKnownSubcat(c.name))
+        .sort((a, b) => SUBCAT_ORDER.indexOf(a.name) - SUBCAT_ORDER.indexOf(b.name))
       for (const subcat of subcats) {
-        out.push(...planLineRows(group.name, subcat.name, 'categoryId', subcat.id, false))
+        out.push(...planLineRows(group.name, section, subcat.name, 'categoryId', subcat.id, false))
       }
     }
     const allocationTags = tags.filter((t) => t.class === 'allocation')
@@ -121,7 +170,7 @@ export default function Verlauf({ year }) {
       (a, b) => ALLOCATION_TAG_ORDER.indexOf(a.id) - ALLOCATION_TAG_ORDER.indexOf(b.id),
     )
     for (const tag of sortedAllocationTags) {
-      out.push(...planLineRows('Rücklagen', tag.name, 'allocationTagId', tag.id, true))
+      out.push(...planLineRows('Rücklagen', 'ruecklagen', tag.name, 'allocationTagId', tag.id, true))
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps -- planLineRows/progMonths close over categories/tags/transactions/budgets/closedMonths/showPlan0/yearNum, all already current each render
@@ -134,7 +183,16 @@ export default function Verlauf({ year }) {
       valueGetter: (p) => p.data.months[i],
       valueFormatter: (p) => formatMonthCell(p.value),
       cellClass: 'text-right tabular-figure',
-      width: 90,
+      cellStyle: (p) => {
+        const isClosed = closedMonths.includes(i + 1)
+        const style = { color: `var(${monthTextColorVar(p.data.rowLabel, isClosed)})` }
+        // Plan0's own row gets a light grey tint on a closed month's cells
+        // specifically (spec.md §3b) — a second, independent cue alongside
+        // the grey text, not applied to Prog/Plan1's cells.
+        if (p.data.isPlan0 && isClosed) style.backgroundColor = 'var(--color-line-row-tint)'
+        return style
+      },
+      width: 110,
     }))
     return [
       {
@@ -142,37 +200,65 @@ export default function Verlauf({ year }) {
         field: 'groupName',
         spanRows: true,
         pinned: 'left',
-        width: 130,
+        width: 40,
+        cellStyle: (p) => ({ backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})` }),
+        // Rotated 90° counterclockwise, vertically centered, bold (Markus)
+        // — the column can stay narrow now that the text runs vertically,
+        // freeing width for Unterkategorie and the row-total column below.
+        cellRenderer: (p) => (
+          <div className="flex h-full w-full items-center justify-center overflow-visible">
+            <span className="whitespace-nowrap font-bold" style={{ transform: 'rotate(-90deg)' }}>
+              {p.value}
+            </span>
+          </div>
+        ),
       },
       {
         headerName: 'Unterkategorie',
         field: 'subcatName',
         spanRows: true,
         pinned: 'left',
-        width: 140,
+        width: 170,
+        cellStyle: (p) => ({ backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})` }),
       },
       {
         headerName: '',
         colId: 'label',
         pinned: 'left',
-        width: 150,
-        cellClass: (p) => (p.data.isPlan0 ? 'italic text-[var(--color-text-muted)]' : undefined),
-        // Combines the row's own label with its yearly total in one column
-        // (spec.md §3b) — the Jahr figure always carries the € sign, unlike
+        width: 170,
+        cellClass: 'text-right tabular-figure',
+        // The yearly total mixes closed and open months, so it doesn't get
+        // the same per-month grey/black toggle the month columns do (that
+        // rule is only meaningful per-month) — Plan0 stays grey (it's
+        // always the fixed reference), Prog/Plan1 both read as plain text.
+        cellStyle: (p) => ({
+          backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})`,
+          color: `var(${p.data.rowLabel === 'Plan0' ? '--color-text-muted' : '--color-text'})`,
+        }),
+        // Just the yearly € figure now (Markus, once font color told
+        // Prog/Plan1/Plan0 apart, the repeated text label became
+        // redundant) — the Jahr figure always carries the € sign, unlike
         // every month column.
-        cellRenderer: (p) => (
-          <span className="flex w-full justify-between gap-2">
-            <span>{p.data.rowLabel}</span>
-            <span className="tabular-figure">{p.data.yearTotal === 0 ? '' : `${centsToEuro(p.data.yearTotal)} €`}</span>
-          </span>
-        ),
+        valueGetter: (p) => (p.data.yearTotal === 0 ? '' : `${centsToEuro(p.data.yearTotal)} €`),
       },
       ...monthCols,
     ]
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cellStyle callbacks close over closedMonths, already current each render
+  }, [closedMonths])
+
+  // No gridline between the three sibling rows (Prog/Plan1/Plan0) of one
+  // category/allocation-tag block (spec.md §3b) — they read as one visual
+  // unit; the line between one block and the next stays. Determined by
+  // whether the *next* row belongs to the same block, not this row's own
+  // rowLabel, since Plan0 may be hidden (making Plan1 the last row shown).
+  function getRowStyle(params) {
+    const next = rowData[params.node.rowIndex + 1]
+    const same = next && next.groupName === params.data.groupName && next.subcatName === params.data.subcatName
+    return same ? { borderBottom: 'none' } : undefined
+  }
 
   return (
-    <div className="flex min-h-full flex-col gap-3 px-4 py-3">
+    <div className="flex h-full flex-col gap-3 px-4 py-3">
       <div className="flex flex-wrap items-center gap-4">
         <label className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
           <input type="checkbox" checked={showPlan0} onChange={(e) => setShowPlan0(e.target.checked)} />
@@ -194,12 +280,13 @@ export default function Verlauf({ year }) {
         </div>
       </div>
 
-      <div className="h-[70vh] min-h-[360px]">
+      <div className="min-h-0 flex-1">
         <AgGridReact
           theme={themeQuartz}
           rowData={rowData}
           columnDefs={columnDefs}
           defaultColDef={{ suppressMovable: true, sortable: false, filter: false, resizable: true }}
+          getRowStyle={getRowStyle}
           headerHeight={36}
           rowHeight={30}
         />

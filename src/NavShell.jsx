@@ -95,6 +95,30 @@ export default function NavShell({ activeView, onNavigate, year, years, onYearCh
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [signOutConfirmOpen])
 
+  // Ctrl/Cmd+1 through +9, then +0 for the 10th, jump straight to that nav
+  // item, in ALL_ITEMS' own order (Markus: "assign ctrl+1 to dashboard,
+  // ctrl+2 to konten, ctrl+3 to verlauf, and so on"). **Real, near-certain
+  // risk, flagged rather than assumed away** — Ctrl+1 through Ctrl+8 are
+  // Chrome/Firefox/Edge's own reserved "jump to browser tab N" shortcut in
+  // an ordinary tab (Ctrl+9 jumps to the last tab), the same class of
+  // browser-chrome-level reservation already hit and accepted for Ctrl+T/H
+  // elsewhere in this app — no in-page code can intercept a keypress the
+  // browser's own chrome already claimed before it ever reaches this
+  // listener. May work as intended in an installed PWA's standalone window
+  // (no tab strip to reserve it for), genuinely unconfirmed without
+  // testing on Markus's own devices.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return
+      const index = e.key === '0' ? 9 : Number(e.key) - 1
+      if (!(index >= 0 && index < ALL_ITEMS.length)) return
+      e.preventDefault()
+      onNavigate(ALL_ITEMS[index].id)
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [onNavigate])
+
   const activeItem = ALL_ITEMS.find((i) => i.id === activeView)
 
   return (
@@ -192,14 +216,19 @@ export default function NavShell({ activeView, onNavigate, year, years, onYearCh
             just icons-only) when collapsed, per spec.md §1b.2: "so the
             content area can reclaim the full screen width." */}
         {!sidebarCollapsed && (
-          <nav className="hidden w-48 shrink-0 flex-col gap-1 overflow-y-auto border-r border-[var(--color-border)] bg-[var(--color-surface)] p-3 md:flex">
+          <nav className="hidden w-48 shrink-0 flex-col gap-1 overflow-y-auto overscroll-none border-r border-[var(--color-border)] bg-[var(--color-surface)] p-3 md:flex">
             {ALL_ITEMS.map((item) => (
               <NavButton key={item.id} item={item} active={item.id === activeView} onClick={() => navigate(item.id)} />
             ))}
           </nav>
         )}
 
-        <main className="flex flex-1 flex-col overflow-y-auto pb-16 md:pb-0">{children}</main>
+        {/* overscroll-none: the body-level fix (spec.md §1) predates this
+            shell's own scroll container — pull-to-refresh/rubber-band is
+            evaluated against the nearest scrolling ancestor under the
+            touch point, not necessarily the document itself, so this
+            needs the same fix directly, not just inherited from body. */}
+        <main className="flex flex-1 flex-col overflow-y-auto overscroll-none pb-16 md:pb-0">{children}</main>
       </div>
 
       {/* Phone bottom nav — hidden at md and above, where the sidebar takes
