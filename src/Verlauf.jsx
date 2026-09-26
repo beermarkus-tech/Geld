@@ -1,12 +1,19 @@
-import { useEffect, useMemo, useState } from 'react'
-import { collection, doc, onSnapshot, setDoc } from 'firebase/firestore'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { collection, doc, onSnapshot, setDoc, writeBatch } from 'firebase/firestore'
 import { AgGridReact } from 'ag-grid-react'
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community'
 
 import { db } from './firebase'
-import { allocationMonthActual, budgetTopLineMonths, categoryMonthActual } from './lib/budget'
+import {
+  allocationMonthActual,
+  breakdownGroupMonthActual,
+  budgetBreakdownLineMonths,
+  budgetTopLineMonths,
+  categoryMonthActual,
+} from './lib/budget'
 import { centsToWholeEuro } from './lib/format'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
+import { slugify } from './TagEditor'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 syncAgGridColorScheme()
@@ -103,11 +110,14 @@ const SECTION_TINT_VAR = {
 // still open (the actively relevant forecast), grey once closed
 // (superseded by the real actual). Prog is the mirror image — grey while
 // open (a placeholder echo of Plan1), black once closed (now the real
-// number).
+// number). A breakdown/rollup row (Sept 2026) follows whichever of these
+// three its own plan-line rule already covers — a Plan1 breakdown line
+// reads like Plan1, a Plan0 one like Plan0, and the automated rollup
+// header like Prog (same mirror-then-lock behavior).
 function monthTextColorVar(rowLabel, isClosed) {
-  if (rowLabel === 'Plan0') return '--color-text-muted'
-  if (rowLabel === 'Plan1') return isClosed ? '--color-text-muted' : '--color-text'
-  return isClosed ? '--color-text' : '--color-text-muted' // Prog
+  if (rowLabel === 'Plan0' || rowLabel === 'Plan0-breakdown') return '--color-text-muted'
+  if (rowLabel === 'Plan1' || rowLabel === 'Plan1-breakdown') return isClosed ? '--color-text-muted' : '--color-text'
+  return isClosed ? '--color-text' : '--color-text-muted' // Prog, Rollup
 }
 
 // No gridline between the three sibling rows (Prog/Plan1/Plan0) of one
@@ -137,12 +147,14 @@ function blockBorderStyle(rowData) {
 
 // Deterministic budget-document id, exactly matching
 // migration/transform-budgets.py's own `emit()` convention
-// (`f"b-{YEAR}-{plan}-{target_id}-{breakdown or 'top'}-{month:02d}"`) — a
-// flat top-line edit must land on the *same* document a migrated month
-// already occupies, or budgetTopLineMonths() would silently double-count
-// by summing both the old and a stray new document for that month.
-function budgetDocId(year, planVersion, targetId, month) {
-  return `b-${year}-${planVersion}-${targetId}-top-${String(month).padStart(2, '0')}`
+// (`f"b-{YEAR}-{plan}-{target_id}-{breakdown or 'top'}-{month:02d}"`) — an
+// edit must land on the *same* document a migrated month already occupies,
+// or budgetTopLineMonths()/budgetBreakdownLineMonths() would silently
+// double-count by summing both the old and a stray new document for that
+// month. `breakdownTagId` defaults to the flat top-line's own 'top'
+// placeholder.
+function budgetDocId(year, planVersion, targetId, month, breakdownTagId) {
+  return `b-${year}-${planVersion}-${targetId}-${breakdownTagId ?? 'top'}-${String(month).padStart(2, '0')}`
 }
 
 // Parses a Plan0/Plan1 month cell's typed text back into cents — mirrors
@@ -165,17 +177,38 @@ function parseWholeEuroInput(s) {
 }
 
 const SHOW_PLAN0_KEY = 'geld-verlauf-show-plan0'
+const SHOW_BREAKDOWNS_KEY = 'geld-verlauf-show-breakdowns'
 
 // Per-device convenience only, same reasoning as NavShell.jsx's own
 // sidebar-collapsed persistence (Markus, Sept 2026: "save the state of
 // show or hide plan0") — a read/write failure (private browsing, blocked
 // storage) just means it starts shown every time, never a crash.
-function readShowPlan0() {
+function readBoolSetting(key) {
   try {
-    const stored = localStorage.getItem(SHOW_PLAN0_KEY)
+    const stored = localStorage.getItem(key)
     return stored === null ? true : stored === '1'
   } catch {
     return true
+  }
+}
+
+// A budget row's per-month document, keyed however this particular flat
+// top-line/breakdown line is targeted — every write path (a plain month
+// edit, converting a category to breakdown mode, adding/removing a line)
+// goes through this one shape so they can't quietly drift apart.
+function budgetDoc(yearNum, targetKey, targetId, planVersion, month, breakdownTagId, cents, note) {
+  const id = budgetDocId(yearNum, planVersion, targetId, month, breakdownTagId)
+  return {
+    id,
+    year: yearNum,
+    month,
+    planVersion,
+    type: targetKey === 'allocationTagId' ? 'savings-transfer' : 'expense',
+    categoryId: targetKey === 'categoryId' ? targetId : null,
+    allocationTagId: targetKey === 'allocationTagId' ? targetId : null,
+    breakdownTagId: breakdownTagId ?? null,
+    plannedAmountCents: cents,
+    note,
   }
 }
 
@@ -185,10 +218,20 @@ export default function Verlauf({ year }) {
   const [transactions, setTransactions] = useState([])
   const [budgets, setBudgets] = useState([])
   const [closedMonths, setClosedMonths] = useState([])
-  // Two independent global controls (spec.md §3b) — breakdown-block
-  // show/hide isn't built yet (no breakdown lines rendered at all this
-  // round), so only Plan0's own toggle exists so far.
-  const [showPlan0, setShowPlan0] = useState(readShowPlan0)
+  // Global controls (spec.md §3b): Plan0's own show/hide, and (Sept 2026)
+  // "Aufschlüsselung anzeigen/ausblenden" for every breakdown block at
+  // once. A block not individually touched defaults to expanded once
+  // breakdowns are shown at all (`collapsedBlocks` below) — nothing
+  // pre-populates that set, absence from it just means "expanded."
+  const [showPlan0, setShowPlan0] = useState(() => readBoolSetting(SHOW_PLAN0_KEY))
+  const [showBreakdowns, setShowBreakdowns] = useState(() => readBoolSetting(SHOW_BREAKDOWNS_KEY))
+  const [collapsedBlocks, setCollapsedBlocks] = useState(() => new Set())
+  // Two-click arm/confirm for removing a breakdown line (Sept 2026,
+  // Markus's own established convention elsewhere — Konten's delete
+  // column) — a real, permanent loss of that line's planned figures, so
+  // one click alone shouldn't be enough.
+  const [confirmRemoveRowId, setConfirmRemoveRowId] = useState(null)
+  const gridApiRef = useRef(null)
 
   useEffect(() => {
     try {
@@ -197,6 +240,23 @@ export default function Verlauf({ year }) {
       // Per-device convenience only — nothing to recover from here.
     }
   }, [showPlan0])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SHOW_BREAKDOWNS_KEY, showBreakdowns ? '1' : '0')
+    } catch {
+      // Per-device convenience only — nothing to recover from here.
+    }
+  }, [showBreakdowns])
+
+  useEffect(() => {
+    if (!confirmRemoveRowId) return
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setConfirmRemoveRowId(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [confirmRemoveRowId])
 
   useEffect(() => {
     const unsubs = [
@@ -225,6 +285,9 @@ export default function Verlauf({ year }) {
 
   const yearNum = Number(year)
 
+  const tagById = useMemo(() => new Map(tags.map((t) => [t.id, t])), [tags])
+  const tagName = (id) => tagById.get(id)?.name ?? id
+
   // Prog (spec.md §3b): a closed month is a pure Konten rollup; an open
   // month mirrors Plan1 for that same month ("if nothing changes, this is
   // what will happen"). Same rule for a category and an allocation tag,
@@ -243,75 +306,258 @@ export default function Verlauf({ year }) {
   // directly-edited figure or has become computed (spec.md §2.7: "once
   // breakdown lines exist, the top-line value becomes the sum of its
   // breakdown-line rows"). Checked per planVersion independently, same as
-  // budgetTopLineMonths()'s own internal check — a flat top-line row is
-  // only ever editable while this is false.
+  // budgetTopLineMonths()'s own internal check.
   function hasBreakdownLines(targetKey, targetId, planVersion) {
     return budgets.some((b) => b.year === yearNum && b.planVersion === planVersion && b[targetKey] === targetId && b.breakdownTagId != null)
   }
 
-  // One row per plan line (Prog/Plan1/Plan0), in that display order
-  // (spec.md §3b) — breakdown lines aren't rendered yet (deferred, see
-  // CODEMAP.md), so every subcategory/allocation tag gets exactly these
-  // three rows for now.
-  function planLineRows(groupName, section, subcatName, targetKey, targetId, isAllocation) {
-    const plan1 = budgetTopLineMonths(targetKey, targetId, 'plan1', yearNum, budgets)
-    const plan0 = budgetTopLineMonths(targetKey, targetId, 'plan0', yearNum, budgets)
-    const prog = progMonths(targetId, plan1.months, isAllocation)
-    const progTotal = prog.reduce((a, b) => a + b, 0)
-    const common = { groupName, section, subcatName, targetKey, targetId, isAllocation }
-    const rows = [
-      { ...common, rowLabel: 'Prog', months: prog, yearTotal: progTotal },
-      {
-        ...common,
-        rowLabel: 'Plan1',
-        months: plan1.months,
-        yearTotal: plan1.yearTotal,
-        rowHasBreakdown: hasBreakdownLines(targetKey, targetId, 'plan1'),
-      },
-      {
-        ...common,
-        rowLabel: 'Plan0',
-        months: plan0.months,
-        yearTotal: plan0.yearTotal,
-        isPlan0: true,
-        rowHasBreakdown: hasBreakdownLines(targetKey, targetId, 'plan0'),
-      },
+  // Every distinct breakdownTagId currently in use for one (target,
+  // planVersion) — what actually determines which breakdown rows exist,
+  // since a tag with zero remaining budget documents has nothing left to
+  // discover it by (see addBreakdownLine()'s own always-write-12-months
+  // comment on why a freshly created line never hits this edge case).
+  function breakdownTagIdsFor(targetKey, targetId, planVersion) {
+    return [
+      ...new Set(
+        budgets
+          .filter((b) => b.year === yearNum && b.planVersion === planVersion && b[targetKey] === targetId && b.breakdownTagId != null)
+          .map((b) => b.breakdownTagId),
+      ),
     ]
-    const filtered = showPlan0 ? rows : rows.filter((r) => !r.isPlan0)
-    // Marks the actual last row of this block after Plan0's own filter has
-    // already applied — used below to draw a real boundary line only
-    // between blocks, never between a block's own sibling rows.
-    filtered.forEach((r, i) => {
-      r.isLastOfBlock = i === filtered.length - 1
-    })
-    return filtered
   }
 
-  // Writes one month's Plan0/Plan1 value directly (Sept 2026, Markus:
-  // Plan0/Plan1 editing for flat — no breakdown lines — categories; the
+  // One plan-version's own rows for a category/allocation-tag block: the
+  // top-line row, plus — once it's in breakdown mode and its own block
+  // isn't collapsed — the parent-tag "(automatisch)" rollup headers
+  // (Plan1 only, spec.md §2.7) and every breakdown line itself, grouped
+  // under its parent where one exists, alphabetical otherwise (no ordinal
+  // field exists to do better — a reasonable default, not spec-mandated).
+  function planVersionRows(common, rowIdBase, planVersion, topMonths) {
+    const isPlan0 = planVersion === 'plan0'
+    const rowLabel = isPlan0 ? 'Plan0' : 'Plan1'
+    const rowHasBreakdown = hasBreakdownLines(common.targetKey, common.targetId, planVersion)
+    const blockKey = `${rowIdBase}:${planVersion}`
+    const topRow = {
+      ...common,
+      rowId: `${rowIdBase}:${rowLabel}`,
+      rowLabel,
+      planVersion,
+      months: topMonths.months,
+      yearTotal: topMonths.yearTotal,
+      isPlan0,
+      rowHasBreakdown,
+      blockKey,
+      blockExpanded: !collapsedBlocks.has(blockKey),
+    }
+    const out = [topRow]
+    if (!rowHasBreakdown || !showBreakdowns || !topRow.blockExpanded) return out
+
+    const breakdownTagIds = breakdownTagIdsFor(common.targetKey, common.targetId, planVersion)
+    const byParent = new Map()
+    const standalone = []
+    for (const tagId of breakdownTagIds) {
+      const parentTag = tagById.get(tagId)?.parentTag
+      if (parentTag) {
+        if (!byParent.has(parentTag)) byParent.set(parentTag, [])
+        byParent.get(parentTag).push(tagId)
+      } else {
+        standalone.push(tagId)
+      }
+    }
+    const byName = (a, b) => tagName(a).localeCompare(tagName(b))
+    const parentIds = [...byParent.keys()].sort(byName)
+
+    function breakdownRow(tagId, isLastInBlock) {
+      const line = budgetBreakdownLineMonths(common.targetKey, common.targetId, tagId, planVersion, yearNum, budgets)
+      return {
+        ...common,
+        rowId: `${rowIdBase}:${planVersion}:${tagId}`,
+        rowLabel: isPlan0 ? 'Plan0-breakdown' : 'Plan1-breakdown',
+        planVersion,
+        isPlan0,
+        breakdownTagId: tagId,
+        breakdownLabel: tagName(tagId),
+        months: line.months,
+        yearTotal: line.yearTotal,
+        // Plan1's own last line also gets the "add another line" action
+        // (Konten's own split-column convention: the last line is always
+        // where the next one gets added) — never Plan0's, since a
+        // breakdown line is only ever created via Plan1 (spec.md §2.7:
+        // "always both, in parallel" — the app keeps that symmetric on its
+        // own, not by offering two independent creation points).
+        canAddAfter: !isPlan0 && isLastInBlock,
+      }
+    }
+
+    for (const parentId of parentIds) {
+      const childIds = byParent.get(parentId).sort(byName)
+      if (!isPlan0) {
+        const tagIdSet = new Set([parentId, ...childIds])
+        const rollupMonths = Array.from({ length: 12 }, (_, i) => {
+          const month = i + 1
+          if (!closedMonths.includes(month)) {
+            return childIds.reduce(
+              (sum, cid) => sum + budgetBreakdownLineMonths(common.targetKey, common.targetId, cid, planVersion, yearNum, budgets).months[i],
+              0,
+            )
+          }
+          return common.targetKey === 'categoryId' ? breakdownGroupMonthActual(common.targetId, tagIdSet, yearNum, month, transactions) : 0
+        })
+        out.push({
+          ...common,
+          rowId: `${rowIdBase}:${planVersion}:rollup:${parentId}`,
+          rowLabel: 'Rollup',
+          breakdownLabel: `${tagName(parentId)} (automatisch)`,
+          months: rollupMonths,
+          yearTotal: rollupMonths.reduce((a, b) => a + b, 0),
+        })
+      }
+      childIds.forEach((tagId, i) => out.push(breakdownRow(tagId, parentId === parentIds.at(-1) && i === childIds.length - 1 && standalone.length === 0)))
+    }
+    const standaloneSorted = [...standalone].sort(byName)
+    standaloneSorted.forEach((tagId, i) => out.push(breakdownRow(tagId, i === standaloneSorted.length - 1)))
+    return out
+  }
+
+  // One category/allocation-tag block: Prog (never has breakdown rows of
+  // its own, spec.md §3b), then Plan1's own rows, then — while shown —
+  // Plan0's.
+  function planLineRows(groupName, section, subcatName, targetKey, targetId, isAllocation) {
+    const plan1Top = budgetTopLineMonths(targetKey, targetId, 'plan1', yearNum, budgets)
+    const prog = progMonths(targetId, plan1Top.months, isAllocation)
+    const common = { groupName, section, subcatName, targetKey, targetId, isAllocation }
+    const rowIdBase = `${targetKey}:${targetId}`
+    const rows = [{ ...common, rowId: `${rowIdBase}:Prog`, rowLabel: 'Prog', months: prog, yearTotal: prog.reduce((a, b) => a + b, 0) }]
+    rows.push(...planVersionRows(common, rowIdBase, 'plan1', plan1Top))
+    if (showPlan0) {
+      const plan0Top = budgetTopLineMonths(targetKey, targetId, 'plan0', yearNum, budgets)
+      rows.push(...planVersionRows(common, rowIdBase, 'plan0', plan0Top))
+    }
+    // Marks the actual last row of this block after every filter above has
+    // already applied — used below to draw a real boundary line only
+    // between blocks, never between a block's own sibling/breakdown rows.
+    rows.forEach((r, i) => {
+      r.isLastOfBlock = i === rows.length - 1
+    })
+    return rows
+  }
+
+  // Writes one month's value directly for either a flat top-line row or a
+  // real breakdown line (Sept 2026, Markus: Plan0/Plan1 editing; the
   // confirm-to-edit prompt spec.md originally called for on Plan0 was
   // dropped the same round in favor of its own show/hide toggle already
   // being protection enough). Always a full-document upsert at the same
   // deterministic id a migrated month already occupies (budgetDocId,
-  // above), preserving any existing `note` rather than wiping it — the one
-  // field this row's own edit doesn't otherwise know about.
+  // above), preserving any existing `note` rather than wiping it.
   function persistBudgetMonth(row, month, cents) {
-    const planVersion = row.rowLabel.toLowerCase()
-    const id = budgetDocId(yearNum, planVersion, row.targetId, month)
+    const id = budgetDocId(yearNum, row.planVersion, row.targetId, month, row.breakdownTagId)
     const existing = budgets.find((b) => b.id === id)
-    setDoc(doc(db, 'budgets', id), {
-      ...existing,
+    setDoc(
+      doc(db, 'budgets', id),
+      budgetDoc(yearNum, row.targetKey, row.targetId, row.planVersion, month, row.breakdownTagId, cents, existing?.note ?? ''),
+    )
+  }
+
+  // Grouping-tag creation for a breakdown line's own name (Sept 2026) —
+  // deliberately a scoped-down duplicate of Konten.jsx's own
+  // createPlainTag()/createTag(), not an extracted shared module: the two
+  // call sites want slightly different things (Konten's is wired through
+  // TagEditor's own create-type picker; this one only ever makes a plain
+  // grouping tag), and the whole function is short enough that forcing a
+  // shared abstraction across two screens isn't worth the indirection —
+  // flagged in CODEMAP.md as accepted, deliberate duplication to watch,
+  // same discipline already applied elsewhere in this codebase. "Schottland:
+  // Hotels" reuses an existing top-level "Schottland" tag by name
+  // (case-insensitive) or creates one, then creates a real child under it
+  // (spec.md §2.5's hierarchy) — the id actually used as breakdownTagId is
+  // always the child's.
+  function createPlainGroupingTag(name, parentTag) {
+    let id = slugify(name)
+    if (tags.some((t) => t.id === id)) id = `${id}-${Math.random().toString(36).slice(2, 6)}`
+    setDoc(doc(db, 'tags', id), {
       id,
-      year: yearNum,
-      month,
-      planVersion,
-      type: row.targetKey === 'allocationTagId' ? 'savings-transfer' : 'expense',
-      categoryId: row.targetKey === 'categoryId' ? row.targetId : null,
-      allocationTagId: row.targetKey === 'allocationTagId' ? row.targetId : null,
-      breakdownTagId: null,
-      plannedAmountCents: cents,
-      note: existing?.note ?? '',
+      name,
+      parentTag,
+      class: 'grouping',
+      reconciliationTargetAccountIds: [],
+      groupingType: null,
+      archived: false,
     })
+    return id
+  }
+  function createBreakdownTag(name) {
+    const colon = name.indexOf(':')
+    if (colon === -1) return createPlainGroupingTag(name, null)
+    const parentName = name.slice(0, colon).trim()
+    const childName = name.slice(colon + 1).trim()
+    if (!parentName || !childName) return createPlainGroupingTag(name, null)
+    const existingParent = tags.find(
+      (t) => t.class === 'grouping' && !t.parentTag && t.name.toLowerCase() === parentName.toLowerCase(),
+    )
+    const parentId = existingParent ? existingParent.id : createPlainGroupingTag(parentName, null)
+    return createPlainGroupingTag(childName, parentId)
+  }
+
+  // Adding a breakdown line (Sept 2026, Markus) — always writes all 12
+  // months for both plan versions right away, even where the value is 0,
+  // rather than migration's own "skip a zero month" convention: a brand
+  // new line otherwise has *no* budget document anywhere yet, and nothing
+  // in the schema records "this breakdown tag exists for this category"
+  // independent of having at least one real document — an all-zero line
+  // would be undiscoverable (breakdownTagIdsFor() reads it straight off
+  // budgets, there's no separate registry).
+  async function addBreakdownLine(row) {
+    const name = window.prompt('Neue Aufschlüsselungszeile — Name (z. B. "Hotels" oder "Schottland:Hotels" für eine Gruppe):')
+    if (!name || !name.trim()) return
+    const tagId = createBreakdownTag(name.trim())
+    const isFirstLine = !row.rowHasBreakdown
+    const batch = writeBatch(db)
+    for (const planVersion of ['plan1', 'plan0']) {
+      // Converting a previously-flat category: whatever was already
+      // planned on the top line must survive into this new first line,
+      // for both plan versions symmetrically (spec.md §2.7) — never
+      // discarded just because the line didn't exist an instant earlier.
+      const carryOver = isFirstLine ? budgetTopLineMonths(row.targetKey, row.targetId, planVersion, yearNum, budgets) : null
+      for (let month = 1; month <= 12; month++) {
+        const cents = carryOver ? carryOver.months[month - 1] : 0
+        const id = budgetDocId(yearNum, planVersion, row.targetId, month, tagId)
+        batch.set(doc(db, 'budgets', id), budgetDoc(yearNum, row.targetKey, row.targetId, planVersion, month, tagId, cents, ''))
+        if (isFirstLine) {
+          const flatId = budgetDocId(yearNum, planVersion, row.targetId, month, null)
+          if (budgets.some((b) => b.id === flatId)) batch.delete(doc(db, 'budgets', flatId))
+        }
+      }
+    }
+    await batch.commit()
+    setCollapsedBlocks((prev) => {
+      const next = new Set(prev)
+      next.delete(`${row.targetKey}:${row.targetId}:plan1`)
+      next.delete(`${row.targetKey}:${row.targetId}:plan0`)
+      return next
+    })
+  }
+
+  // Removing a breakdown line always deletes both its plan1 and plan0
+  // documents together (spec.md §2.7: the two plan versions stay
+  // symmetric, so a line can't exist for one but not the other). If it was
+  // the *last* remaining line, its own final values fold back up into a
+  // real flat top-line row instead of just vanishing — mirroring
+  // addBreakdownLine()'s own value-preserving carry-over, in reverse.
+  async function removeBreakdownLine(row) {
+    const remaining = breakdownTagIdsFor(row.targetKey, row.targetId, 'plan1')
+    const isLastLine = remaining.length <= 1
+    const batch = writeBatch(db)
+    for (const planVersion of ['plan1', 'plan0']) {
+      const own = isLastLine ? budgetBreakdownLineMonths(row.targetKey, row.targetId, row.breakdownTagId, planVersion, yearNum, budgets) : null
+      for (let month = 1; month <= 12; month++) {
+        batch.delete(doc(db, 'budgets', budgetDocId(yearNum, planVersion, row.targetId, month, row.breakdownTagId)))
+        if (isLastLine) {
+          const id = budgetDocId(yearNum, planVersion, row.targetId, month, null)
+          batch.set(doc(db, 'budgets', id), budgetDoc(yearNum, row.targetKey, row.targetId, planVersion, month, null, own.months[month - 1], ''))
+        }
+      }
+    }
+    await batch.commit()
   }
 
   const rowData = useMemo(() => {
@@ -335,8 +581,8 @@ export default function Verlauf({ year }) {
       out.push(...planLineRows('Rücklagen', 'ruecklagen', tag.name, 'allocationTagId', tag.id, true))
     }
     return out
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- planLineRows/progMonths close over categories/tags/transactions/budgets/closedMonths/showPlan0/yearNum, all already current each render
-  }, [categories, tags, transactions, budgets, closedMonths, showPlan0, yearNum])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- planLineRows and everything it calls close over categories/tags/transactions/budgets/closedMonths/showPlan0/showBreakdowns/collapsedBlocks/yearNum, all already current each render
+  }, [categories, tags, transactions, budgets, closedMonths, showPlan0, showBreakdowns, collapsedBlocks, yearNum])
 
   const columnDefs = useMemo(() => {
     const monthCols = MONTH_LABELS.map((label, i) => ({
@@ -349,24 +595,39 @@ export default function Verlauf({ year }) {
       headerComponentParams: { month: i + 1, closedMonths, onToggle: toggleMonthClosed },
       valueGetter: (p) => p.data.months[i],
       valueFormatter: (p) => formatMonthCell(p.value),
-      cellClass: 'text-right tabular-figure',
+      cellClass: (p) => `text-right tabular-figure${p.data.rowLabel?.includes('breakdown') || p.data.rowLabel === 'Rollup' ? ' text-xs' : ''}`,
       cellStyle: (p) => {
         const isClosed = closedMonths.includes(i + 1)
         const style = { color: `var(${monthTextColorVar(p.data.rowLabel, isClosed)})`, ...blockBorderStyle(p.data) }
-        // Prog's own row gets a light grey tint on a closed month's cells
+        // Prog's own row (and its breakdown-group mirror, the automated
+        // rollup header) gets a light grey tint on a closed month's cells
         // specifically (spec.md §3b, corrected Sept 2026 — Markus caught
         // it applied to Plan0 instead) — a second, independent cue
         // alongside the grey text, not applied to Plan1/Plan0's cells.
-        if (p.data.rowLabel === 'Prog' && isClosed) style.backgroundColor = 'var(--color-line-row-tint)'
+        if ((p.data.rowLabel === 'Prog' || p.data.rowLabel === 'Rollup') && isClosed) style.backgroundColor = 'var(--color-line-row-tint)'
+        // A breakdown line itself (not the rollup header) gets its own
+        // subtle tinted background regardless of closed-state (spec.md
+        // §3b: "visually distinguished by smaller text and a tinted
+        // background"), and Plan0's own breakdown rows are additionally
+        // italicized to match Plan0's own styling.
+        if (p.data.rowLabel === 'Plan1-breakdown' || p.data.rowLabel === 'Plan0-breakdown') {
+          style.backgroundColor = 'var(--color-line-row-tint)'
+          if (p.data.rowLabel === 'Plan0-breakdown') style.fontStyle = 'italic'
+        }
         return style
       },
       width: 110,
-      // Plan0/Plan1 editing (Sept 2026, Markus) — Prog is always computed,
-      // never editable; a row whose top line has become computed because
-      // real breakdown lines exist under it (spec.md §2.7) isn't editable
-      // here either, since there's currently nothing on screen to edit
-      // instead (breakdown-line rows themselves aren't rendered yet).
-      editable: (p) => (p.data.rowLabel === 'Plan1' || p.data.rowLabel === 'Plan0') && !p.data.rowHasBreakdown,
+      // The cursor/focus rectangle should only ever land in a month column
+      // (Markus) — every other column is suppressNavigable (below).
+      // Editable: Plan1/Plan0 top-line rows once they're *not* in
+      // breakdown mode (spec.md §2.7 — the top line becomes computed once
+      // real breakdown lines exist under it), and every real breakdown
+      // line itself, always. Prog and the automated rollup header are
+      // always computed, never editable.
+      editable: (p) =>
+        ((p.data.rowLabel === 'Plan1' || p.data.rowLabel === 'Plan0') && !p.data.rowHasBreakdown) ||
+        p.data.rowLabel === 'Plan1-breakdown' ||
+        p.data.rowLabel === 'Plan0-breakdown',
       // useFormatter: the edit box shows the same whole-euro, de-DE-grouped
       // text formatMonthCell() already displays (e.g. "8.000"), not the
       // raw underlying cents — parseWholeEuroInput() undoes exactly that
@@ -388,9 +649,19 @@ export default function Verlauf({ year }) {
       {
         headerName: 'Kategorie',
         field: 'groupName',
+        colId: 'groupName',
         spanRows: true,
         pinned: 'left',
         width: 40,
+        // The cursor/focus rectangle should only ever land in a month
+        // column (Markus) — nothing here is ever editable. suppressNavigable
+        // only keeps keyboard Tab/arrow navigation from landing here; it
+        // does *not* stop a plain mouse click from focusing the cell
+        // directly (confirmed by reading AG Grid's own onMouseDown handler,
+        // which calls focusCell() unconditionally with no suppressNavigable
+        // check at all) — the grid's own onCellFocused handler below
+        // redirects a click here back to that row's first month cell.
+        suppressNavigable: true,
         cellStyle: (p) => ({ backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})` }),
         // Rotated 90° counterclockwise, vertically centered, bold (Markus)
         // — the column can stay narrow now that the text runs vertically,
@@ -406,9 +677,11 @@ export default function Verlauf({ year }) {
       {
         headerName: 'Unterkategorie',
         field: 'subcatName',
+        colId: 'subcatName',
         spanRows: true,
         pinned: 'left',
         width: 170,
+        suppressNavigable: true,
         cellStyle: (p) => ({ backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})` }),
         // Vertically centered within its own spanned (merged) cell (Markus)
         // — AG Grid's default cell rendering doesn't center content inside
@@ -417,8 +690,91 @@ export default function Verlauf({ year }) {
       },
       {
         headerName: '',
+        colId: 'breakdownActions',
+        pinned: 'left',
+        width: 26,
+        suppressNavigable: true,
+        cellStyle: (p) => ({ backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})`, ...blockBorderStyle(p.data) }),
+        // One narrow action column covering every breakdown-line
+        // interaction (Sept 2026, Markus) — mirrors Konten.jsx's own
+        // pinned "split" column conventions closely on purpose (✚ to
+        // add/split further, a chevron to expand/collapse, 🗑 per line):
+        // ▸/▾ toggles a Plan1/Plan0 block that already has breakdown lines
+        // (independent per plan version, spec.md §2.7); a bare ✚ on the
+        // top-line row itself starts the *first* breakdown line; once a
+        // block is showing, ✚ moves to Plan1's own last line (only Plan1
+        // — a line is always created symmetrically for both plan versions
+        // together, never independently on Plan0); every breakdown row
+        // gets 🗑, arm-then-confirm exactly like Konten's own delete.
+        cellRenderer: (p) => {
+          const row = p.data
+          if (row.rowLabel === 'Plan1-breakdown' || row.rowLabel === 'Plan0-breakdown') {
+            const armed = confirmRemoveRowId === row.rowId
+            return (
+              <div className="flex h-full w-full items-center justify-center gap-0.5">
+                <button
+                  type="button"
+                  title={armed ? 'Nochmal klicken zum Entfernen' : 'Aufschlüsselungszeile entfernen'}
+                  className="text-xs leading-none"
+                  style={armed ? { color: 'var(--color-alert)' } : undefined}
+                  onClick={() => {
+                    if (armed) {
+                      setConfirmRemoveRowId(null)
+                      removeBreakdownLine(row)
+                    } else {
+                      setConfirmRemoveRowId(row.rowId)
+                    }
+                  }}
+                >
+                  {armed ? '⚠︎' : '🗑'}
+                </button>
+                {row.canAddAfter && (
+                  <button type="button" title="Weitere Aufschlüsselungszeile hinzufügen" className="text-xs leading-none" onClick={() => addBreakdownLine(row)}>
+                    ✚
+                  </button>
+                )}
+              </div>
+            )
+          }
+          if ((row.rowLabel === 'Plan1' || row.rowLabel === 'Plan0') && row.rowHasBreakdown) {
+            return (
+              <button
+                type="button"
+                title={row.blockExpanded ? 'Aufschlüsselung einklappen' : 'Aufschlüsselung ausklappen'}
+                className="flex h-full w-full items-center justify-center text-xs leading-none"
+                onClick={() =>
+                  setCollapsedBlocks((prev) => {
+                    const next = new Set(prev)
+                    if (next.has(row.blockKey)) next.delete(row.blockKey)
+                    else next.add(row.blockKey)
+                    return next
+                  })
+                }
+              >
+                {row.blockExpanded ? '▾' : '▸'}
+              </button>
+            )
+          }
+          if (row.rowLabel === 'Plan1') {
+            return (
+              <button
+                type="button"
+                title="Aufschlüsselungszeile hinzufügen"
+                className="flex h-full w-full items-center justify-center text-xs leading-none"
+                onClick={() => addBreakdownLine(row)}
+              >
+                ✚
+              </button>
+            )
+          }
+          return null
+        },
+      },
+      {
+        headerName: '',
         colId: 'label',
         pinned: 'left',
+        suppressNavigable: true,
         // Narrower now that this column only holds the € figure (Markus —
         // it was still reserving width for the Prog/Plan1/Plan0 text label
         // dropped earlier) — a little wider than the month columns rather
@@ -426,26 +782,48 @@ export default function Verlauf({ year }) {
         // trailing " €" the month columns never carry (spec.md §3b), which
         // clipped at the exact same width.
         width: 128,
-        cellClass: 'text-right tabular-figure',
+        cellClass: (p) => `text-right tabular-figure${p.data.rowLabel?.includes('breakdown') || p.data.rowLabel === 'Rollup' ? ' text-xs' : ''}`,
         // The yearly total mixes closed and open months, so it doesn't get
         // the same per-month grey/black toggle the month columns do (that
-        // rule is only meaningful per-month) — Plan0 stays grey (it's
-        // always the fixed reference), Prog/Plan1 both read as plain text.
-        cellStyle: (p) => ({
-          backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})`,
-          color: `var(${p.data.rowLabel === 'Plan0' ? '--color-text-muted' : '--color-text'})`,
-          ...blockBorderStyle(p.data),
-        }),
-        // Just the yearly € figure (Markus, Sept 2026: back to this after
-        // briefly restoring the Prog/Plan1/Plan0 text label to check
-        // something) — font color already tells the three rows apart. The
-        // Jahr figure always carries the € sign, unlike every month column.
-        valueGetter: (p) => (p.data.yearTotal === 0 ? '' : `${centsToWholeEuro(p.data.yearTotal)} €`),
+        // rule is only meaningful per-month) — Plan0 (and its own
+        // breakdown rows) stay grey, everything else reads as plain text.
+        cellStyle: (p) => {
+          const style = {
+            backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})`,
+            color: `var(${p.data.rowLabel === 'Plan0' || p.data.rowLabel === 'Plan0-breakdown' ? '--color-text-muted' : '--color-text'})`,
+            ...blockBorderStyle(p.data),
+          }
+          if (p.data.rowLabel === 'Plan1-breakdown' || p.data.rowLabel === 'Plan0-breakdown' || p.data.rowLabel === 'Rollup') {
+            style.backgroundColor = 'var(--color-line-row-tint)'
+            if (p.data.rowLabel === 'Plan0-breakdown') style.fontStyle = 'italic'
+          }
+          return style
+        },
+        // Prog/Plan1/Plan0 show just the yearly € figure (font color
+        // already tells them apart, Markus — dropped their own text label
+        // last round). A breakdown/rollup row has no other column that
+        // could show *which* line it is (Unterkategorie stays one merged
+        // cell across the whole block, spec.md §3b: "breakdown item names
+        // live in this third column, never in Unterkategorie"), so those
+        // get a small two-line name-then-total instead.
+        cellRenderer: (p) => {
+          const { rowLabel, yearTotal, breakdownLabel } = p.data
+          const total = yearTotal === 0 ? '' : `${centsToWholeEuro(yearTotal)} €`
+          if (rowLabel === 'Plan1-breakdown' || rowLabel === 'Plan0-breakdown' || rowLabel === 'Rollup') {
+            return (
+              <div className="flex h-full w-full flex-col items-end justify-center overflow-hidden leading-tight">
+                <span className="w-full truncate text-left">{breakdownLabel}</span>
+                <span>{total}</span>
+              </div>
+            )
+          }
+          return total
+        },
       },
       ...monthCols,
     ]
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- cellStyle callbacks close over closedMonths; valueSetter's persistBudgetMonth closes over budgets/yearNum — all already current each render
-  }, [closedMonths, budgets, yearNum])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cellStyle/cellRenderer callbacks close over closedMonths/confirmRemoveRowId; valueSetter's persistBudgetMonth and the add/remove handlers' createBreakdownTag close over budgets/tags/yearNum — all already current each render
+  }, [closedMonths, budgets, tags, yearNum, confirmRemoveRowId])
 
   return (
     <div className="flex h-full flex-col gap-3 px-4 py-3">
@@ -453,6 +831,10 @@ export default function Verlauf({ year }) {
         <label className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
           <input type="checkbox" checked={showPlan0} onChange={(e) => setShowPlan0(e.target.checked)} />
           Plan0 anzeigen
+        </label>
+        <label className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
+          <input type="checkbox" checked={showBreakdowns} onChange={(e) => setShowBreakdowns(e.target.checked)} />
+          Aufschlüsselung anzeigen
         </label>
         {/* Month-close "ok" switches now live in each month's own column
             header (MonthHeader, above) — moved there per Markus's request,
@@ -470,22 +852,40 @@ export default function Verlauf({ year }) {
         <AgGridReact
           theme={themeQuartz}
           rowData={rowData}
-          // Every plan-line row is uniquely identified by which category/
-          // allocation tag it belongs to plus which of the three lines it
-          // is — stable across re-renders even though `rowData` itself is a
-          // brand-new array of brand-new objects every time (built fresh in
-          // the useMemo above, not object-identity-preserved). **Missing
-          // until now, unlike Konten.jsx's own grid — real bug, Markus:
-          // "when i edit a cell the grid snaps weirdly back to the top."**
+          // Every row is uniquely identified by which category/allocation
+          // tag it belongs to, which plan line, and (for a breakdown/
+          // rollup row) which tag it represents — stable across re-renders
+          // even though `rowData` itself is a brand-new array of brand-new
+          // objects every time (built fresh in the useMemo above, never
+          // object-identity-preserved). **Missing until the previous
+          // round, unlike Konten.jsx's own grid — real bug, Markus: "when
+          // i edit a cell the grid snaps weirdly back to the top."**
           // Without getRowId, AG Grid has no way to match a new rowData
-          // array back to the rows it already had (it can only fall back to
-          // row *index*, which breaks the moment sibling rows above shift
-          // at all), so every Firestore round-trip that updates `budgets`
-          // (i.e. every edit) looked like an entirely new dataset and reset
-          // scroll position — the exact same class of "the grid's real
-          // behavior isn't what the public API most obviously suggests"
-          // lesson this file's own gridline saga already hit twice.
-          getRowId={(p) => `${p.data.targetKey}:${p.data.targetId}:${p.data.rowLabel}`}
+          // array back to the rows it already had (it can only fall back
+          // to row *index*, which breaks the moment sibling rows above
+          // shift at all — exactly what happens the instant a breakdown
+          // block expands/collapses), so every Firestore round-trip that
+          // updates `budgets` looked like an entirely new dataset and
+          // reset scroll position.
+          getRowId={(p) => p.data.rowId}
+          onGridReady={(p) => {
+            gridApiRef.current = p.api
+          }}
+          // The cursor/focus rectangle should only ever land in a month
+          // column (Markus) — suppressNavigable (above) keeps keyboard
+          // Tab/arrow navigation from landing on the other pinned columns,
+          // but a plain click still focuses whatever cell it hits
+          // regardless (AG Grid's own onMouseDown calls focusCell()
+          // unconditionally, with no suppressNavigable check at all — found
+          // by reading its bundled source once suppressNavigable alone
+          // turned out not to be enough). This redirects any such click
+          // straight to that row's January cell instead.
+          onCellFocused={(e) => {
+            if (e.rowIndex == null || !e.column) return
+            if (['groupName', 'subcatName', 'breakdownActions', 'label'].includes(e.column.getColId())) {
+              gridApiRef.current?.setFocusedCell(e.rowIndex, 'm1', e.rowPinned)
+            }
+          }}
           columnDefs={columnDefs}
           defaultColDef={{ suppressMovable: true, sortable: false, filter: false, resizable: true }}
           // A colDef's own `spanRows: true` does nothing on its own — this

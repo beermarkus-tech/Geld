@@ -69,6 +69,20 @@ export function allocationMonthActual(allocationTagId, year, month, transactions
 // month), but the schema allows it, so it's handled rather than silently
 // dropped.
 //
+// Shared by budgetTopLineMonths() and budgetBreakdownLineMonths() below —
+// both ultimately just fold a filtered set of budgets rows into 12 month
+// slots plus a yearly total, differing only in *which* rows they hand in.
+function sumBudgetRows(rows) {
+  const months = Array.from({ length: 12 }, () => 0)
+  let lumpTotal = 0
+  for (const row of rows) {
+    if (row.month == null) lumpTotal += row.plannedAmountCents
+    else months[row.month - 1] += row.plannedAmountCents
+  }
+  const yearTotal = months.reduce((a, b) => a + b, 0) + lumpTotal
+  return { months, yearTotal }
+}
+
 // @param {'categoryId'|'allocationTagId'} targetKey
 // @param {string} targetId
 // @param {'plan0'|'plan1'} planVersion
@@ -79,12 +93,49 @@ export function budgetTopLineMonths(targetKey, targetId, planVersion, year, budg
   const rows = budgets.filter((b) => b.year === year && b.planVersion === planVersion && b[targetKey] === targetId)
   const breakdownRows = rows.filter((b) => b.breakdownTagId != null)
   const source = breakdownRows.length > 0 ? breakdownRows : rows.filter((b) => b.breakdownTagId == null)
-  const months = Array.from({ length: 12 }, () => 0)
-  let lumpTotal = 0
-  for (const row of source) {
-    if (row.month == null) lumpTotal += row.plannedAmountCents
-    else months[row.month - 1] += row.plannedAmountCents
+  return sumBudgetRows(source)
+}
+
+// One specific breakdown line's own 12 months (spec.md §2.7) — unlike
+// budgetTopLineMonths() above, which sums *every* breakdown row into one
+// top-line total, this reads a single breakdownTagId's own rows only, for
+// rendering that line as its own row in Verlauf.
+//
+// @param {'categoryId'|'allocationTagId'} targetKey
+// @param {string} targetId
+// @param {string} breakdownTagId
+// @param {'plan0'|'plan1'} planVersion
+// @param {number} year
+// @param {Array} budgets
+export function budgetBreakdownLineMonths(targetKey, targetId, breakdownTagId, planVersion, year, budgets) {
+  const rows = budgets.filter(
+    (b) => b.year === year && b.planVersion === planVersion && b[targetKey] === targetId && b.breakdownTagId === breakdownTagId,
+  )
+  return sumBudgetRows(rows)
+}
+
+// The "Schottland (automatisch)" parent-tag rollup header (spec.md §2.7) —
+// a narrower version of categoryMonthActual()'s own rule: only lines that
+// are *both* in this category *and* carry the parent tag or one of its
+// children count, since the whole point is showing what's actually been
+// tagged under this specific breakdown group, not the category's every
+// transaction (that's what the plain Prog row above already shows).
+//
+// @param {string} categoryId
+// @param {Set<string>} tagIds  the parent tag's own id plus every child's
+// @param {number} year
+// @param {number} month  1-12
+// @param {Array} transactions
+export function breakdownGroupMonthActual(categoryId, tagIds, year, month, transactions) {
+  const prefix = `${year}-${String(month).padStart(2, '0')}`
+  let total = 0
+  for (const tx of transactions) {
+    if (!tx.date.startsWith(prefix)) continue
+    for (const line of tx.lines ?? []) {
+      if (line.categoryId !== categoryId) continue
+      if (!(line.tags ?? []).some((t) => tagIds.has(t))) continue
+      total += line.amountCents
+    }
   }
-  const yearTotal = months.reduce((a, b) => a + b, 0) + lumpTotal
-  return { months, yearTotal }
+  return total
 }

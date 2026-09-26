@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { allocationMonthActual, budgetTopLineMonths, categoryMonthActual } from './budget'
+import {
+  allocationMonthActual,
+  breakdownGroupMonthActual,
+  budgetBreakdownLineMonths,
+  budgetTopLineMonths,
+  categoryMonthActual,
+} from './budget'
 
 // Synthetic fixtures only — same standing privacy rule as balance.test.js/
 // tagBalance.test.js.
@@ -124,5 +130,65 @@ describe('budgetTopLineMonths()', () => {
     expect(months[2]).toBe(-5000)
     expect(months.reduce((a, b) => a + b, 0)).toBe(-5000)
     expect(yearTotal).toBe(-17000)
+  })
+})
+
+describe('budgetBreakdownLineMonths()', () => {
+  it('reads one specific breakdown line\'s own rows only, not every line under the category', () => {
+    const budgets = [
+      { year: 2025, planVersion: 'plan1', categoryId: 'sonstiges-urlaube', allocationTagId: null, breakdownTagId: 'schottland-hotels', month: 6, plannedAmountCents: -20000 },
+      { year: 2025, planVersion: 'plan1', categoryId: 'sonstiges-urlaube', allocationTagId: null, breakdownTagId: 'schottland-flug', month: 6, plannedAmountCents: -30000 },
+    ]
+    const { months, yearTotal } = budgetBreakdownLineMonths('categoryId', 'sonstiges-urlaube', 'schottland-hotels', 'plan1', 2025, budgets)
+    expect(months[5]).toBe(-20000)
+    expect(yearTotal).toBe(-20000)
+  })
+
+  it('returns all-zero months for a line with no rows yet (a freshly created, still-blank breakdown line)', () => {
+    const { months, yearTotal } = budgetBreakdownLineMonths('categoryId', 'sonstiges-urlaube', 'schottland-auto', 'plan1', 2025, [])
+    expect(months).toEqual(Array(12).fill(0))
+    expect(yearTotal).toBe(0)
+  })
+})
+
+describe('breakdownGroupMonthActual()', () => {
+  it('sums only lines carrying the parent or a child tag, within the given category and month', () => {
+    const hotelBooking = {
+      date: '2025-06-05',
+      lines: [{ amountCents: -18000, categoryId: 'sonstiges-urlaube', note: '', tags: ['schottland-hotels'] }],
+    }
+    const flightBooking = {
+      date: '2025-06-10',
+      lines: [{ amountCents: -29000, categoryId: 'sonstiges-urlaube', note: '', tags: ['schottland-flug'] }],
+    }
+    const untaggedTripSpend = {
+      date: '2025-06-12',
+      lines: [{ amountCents: -5000, categoryId: 'sonstiges-urlaube', note: '', tags: [] }],
+    }
+    const otherCategory = {
+      date: '2025-06-15',
+      lines: [{ amountCents: -1000, categoryId: 'lebensmittel', note: '', tags: ['schottland-hotels'] }],
+    }
+    const tagIds = new Set(['schottland', 'schottland-hotels', 'schottland-flug'])
+    expect(
+      breakdownGroupMonthActual('sonstiges-urlaube', tagIds, 2025, 6, [hotelBooking, flightBooking, untaggedTripSpend, otherCategory]),
+    ).toBe(-47000)
+  })
+
+  it('a bare parent-tagged line (not broken into a child) still counts, per spec.md §2.7', () => {
+    const bareParentSpend = {
+      date: '2025-06-20',
+      lines: [{ amountCents: -2000, categoryId: 'sonstiges-urlaube', note: '', tags: ['schottland'] }],
+    }
+    const tagIds = new Set(['schottland', 'schottland-hotels'])
+    expect(breakdownGroupMonthActual('sonstiges-urlaube', tagIds, 2025, 6, [bareParentSpend])).toBe(-2000)
+  })
+
+  it('excludes a matching-tag line dated in a different month', () => {
+    const laterBooking = {
+      date: '2025-07-01',
+      lines: [{ amountCents: -18000, categoryId: 'sonstiges-urlaube', note: '', tags: ['schottland-hotels'] }],
+    }
+    expect(breakdownGroupMonthActual('sonstiges-urlaube', new Set(['schottland-hotels']), 2025, 6, [laterBooking])).toBe(0)
   })
 })
