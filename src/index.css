@@ -13,7 +13,7 @@
   --color-bg: #f7f8fa;
   --color-surface: #ffffff;
   --color-text: #14181f;
-  --color-text-muted: #5b6472;
+  --color-text-muted: #6b7484; /* lightened slightly (Sept 2026, Markus — Verlauf's grey rows) */
   --color-border: #e2e5eb;
 
   --color-computed: #2563eb; /* blue — computed account totals */
@@ -44,7 +44,7 @@
     --color-bg: #0b1017;
     --color-surface: #161c26;
     --color-text: #e7eaf0;
-    --color-text-muted: #9aa3b2;
+    --color-text-muted: #a9b1bf; /* lightened slightly (Sept 2026, Markus — Verlauf's grey rows) */
     --color-border: #2a3140;
 
     --color-computed: #60a5fa;

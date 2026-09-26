@@ -83,6 +83,22 @@ function monthTextColorVar(rowLabel, isClosed) {
   return isClosed ? '--color-text' : '--color-text-muted' // Prog
 }
 
+// No gridline between the three sibling rows (Prog/Plan1/Plan0) of one
+// block (spec.md §3b) — they read as one visual unit; the line between one
+// block and the next stays. AG Grid's own default cell styling already
+// gives every cell a 1px *transparent* border (reserved space, not an
+// actual visible line) — a plain row-level override can't remove or add a
+// real line on top of that, so this has to happen per cell instead: zero
+// out the border entirely for a non-last row (no reserved gap = no seam),
+// and give the actual last row of a block a real, visible border color
+// instead of the default transparent one. Kategorie/Unterkategorie don't
+// need this — they're genuinely merged into one spanned cell per block via
+// `spanRows`, so there's no seam between sibling rows there to begin with.
+function blockBorderStyle(rowData) {
+  if (rowData.isLastOfBlock) return { borderBottom: '1px solid var(--color-border)' }
+  return { borderBottom: '0px none' }
+}
+
 export default function Verlauf({ year }) {
   const [categories, setCategories] = useState([])
   const [tags, setTags] = useState([])
@@ -149,7 +165,14 @@ export default function Verlauf({ year }) {
       { groupName, section, subcatName, rowLabel: 'Plan1', months: plan1.months, yearTotal: plan1.yearTotal },
       { groupName, section, subcatName, rowLabel: 'Plan0', months: plan0.months, yearTotal: plan0.yearTotal, isPlan0: true },
     ]
-    return showPlan0 ? rows : rows.filter((r) => !r.isPlan0)
+    const filtered = showPlan0 ? rows : rows.filter((r) => !r.isPlan0)
+    // Marks the actual last row of this block after Plan0's own filter has
+    // already applied — used below to draw a real boundary line only
+    // between blocks, never between a block's own sibling rows.
+    filtered.forEach((r, i) => {
+      r.isLastOfBlock = i === filtered.length - 1
+    })
+    return filtered
   }
 
   const rowData = useMemo(() => {
@@ -185,11 +208,12 @@ export default function Verlauf({ year }) {
       cellClass: 'text-right tabular-figure',
       cellStyle: (p) => {
         const isClosed = closedMonths.includes(i + 1)
-        const style = { color: `var(${monthTextColorVar(p.data.rowLabel, isClosed)})` }
-        // Plan0's own row gets a light grey tint on a closed month's cells
-        // specifically (spec.md §3b) — a second, independent cue alongside
-        // the grey text, not applied to Prog/Plan1's cells.
-        if (p.data.isPlan0 && isClosed) style.backgroundColor = 'var(--color-line-row-tint)'
+        const style = { color: `var(${monthTextColorVar(p.data.rowLabel, isClosed)})`, ...blockBorderStyle(p.data) }
+        // Prog's own row gets a light grey tint on a closed month's cells
+        // specifically (spec.md §3b, corrected Sept 2026 — Markus caught
+        // it applied to Plan0 instead) — a second, independent cue
+        // alongside the grey text, not applied to Plan1/Plan0's cells.
+        if (p.data.rowLabel === 'Prog' && isClosed) style.backgroundColor = 'var(--color-line-row-tint)'
         return style
       },
       width: 110,
@@ -220,6 +244,10 @@ export default function Verlauf({ year }) {
         pinned: 'left',
         width: 170,
         cellStyle: (p) => ({ backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})` }),
+        // Vertically centered within its own spanned (merged) cell (Markus)
+        // — AG Grid's default cell rendering doesn't center content inside
+        // a tall spanned cell on its own.
+        cellRenderer: (p) => <div className="flex h-full w-full items-center">{p.value}</div>,
       },
       {
         headerName: '',
@@ -233,6 +261,7 @@ export default function Verlauf({ year }) {
         cellStyle: (p) => ({
           backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})`,
           color: `var(${p.data.rowLabel === 'Plan0' ? '--color-text-muted' : '--color-text'})`,
+          ...blockBorderStyle(p.data),
         }),
         // Prog/Plan1/Plan0 text label temporarily brought back (Markus,
         // Sept 2026: "show column plan0/1/prog again for a moment so i can
@@ -251,17 +280,6 @@ export default function Verlauf({ year }) {
     ]
     // eslint-disable-next-line react-hooks/exhaustive-deps -- cellStyle callbacks close over closedMonths, already current each render
   }, [closedMonths])
-
-  // No gridline between the three sibling rows (Prog/Plan1/Plan0) of one
-  // category/allocation-tag block (spec.md §3b) — they read as one visual
-  // unit; the line between one block and the next stays. Determined by
-  // whether the *next* row belongs to the same block, not this row's own
-  // rowLabel, since Plan0 may be hidden (making Plan1 the last row shown).
-  function getRowStyle(params) {
-    const next = rowData[params.node.rowIndex + 1]
-    const same = next && next.groupName === params.data.groupName && next.subcatName === params.data.subcatName
-    return same ? { borderBottom: 'none' } : undefined
-  }
 
   return (
     <div className="flex h-full flex-col gap-3 px-4 py-3">
@@ -299,7 +317,6 @@ export default function Verlauf({ year }) {
           // overflowing into its neighbors, since `spanRows` alone never
           // took effect without this).
           enableCellSpan
-          getRowStyle={getRowStyle}
           headerHeight={36}
           rowHeight={30}
         />
