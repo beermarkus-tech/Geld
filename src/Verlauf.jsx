@@ -135,6 +135,35 @@ function blockBorderStyle(rowData) {
   return { borderBottom: '0px none' }
 }
 
+// Deterministic budget-document id, exactly matching
+// migration/transform-budgets.py's own `emit()` convention
+// (`f"b-{YEAR}-{plan}-{target_id}-{breakdown or 'top'}-{month:02d}"`) — a
+// flat top-line edit must land on the *same* document a migrated month
+// already occupies, or budgetTopLineMonths() would silently double-count
+// by summing both the old and a stray new document for that month.
+function budgetDocId(year, planVersion, targetId, month) {
+  return `b-${year}-${planVersion}-${targetId}-top-${String(month).padStart(2, '0')}`
+}
+
+// Parses a Plan0/Plan1 month cell's typed text back into cents — mirrors
+// Konten.jsx's own parseEuroInput, but for whole euros only (matching this
+// screen's own display rounding, §3b) and treating a cleared cell as 0
+// (Verlauf's "0 shows blank" convention runs the other way at display
+// time; an edit clearing the box should mean "plan 0 for this month," not
+// reject the edit). Strips German thousands-grouping dots first (the edit
+// box is pre-filled from centsToWholeEuro's own de-DE formatting, e.g.
+// "8.000") — without this, committing an untouched large value back
+// unchanged would silently reinterpret "8.000" as 8 (JS parses a bare
+// "8.000" as the number 8).
+function parseWholeEuroInput(s) {
+  const cleaned = String(s).trim().replace(/[€\s]/g, '')
+  if (cleaned === '') return 0
+  if (cleaned === '-') return null
+  const normalized = cleaned.replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.')
+  const f = Number(normalized)
+  return Number.isNaN(f) ? null : Math.round(f) * 100
+}
+
 const SHOW_PLAN0_KEY = 'geld-verlauf-show-plan0'
 
 // Per-device convenience only, same reasoning as NavShell.jsx's own
@@ -210,6 +239,16 @@ export default function Verlauf({ year }) {
     })
   }
 
+  // Whether a category/allocation tag's top-line row is still the real,
+  // directly-edited figure or has become computed (spec.md §2.7: "once
+  // breakdown lines exist, the top-line value becomes the sum of its
+  // breakdown-line rows"). Checked per planVersion independently, same as
+  // budgetTopLineMonths()'s own internal check — a flat top-line row is
+  // only ever editable while this is false.
+  function hasBreakdownLines(targetKey, targetId, planVersion) {
+    return budgets.some((b) => b.year === yearNum && b.planVersion === planVersion && b[targetKey] === targetId && b.breakdownTagId != null)
+  }
+
   // One row per plan line (Prog/Plan1/Plan0), in that display order
   // (spec.md §3b) — breakdown lines aren't rendered yet (deferred, see
   // CODEMAP.md), so every subcategory/allocation tag gets exactly these
@@ -219,10 +258,24 @@ export default function Verlauf({ year }) {
     const plan0 = budgetTopLineMonths(targetKey, targetId, 'plan0', yearNum, budgets)
     const prog = progMonths(targetId, plan1.months, isAllocation)
     const progTotal = prog.reduce((a, b) => a + b, 0)
+    const common = { groupName, section, subcatName, targetKey, targetId, isAllocation }
     const rows = [
-      { groupName, section, subcatName, rowLabel: 'Prog', months: prog, yearTotal: progTotal },
-      { groupName, section, subcatName, rowLabel: 'Plan1', months: plan1.months, yearTotal: plan1.yearTotal },
-      { groupName, section, subcatName, rowLabel: 'Plan0', months: plan0.months, yearTotal: plan0.yearTotal, isPlan0: true },
+      { ...common, rowLabel: 'Prog', months: prog, yearTotal: progTotal },
+      {
+        ...common,
+        rowLabel: 'Plan1',
+        months: plan1.months,
+        yearTotal: plan1.yearTotal,
+        rowHasBreakdown: hasBreakdownLines(targetKey, targetId, 'plan1'),
+      },
+      {
+        ...common,
+        rowLabel: 'Plan0',
+        months: plan0.months,
+        yearTotal: plan0.yearTotal,
+        isPlan0: true,
+        rowHasBreakdown: hasBreakdownLines(targetKey, targetId, 'plan0'),
+      },
     ]
     const filtered = showPlan0 ? rows : rows.filter((r) => !r.isPlan0)
     // Marks the actual last row of this block after Plan0's own filter has
@@ -232,6 +285,33 @@ export default function Verlauf({ year }) {
       r.isLastOfBlock = i === filtered.length - 1
     })
     return filtered
+  }
+
+  // Writes one month's Plan0/Plan1 value directly (Sept 2026, Markus:
+  // Plan0/Plan1 editing for flat — no breakdown lines — categories; the
+  // confirm-to-edit prompt spec.md originally called for on Plan0 was
+  // dropped the same round in favor of its own show/hide toggle already
+  // being protection enough). Always a full-document upsert at the same
+  // deterministic id a migrated month already occupies (budgetDocId,
+  // above), preserving any existing `note` rather than wiping it — the one
+  // field this row's own edit doesn't otherwise know about.
+  function persistBudgetMonth(row, month, cents) {
+    const planVersion = row.rowLabel.toLowerCase()
+    const id = budgetDocId(yearNum, planVersion, row.targetId, month)
+    const existing = budgets.find((b) => b.id === id)
+    setDoc(doc(db, 'budgets', id), {
+      ...existing,
+      id,
+      year: yearNum,
+      month,
+      planVersion,
+      type: row.targetKey === 'allocationTagId' ? 'savings-transfer' : 'expense',
+      categoryId: row.targetKey === 'categoryId' ? row.targetId : null,
+      allocationTagId: row.targetKey === 'allocationTagId' ? row.targetId : null,
+      breakdownTagId: null,
+      plannedAmountCents: cents,
+      note: existing?.note ?? '',
+    })
   }
 
   const rowData = useMemo(() => {
@@ -281,6 +361,28 @@ export default function Verlauf({ year }) {
         return style
       },
       width: 110,
+      // Plan0/Plan1 editing (Sept 2026, Markus) — Prog is always computed,
+      // never editable; a row whose top line has become computed because
+      // real breakdown lines exist under it (spec.md §2.7) isn't editable
+      // here either, since there's currently nothing on screen to edit
+      // instead (breakdown-line rows themselves aren't rendered yet).
+      editable: (p) => (p.data.rowLabel === 'Plan1' || p.data.rowLabel === 'Plan0') && !p.data.rowHasBreakdown,
+      // useFormatter: the edit box shows the same whole-euro, de-DE-grouped
+      // text formatMonthCell() already displays (e.g. "8.000"), not the
+      // raw underlying cents — parseWholeEuroInput() undoes exactly that
+      // formatting back into cents on commit.
+      cellEditor: 'agTextCellEditor',
+      cellEditorParams: { useFormatter: true },
+      valueSetter: (p) => {
+        const cents = parseWholeEuroInput(p.newValue)
+        if (cents === null) return false
+        const prevCents = p.data.months[i]
+        if (cents === prevCents) return false
+        p.data.months[i] = cents
+        p.data.yearTotal = p.data.yearTotal - prevCents + cents
+        persistBudgetMonth(p.data, i + 1, cents)
+        return true
+      },
     }))
     return [
       {
@@ -342,8 +444,8 @@ export default function Verlauf({ year }) {
       },
       ...monthCols,
     ]
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- cellStyle callbacks close over closedMonths, already current each render
-  }, [closedMonths])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cellStyle callbacks close over closedMonths; valueSetter's persistBudgetMonth closes over budgets/yearNum — all already current each render
+  }, [closedMonths, budgets, yearNum])
 
   return (
     <div className="flex h-full flex-col gap-3 px-4 py-3">
