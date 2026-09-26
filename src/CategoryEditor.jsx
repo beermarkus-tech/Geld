@@ -158,10 +158,27 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
   // value, for the same reason as KontoEditor.jsx's apply(): Listbox's
   // Enter-to-apply fires synchronously right after its own onChange, before
   // React has re-rendered `categoryId` with the new value.
+  //
+  // Lands the grid cursor on the Unterkategorie cell specifically once
+  // this closes (Markus: "when setting a category and untercat
+  // combination, upon closing the modal, please move the cursor onto the
+  // unterkategory field") — regardless of which of the two cells this
+  // editor was actually opened from (`startField`). Every successful apply
+  // is already a category+subcategory combination by construction (§2.6:
+  // Kategorie has no stored value of its own, only ever derived from
+  // Unterkategorie's own leaf id — `categoryId` can't reach here at all
+  // without one), so this doesn't need to check for that separately.
+  // `getFocusedCell()`'s rowIndex is read *before* `stopEditing`, while the
+  // cell actually being edited (Kategorie or Unterkategorie, whichever)
+  // still reports as the grid's own focused cell; `setFocusedCell` runs
+  // *after*, so it's the one that wins over whatever `stopEditing` itself
+  // would otherwise have restored focus to.
   const apply = (finalCategoryId) => {
     const catId = finalCategoryId !== undefined ? finalCategoryId : categoryId
     onApply(data, catId)
+    const rowIndex = api.getFocusedCell()?.rowIndex
     api.stopEditing(true)
+    if (rowIndex != null) api.setFocusedCell(rowIndex, 'unterkategorie')
   }
 
   return (

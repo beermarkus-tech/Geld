@@ -1458,6 +1458,7 @@ export default function Konten() {
       },
       {
         headerName: 'Kategorie',
+        colId: 'kategorie',
         valueGetter: (p) => {
           if (p.data.__isLine) {
             const catId = p.data.__parent.lines[p.data.__lineIndex]?.categoryId
@@ -1522,6 +1523,7 @@ export default function Konten() {
       },
       {
         headerName: 'Unterkategorie',
+        colId: 'unterkategorie',
         valueGetter: (p) => {
           if (p.data.__isLine) {
             const catId = p.data.__parent.lines[p.data.__lineIndex]?.categoryId
