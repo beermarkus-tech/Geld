@@ -110,6 +110,18 @@ describe('tagBalance()', () => {
     expect(tagBalance('does-not-exist', '2025-12-31', [], [SPAREN_SOPHIA])).toBe(0)
   })
 
+  it('a genuinely single-sided expense line contributes its own natural (negative) sign, not a position-flipped positive (bug caught by Markus: Tagesgeld off by exactly double a tagged expense)', () => {
+    const expense = {
+      date: '2025-12-15',
+      fromAccountId: 'livret-a-tagesgeld',
+      toAccountId: null,
+      amountCents: -29000,
+      lines: [{ amountCents: -29000, categoryId: null, note: '', tags: ['tagesgeld'] }],
+    }
+    const TAGESGELD = { id: 'tagesgeld', reconciliationTargetAccountIds: ['livret-a-tagesgeld'] }
+    expect(tagBalance('tagesgeld', '2025-12-31', [expense], [TAGESGELD])).toBe(-29000)
+  })
+
   it('uses a line\'s own signed amountCents directly, not Math.abs() (bug caught by Markus: a negative-signed tagged line, e.g. a fee split out of a contribution, silently flipped positive)', () => {
     // Single-sided income into Aktien, split into a positive contribution
     // line and a negative fee line — both tagged, same as a real

@@ -6,10 +6,11 @@
 // portion can carry a tag that doesn't apply to the rest of that
 // transaction.
 //
-// Sign rule: a tagged line contributes its own *signed* amountCents,
-// applied + if the parent transaction's toAccountId is one of the tag's
-// targets (money arrived in the pool this tag subdivides), and − (i.e.
-// negated) if fromAccountId is one of them (money left it) — both checked
+// Sign rule for a genuine transfer (both fromAccountId and toAccountId
+// set): a tagged line contributes its own *signed* amountCents, applied +
+// if the parent transaction's toAccountId is one of the tag's targets
+// (money arrived in the pool this tag subdivides), and − (i.e. negated) if
+// fromAccountId is one of them (money left it) — both checked
 // independently, not either/or, so a transaction moving money *between*
 // two of a tag's own target accounts (e.g. Aktien -> Crypto, both inside
 // Anlage Familie's combined pool) nets to zero.
@@ -28,6 +29,22 @@
 // totals during the original migration (`verify_tag_sums()`) — which never
 // takes abs() either, for the same reason.
 //
+// **A genuinely single-sided transaction (only one of fromAccountId/
+// toAccountId set — a plain expense or income, not a transfer) is a
+// second, separate real bug of the same shape (Sept 2026, Markus: Tagesgeld
+// off by exactly double a tagged expense line's own amount).** The −/+
+// position rule above assumes `amountCents` is always a positive magnitude
+// re-signed by which side moved the money — true for a transfer (§2.6), but
+// a single-sided line already carries its own natural sign (negative =
+// outflow, positive = inflow) with no "other side" to re-sign against.
+// Applying the transfer rule anyway double-flips a negative expense: `total
+// -= line.amountCents` with a negative `amountCents` *adds* its magnitude
+// instead of subtracting it. Fixed by adding the line's own signed amount
+// directly whenever the transaction isn't a transfer — matching
+// `tagFilterTotal()`'s own already-correct handling of the same case below
+// (a genuinely single-sided line contributes "its own natural signed
+// amount directly").
+//
 // @param {string} tagId
 // @param {string} asOfDate  "YYYY-MM-DD"
 // @param {Array} transactions
@@ -39,8 +56,13 @@ export function tagBalance(tagId, asOfDate, transactions, tags) {
   let total = 0
   for (const tx of transactions) {
     if (tx.date > asOfDate) continue
+    const isTransfer = Boolean(tx.fromAccountId && tx.toAccountId)
     for (const line of tx.lines ?? []) {
       if (!(line.tags ?? []).includes(tagId)) continue
+      if (!isTransfer) {
+        if (targets.has(tx.fromAccountId) || targets.has(tx.toAccountId)) total += line.amountCents
+        continue
+      }
       if (targets.has(tx.fromAccountId)) total -= line.amountCents
       if (targets.has(tx.toAccountId)) total += line.amountCents
     }

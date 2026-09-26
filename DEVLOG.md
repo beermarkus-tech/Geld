@@ -1113,3 +1113,19 @@ Markus caught this from a real screenshot: filtering by "Sparen Sophia" showed e
 `npm run build`, `npm test` (still 42), `npm run lint` all clean before pushing.
 
 **Next session:** no new standing items — this was a scoped bugfix on last round's own feature. Everything else unchanged from the prior entry.
+
+## Session 36, continued a twentieth time — 2026-09-26 — Real bug found: Tagesgeld's total off by 580€ (a single-sided-expense sign flip in tagBalance)
+
+Markus's screenshot: the Tagesgeld tag total (panel + toolbar) showed 1.053,76 € while the actual account (Livret A Tagesgeld) showed 473,76 € — a 580,00 € gap, and per spec these two are supposed to always match exactly (Tagesgeld is a 1:1 tag-to-account relationship, §2.5).
+
+**Root cause, found by reproducing his exact rows in a harness:** `tagBalance()`'s position-based sign rule (`-= line.amountCents` when `fromAccountId` is the target, `+=` when `toAccountId` is) assumes `amountCents` is always a positive magnitude re-signed by which side moved money — true for a transfer, but **not** for a genuinely single-sided expense/income line, which already carries its own natural sign. His "Feelharmonia" row (a plain −290,00 € expense straight out of Livret A Tagesgeld, no transfer) hit the `fromAccountId` branch and got `total -= (-29000)`, i.e. **added** 290,00 € instead of subtracting it — a 580,00 € swing (double the expense) that exactly matches what he saw. The sibling function `tagFilterTotal()` in the same file already had the correct rule for this case ("a genuinely single-sided line contributes its own natural signed amount directly") — `tagBalance()` just never got the equivalent fix when it was written.
+
+**Fixed:** `tagBalance()` now branches on whether the transaction is actually a transfer (`fromAccountId && toAccountId`); a single-sided line adds its own signed `amountCents` directly, no position-flip. The original "don't force `Math.abs()` first" fix (last caught on Anlage Familie) is untouched — this only changes the single-sided branch, which never went through that logic differently before. New regression test in `tagBalance.test.js` (43 total, up from 42) using Markus's own real Feelharmonia figures as the fixture.
+
+**Also fixed, same investigation, a smaller display-only bug:** filtering by an allocation tag on a plain single-sided transaction (an expense or income directly on the tag's target account, not a transfer) rendered a broken arrow pointing at nothing (`"Livret A Tagesgeld →"` with no second account) — `allocationSideOrder()` was applying its transfer-reordering logic even when there was no second account to order against. Now returns `null` (falls through to the plain single-account display) unless both `fromAccountId` and `toAccountId` are set.
+
+**Verified via a disposable Playwright harness**, seeded with Markus's own real transaction figures (the Transfer/Feelharmonia/Renumeration Nette rows from his screenshot): before the fix, the panel showed a synthetic 580,00 €-inflated total reproducing his exact bug; after, `Angezeigt`/the panel's Tagesgeld row and the real account balance both read 7.821,36 € — screenshot-confirmed, not just computed-value checks.
+
+`npm run build`, `npm test` (43, up from 42), `npm run lint` all clean before pushing.
+
+**Next session:** no new standing items — flag to Markus that this bug means any allocation tag with activity from a genuinely single-sided (non-transfer) expense/income line may have been silently wrong before this fix; worth a quick sanity check across the other six allocation tags (Sparen Familie/Sophia/Julia, Rücklagen Steuern, Anlage Familie/Sophia) for any single-sided lines of their own, though most of their real activity is transfers.

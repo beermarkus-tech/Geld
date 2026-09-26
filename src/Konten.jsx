@@ -268,10 +268,15 @@ function glueToParent(getValue) {
 // every other Konto display rule here, so sorting and what's actually
 // shown can't quietly disagree. Returns null when neither side of the
 // transaction is one of the currently filtered tag's own targets (a
-// mistakenly-tagged line, most likely) — callers fall through to the
-// plain from→to order in that case.
+// mistakenly-tagged line, most likely), or when the transaction isn't
+// actually a transfer at all — a plain single-sided expense/income row
+// whose one account happens to be the tag's target (real bug, Markus's
+// screenshot: "Livret A Tagesgeld →" with nothing after the arrow, since
+// the missing side has no account name to render) — callers fall through
+// to the plain from→to/single-account display in both cases.
 function allocationSideOrder(t, targets) {
   if (!targets || targets.size === 0) return null
+  if (!t.fromAccountId || !t.toAccountId) return null
   const fromIsTarget = targets.has(t.fromAccountId)
   const toIsTarget = targets.has(t.toAccountId)
   if (!fromIsTarget && !toIsTarget) return null
