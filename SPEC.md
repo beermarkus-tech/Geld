@@ -105,7 +105,7 @@ The user is a non-programmer ("vibe coder") directing AI-assisted development, a
 
 ### 1b.2a Global year selector
 
-A single year selector lives in the app shell header (not per-screen), and drives every year-scoped view: **Konten** (as a filter over the otherwise-continuous transaction list — useful once several years of history pile up), **Verlauf**, **Planung**, **Prognose**, **Status**, and **Quickview**. It **defaults to the current calendar year** on open. To plan next year, the user simply switches this selector to that year and starts working directly in Verlauf — Planung then shows it (against the now-prior year) as soon as Plan0 data exists for it, with no separate "start planning" step. Neither Plan0 nor Plan1 is ever locked, for any year, past or present — the soft confirm-to-edit prompt on Plan0 (§2.7) is the only friction, and even a stronger safeguard against accidental edits to old years is parked for later consideration, not required now.
+A single year selector lives in the app shell header (not per-screen), and drives every year-scoped view: **Konten** (as a filter over the otherwise-continuous transaction list — useful once several years of history pile up), **Verlauf**, **Planung**, **Prognose**, **Status**, and **Quickview**. It **defaults to the current calendar year** on open. To plan next year, the user simply switches this selector to that year and starts working directly in Verlauf — Planung then shows it (against the now-prior year) as soon as Plan0 data exists for it, with no separate "start planning" step. Neither Plan0 nor Plan1 is ever locked, for any year, past or present — Plan0's own show/hide toggle (§2.7 correction, Sept 2026) is the only friction against touching it by accident, and even a stronger safeguard against accidental edits to old years is parked for later consideration, not required now.
 
 ### 1b.3 Standardized header + grid pattern
 
@@ -313,7 +313,7 @@ pacingMode: "fixed-profile" | "yearly-rolling" | null   // deliberate planning c
 ```
 
 **Two planning lines, one locked:**
-- **Plan0** is set once a year and is the reference — normally untouched. The app should protect it with a soft lock: editing a Plan0 value after initial entry prompts an explicit confirmation ("really change Plan0?") rather than a hard permission barrier; no separate unlock step is required, just a deliberate extra click.
+- **Plan0** is set once a year and is the reference — normally untouched. **Corrected Sept 2026 (Markus): no confirm-to-edit prompt** — editing Plan0 is a plain, ordinary edit like any other cell. Protection against touching it by accident is Verlauf's own "Plan0 anzeigen/ausblenden" toggle (§3b/§1b.2, already built and persisted per device): keeping Plan0 hidden most of the time is considered sufficient friction on its own, without a second confirmation layer on top.
 - **Plan1** is the working forecast, adjusted through the year as real decisions are made (unplanned spend, reallocations). It's what actually drives the year-end prediction.
 - Both `plan0` and `plan1` rows exist for every category/breakdown line, always in parallel, so any breakdown line added under Plan1 must also get a symmetrical Plan0 row (see breakdown-line mechanism below).
 
@@ -512,7 +512,7 @@ Applying a saved filter fully replaces the grid's current filter state (quick-fi
 **Zero-value display:** a cell whose value is exactly 0 shows **empty, not "0"** — applies to every numeric cell in the grid (month columns and the Jahr column alike), across all three plan-line rows and breakdown rows. Keeps genuinely-zero months visually quiet rather than cluttering the grid with a wall of zeros, consistent with how sparse a lump-sum-funded category's month columns usually are (§3c's `yearly-rolling`/near-100%-einmal categories in particular).
 
 **Three lines per category, always:**
-- **Plan0** — set once a year, the fixed reference, protected by a soft confirm-to-edit lock (§2.7).
+- **Plan0** — set once a year, the fixed reference. **Corrected Sept 2026 (Markus): protected only by its own show/hide toggle, not a confirm-to-edit prompt** (§2.7) — an ordinary editable cell once it's visible at all.
 - **Plan1** — the adjusted working forecast; this is what the user actively manages through the year (unplanned spend, conscious reallocations between categories).
 - **Actuals/Prognose** — a single row that is actually two different computations depending on whether a given month is "closed":
   - Past/closed months → **actuals**: `Σ transactions where categoryId == X and date in month` (pure Konten rollup).
