@@ -226,7 +226,6 @@ export default function Verlauf({ year }) {
         colId: 'label',
         pinned: 'left',
         width: 170,
-        cellClass: 'text-right tabular-figure',
         // The yearly total mixes closed and open months, so it doesn't get
         // the same per-month grey/black toggle the month columns do (that
         // rule is only meaningful per-month) — Plan0 stays grey (it's
@@ -235,11 +234,18 @@ export default function Verlauf({ year }) {
           backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})`,
           color: `var(${p.data.rowLabel === 'Plan0' ? '--color-text-muted' : '--color-text'})`,
         }),
-        // Just the yearly € figure now (Markus, once font color told
-        // Prog/Plan1/Plan0 apart, the repeated text label became
-        // redundant) — the Jahr figure always carries the € sign, unlike
-        // every month column.
-        valueGetter: (p) => (p.data.yearTotal === 0 ? '' : `${centsToEuro(p.data.yearTotal)} €`),
+        // Prog/Plan1/Plan0 text label temporarily brought back (Markus,
+        // Sept 2026: "show column plan0/1/prog again for a moment so i can
+        // check something") — was dropped once font color told the three
+        // rows apart, but restored on request; remove again once he
+        // confirms he's done checking. The Jahr figure always carries the
+        // € sign, unlike every month column.
+        cellRenderer: (p) => (
+          <span className="flex w-full justify-between gap-2">
+            <span>{p.data.rowLabel}</span>
+            <span className="tabular-figure">{p.data.yearTotal === 0 ? '' : `${centsToEuro(p.data.yearTotal)} €`}</span>
+          </span>
+        ),
       },
       ...monthCols,
     ]
@@ -286,6 +292,13 @@ export default function Verlauf({ year }) {
           rowData={rowData}
           columnDefs={columnDefs}
           defaultColDef={{ suppressMovable: true, sortable: false, filter: false, resizable: true }}
+          // A colDef's own `spanRows: true` does nothing on its own — this
+          // grid-level flag is what actually turns the feature on (found
+          // the hard way: every Kategorie/Unterkategorie cell was silently
+          // rendering unmerged, each with its own full-height rotated text
+          // overflowing into its neighbors, since `spanRows` alone never
+          // took effect without this).
+          enableCellSpan
           getRowStyle={getRowStyle}
           headerHeight={36}
           rowHeight={30}

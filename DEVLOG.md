@@ -1036,3 +1036,15 @@ A large batch of feedback from actually looking at Verlauf's first slice on a re
 `npm run build`, `npm test` (still 42 — no new pure-function surface, this round is all display/interaction), `npm run lint` all clean before pushing.
 
 **Next session should probably:** same as last entry — breakdown lines (rows, the parent-tag rollup header, the breakdown show/hide toggle) are the natural next real feature slice. Standing items unchanged (Ctrl+H device confirmation, Außenstände migration/panel check, the "account totals" section ambiguity).
+
+## Session 36, continued a fourteenth time — 2026-09-26 — Real bug: spanRows needs enableCellSpan too
+
+Markus caught this from a real screenshot on his tablet: Kategorie's rotated text was a garbled, repeated smear down the whole column instead of one clean merged label — "the vertical merged cells dont work."
+
+**Root cause:** a colDef's own `spanRows: true` does nothing by itself — AG Grid also needs `enableCellSpan` set as its own top-level `<AgGridReact>` prop, a *grid*-level flag entirely separate from the column option. Without it, every row silently rendered its own unmerged, normal-height cell — invisible for plain text, but once Kategorie's text was also rotated 90° (last round), each row's own oversized rotated text overflowed into its neighbors, producing exactly the smeared mess in the screenshot. **Why this wasn't caught last round:** the harness verification only checked the rotation transform and one background color programmatically (`getComputedStyle`), never an actual multi-row screenshot — a property-level check like that can't tell "one correctly-merged tall cell" apart from "several unmerged cells that each independently happen to have the right CSS applied." Fixed with one line (`enableCellSpan` on `<AgGridReact>`); confirmed this time with real before/after screenshots showing the merge actually working across multiple category groups.
+
+**Also, per Markus's own request while diagnosing this** ("show column plan0/1/prog again for a moment so i can check something"): the row-total column's Prog/Plan1/Plan0 text label, dropped last round once font color told the rows apart, is showing again for now — remove once he confirms he's done checking.
+
+`npm run build`, `npm test` (still 42), `npm run lint` all clean before pushing.
+
+**Next session:** wait for Markus to confirm whether the label column should go back to just the € figure, or he genuinely wants it kept. Otherwise unchanged from last entry — breakdown lines are the natural next real feature slice; standing items (Ctrl+H device confirmation, Außenstände migration/panel check, the "account totals" section ambiguity) still open.
