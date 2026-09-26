@@ -843,6 +843,110 @@ export default function Konten() {
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [shortcutsOpen])
 
+  // Ctrl/Cmd+F opens AG Grid's own native filter popup for whichever column
+  // currently holds the focus rectangle (Markus: "opens the filter modal
+  // for the active column"), instead of the browser's own page-search —
+  // same browser-reservation category as Ctrl+T/H above, accepted the same
+  // way. Enter closes the popup and keeps whatever was typed — AG Grid's
+  // built-in text/number filters already apply live as you type, so there's
+  // nothing extra to "apply" — while Escape restores whatever filter model
+  // existed right before Ctrl+F was pressed and closes without changing
+  // anything (Markus's own spec for the two keys). Either way, focus goes
+  // back to the currently selected/tinted row, in that same column (Markus:
+  // "cursor is going back on the tinted row in that column") — found via
+  // the selected node, not a snapshotted row index, since applying or
+  // reverting a filter can itself change which rows are displayed and at
+  // what index.
+  //
+  // `session` is a plain closure variable, not React state — only this one
+  // listener ever needs to know a filter session is open, and state would
+  // just add a render in between for no benefit. Capture phase, for the
+  // same reason as every other key here that AG Grid's own core (or its
+  // filter popup) might otherwise claim first — Enter/Escape while the
+  // popup's own text input has focus is the same race class already
+  // documented for the cell-editor popups elsewhere in this file.
+  useEffect(() => {
+    let session = null
+    function returnFocusTo(api, colId) {
+      const node = api.getSelectedNodes()[0]
+      // The normal case: the previously selected/tinted row is still on
+      // display (rowIndex only exists on a currently-displayed row), so
+      // land back on it exactly, per Markus's own spec for both keys.
+      if (node && node.rowIndex != null) {
+        api.ensureNodeVisible(node, 'middle')
+        api.setFocusedCell(node.rowIndex, colId)
+        return
+      }
+      // Edge case Markus's own wording didn't anticipate: applying a
+      // filter on Enter can filter the very row it started from right out
+      // of view, leaving no "tinted row" to return to. Land on whatever's
+      // now first rather than stranding the cursor with no focus at all.
+      const first = api.getDisplayedRowAtIndex(0)
+      if (!first) return
+      first.setSelected(true, true)
+      api.setFocusedCell(0, colId)
+    }
+    const onKeyDown = (e) => {
+      const api = gridRef.current?.api
+      if (!api) return
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        if (api.getEditingCells().length > 0) return
+        const column = api.getFocusedCell()?.column
+        if (!column || !column.isFilterAllowed()) return
+        e.preventDefault()
+        const colId = column.getColId()
+        session = { colId, prevModel: api.getColumnFilterModel(colId) }
+        api.showColumnFilter(colId)
+        return
+      }
+      if (!session) return
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        e.stopPropagation()
+        const { colId } = session
+        session = null
+        api.hideColumnFilter()
+        returnFocusTo(api, colId)
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        const { colId, prevModel } = session
+        session = null
+        api.setColumnFilterModel(colId, prevModel).then(() => {
+          api.onFilterChanged()
+          api.hideColumnFilter()
+          returnFocusTo(api, colId)
+        })
+      }
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [])
+
+  // Ctrl/Cmd+S toggles the currently focused column's sort between
+  // ascending and descending (Markus: "sorts the active column (toggle asc
+  // and desc)") — deliberately never clears back to unsorted, matching his
+  // own literal wording; a column not yet sorted starts at ascending.
+  // Single-column sort, replacing whatever the grid was previously sorted
+  // by — the same semantics a header click already has. preventDefault
+  // always, whether or not a column ends up toggled, since Ctrl+S is the
+  // browser's own "Save Page" shortcut and letting that through here would
+  // be strictly worse than a no-op.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 's') return
+      e.preventDefault()
+      const api = gridRef.current?.api
+      if (!api || api.getEditingCells().length > 0) return
+      const column = api.getFocusedCell()?.column
+      if (!column || !column.isSortable()) return
+      const nextSort = column.getSort() === 'asc' ? 'desc' : 'asc'
+      api.applyColumnState({ state: [{ colId: column.getColId(), sort: nextSort }], defaultState: { sort: null } })
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [])
+
   // Two clicks, not a modal (Markus's call).
   function armDelete(id) {
     setConfirmDeleteId(id)
@@ -2096,6 +2200,12 @@ export default function Konten() {
                   </li>
                   <li>
                     <b>Strg+H</b> — Kürzlich gelöscht ein-/ausblenden
+                  </li>
+                  <li>
+                    <b>Strg+F</b> — Spalte filtern (Enter übernimmt, Esc verwirft)
+                  </li>
+                  <li>
+                    <b>Strg+S</b> — Spalte sortieren (auf-/absteigend)
                   </li>
                   <li>
                     <b>Strg+I</b> — diese Übersicht ein-/ausblenden
