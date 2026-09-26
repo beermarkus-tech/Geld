@@ -258,6 +258,30 @@ function glueToParent(getValue) {
   }
 }
 
+// When filtering by an allocation-class (purple) tag specifically, Konto's
+// display consistently orders the tag's own target-pool account first,
+// with the arrow's direction — not the raw left/right order — carrying
+// the actual money-flow direction (Markus, Sept 2026: "make sure to order
+// the grid such that the relevant savings accounts... are shown on the
+// left... so i can see the proper transfer directions"). Shared by
+// kontoValue and the Konto column's own cellRenderer, same discipline as
+// every other Konto display rule here, so sorting and what's actually
+// shown can't quietly disagree. Returns null when neither side of the
+// transaction is one of the currently filtered tag's own targets (a
+// mistakenly-tagged line, most likely) — callers fall through to the
+// plain from→to order in that case.
+function allocationSideOrder(t, targets) {
+  if (!targets || targets.size === 0) return null
+  const fromIsTarget = targets.has(t.fromAccountId)
+  const toIsTarget = targets.has(t.toAccountId)
+  if (!fromIsTarget && !toIsTarget) return null
+  return {
+    left: fromIsTarget ? t.fromAccountId : t.toAccountId,
+    right: fromIsTarget ? t.toAccountId : t.fromAccountId,
+    pointsLeft: !fromIsTarget,
+  }
+}
+
 // `year`/`onYearChange` are controlled from the app shell's own header now
 // (spec.md §1b.2a: "a single year selector lives in the app shell header,
 // not per-screen") — Konten still owns computing *which* years actually
@@ -537,12 +561,24 @@ export default function Konten({ year, onYearChange, onYearsChange }) {
   // reference *account* — an allocation tag can span several target
   // accounts at once (Anlage Familie: Aktien/Crypto/Edelmetalle/ESOP
   // together, §2.5), so there's no one meaningful "the other side" to
-  // show. Tag-filtered rows just show their own plain, unfiltered Konto
-  // arrow and natural amountCents sign instead — filteredAccountId is
-  // null whenever accountFilter is actually a tag, which every place
-  // below that used to read accountFilter directly for this purpose now
-  // reads instead.
+  // collapse to the way a real account filter has. Tag-filtered rows show
+  // both account names instead (below), just consistently ordered around
+  // the tag's own target(s) rather than raw storage order, once it's an
+  // allocation tag specifically — filteredAccountId is null whenever
+  // accountFilter is actually a tag, which every place below that used to
+  // read accountFilter directly for this purpose now reads instead.
   const filteredAccountId = accountFilter && accountById[accountFilter] ? accountFilter : null
+
+  // Purple/allocation tags only (spec.md §1b.4/§2.5) — a grouping tag has
+  // no reconciliationTargetAccountIds of its own to order around. `null`
+  // when there's nothing to reorder around, so allocationSideOrder()'s own
+  // early-return covers every other case uniformly.
+  const filteredAllocationTargets = useMemo(() => {
+    if (!accountFilter || filteredAccountId) return null
+    const tag = tagById[accountFilter]
+    if (tag?.class !== 'allocation') return null
+    return new Set(tag.reconciliationTargetAccountIds ?? [])
+  }, [accountFilter, filteredAccountId, tagById])
 
   // Each column's "parent-level" comparable/display value, extracted so
   // both its valueGetter (parent-row display) and its comparator (every
@@ -554,6 +590,10 @@ export default function Konten({ year, onYearChange, onYearsChange }) {
       const other = outgoing ? t.toAccountId : t.fromAccountId
       if (!other) return '—'
       return (outgoing ? '→ ' : '← ') + accountName(other)
+    }
+    const allocationOrder = allocationSideOrder(t, filteredAllocationTargets)
+    if (allocationOrder) {
+      return `${accountName(allocationOrder.left)} ${allocationOrder.pointsLeft ? '←' : '→'} ${accountName(allocationOrder.right)}`
     }
     if (t.fromAccountId && t.toAccountId) {
       return `${accountName(t.fromAccountId)} → ${accountName(t.toAccountId)}`
@@ -1466,6 +1506,20 @@ export default function Konten({ year, onYearChange, onYearsChange }) {
               <span className="inline-flex items-center gap-1">
                 <span style={{ display: 'inline-block', transform: pointsLeft ? 'scaleX(-1)' : undefined }}>→</span>
                 {accountName(other)}
+              </span>
+            )
+          }
+          // Filtering by an allocation (purple) tag: the tag's own
+          // target-pool account always shows first, arrow direction
+          // carrying the real money-flow direction (Markus, Sept 2026 —
+          // see allocationSideOrder's own comment for the full reasoning).
+          const allocationOrder = allocationSideOrder(t, filteredAllocationTargets)
+          if (allocationOrder) {
+            return (
+              <span className="inline-flex items-center gap-1">
+                {accountName(allocationOrder.left)}
+                <span style={{ display: 'inline-block', transform: allocationOrder.pointsLeft ? 'scaleX(-1)' : undefined }}>→</span>
+                {accountName(allocationOrder.right)}
               </span>
             )
           }

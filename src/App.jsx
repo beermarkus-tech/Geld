@@ -90,6 +90,7 @@ export default function App() {
       years={years}
       onYearChange={setYear}
       userEmail={user.email}
+      photoURL={user.photoURL}
       usingCachedSession={usingCachedSession}
       onSignOut={() => signOut(auth)}
     >

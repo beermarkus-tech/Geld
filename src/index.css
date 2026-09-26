@@ -6,9 +6,11 @@
 @import '@fontsource/jetbrains-mono/500.css';
 
 /* Semantic color tokens (spec.md §1b.4) — red is reserved exclusively for
-   alerts everywhere, never for "this is an expense section." Manual
-   light/dark override switch lands with the Settings screen (§1b.5); for
-   now this follows the system preference only. */
+   alerts everywhere, never for "this is an expense section." Follows the
+   system preference by default; the header's day/night button sets
+   data-theme on <html> as a manual override (see main.jsx/NavShell.jsx),
+   which the :not([data-theme]) guard below and the explicit
+   :root[data-theme="dark"] block make win over prefers-color-scheme. */
 :root {
   --color-bg: #f7f8fa;
   --color-surface: #ffffff;
@@ -40,7 +42,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     --color-bg: #0b1017;
     --color-surface: #161c26;
     --color-text: #e7eaf0;
@@ -63,6 +65,36 @@
     --color-tag-claim: #818cf8;
     --color-tag-claim-category: #fb7185;
   }
+}
+
+/* Explicit dark override (day/night button) — wins regardless of system
+   preference since [data-theme="dark"] outranks the plain :root the media
+   query above falls back to. No matching [data-theme="light"] block is
+   needed: the :not([data-theme]) guard above already keeps the base :root
+   light values in effect whenever an explicit override of either kind is
+   set. */
+:root[data-theme='dark'] {
+  --color-bg: #0b1017;
+  --color-surface: #161c26;
+  --color-text: #e7eaf0;
+  --color-text-muted: #a9b1bf;
+  --color-border: #2a3140;
+
+  --color-computed: #60a5fa;
+  --color-income: #4ade80;
+  --color-expense: #fbbf24;
+  --color-savings: #a78bfa;
+  --color-needs-attention: #fde047;
+  --color-alert: #f87171;
+  --color-alert-tint: #3f1d1d;
+  --color-income-tint: #1c3324;
+  --color-savings-tint: #2e2447;
+  --color-line-row-tint: #1c2330;
+
+  --color-tag-project: #2dd4bf;
+  --color-tag-statement: #94a3b8;
+  --color-tag-claim: #818cf8;
+  --color-tag-claim-category: #fb7185;
 }
 
 html,

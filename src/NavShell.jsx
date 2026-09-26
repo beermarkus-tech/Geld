@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 
+import { effectiveDark, toggleTheme } from './lib/theme'
+
 // Screen-to-component map lives in App.jsx (spec.md §3's own status table) —
 // this file only owns the nav item list/labels and the shell chrome
 // (header, sidebar, bottom nav) that surrounds whatever App.jsx renders as
@@ -55,7 +57,50 @@ function NavButton({ item, active, onClick, className = '' }) {
   )
 }
 
-export default function NavShell({ activeView, onNavigate, year, years, onYearChange, userEmail, usingCachedSession, onSignOut, children }) {
+// Profile picture (or an initial, if the account has none) + Abmelden —
+// shared by the tablet sidebar's bottom and phone's "More" sheet footer
+// (Markus: show the picture instead of the e-mail address) rather than two
+// copies that could quietly drift apart. The e-mail itself isn't dropped,
+// just demoted to a title/tooltip and the cached-session suffix under
+// Abmelden, since Markus still needs some way to see whose session it is.
+function UserBadge({ userEmail, photoURL, usingCachedSession, onSignOutClick, className = '' }) {
+  return (
+    <div className={'flex items-center gap-2 border-t border-[var(--color-border)] p-3 ' + className}>
+      {photoURL ? (
+        <img src={photoURL} alt="" referrerPolicy="no-referrer" className="h-8 w-8 shrink-0 rounded-full" />
+      ) : (
+        <div
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--color-bg)] text-sm text-[var(--color-text-muted)]"
+          aria-hidden="true"
+        >
+          {(userEmail?.[0] ?? '?').toUpperCase()}
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={onSignOutClick}
+        title={userEmail ?? undefined}
+        className="flex-1 text-left text-sm text-[var(--color-text-muted)]"
+      >
+        Abmelden
+        {usingCachedSession && <span className="block text-xs">(zwischengespeichert)</span>}
+      </button>
+    </div>
+  )
+}
+
+export default function NavShell({
+  activeView,
+  onNavigate,
+  year,
+  years,
+  onYearChange,
+  userEmail,
+  photoURL,
+  usingCachedSession,
+  onSignOut,
+  children,
+}) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed)
   const [moreOpen, setMoreOpen] = useState(false)
   // Sign-out gets a real confirmation modal, not the two-click arm/confirm
@@ -63,6 +108,7 @@ export default function NavShell({ activeView, onNavigate, year, years, onYearCh
   // this one) — a stray tap here is a real "did I just get logged out"
   // moment, not something a second tap in the same spot quietly fixes.
   const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false)
+  const [isDark, setIsDark] = useState(effectiveDark)
 
   useEffect(() => {
     try {
@@ -71,6 +117,21 @@ export default function NavShell({ activeView, onNavigate, year, years, onYearCh
       // Per-device convenience only — nothing to recover from here.
     }
   }, [sidebarCollapsed])
+
+  // Keeps the sun/moon icon correct if the system preference itself
+  // changes (no manual override yet) or another part of the app toggles
+  // the override (theme.js's 'geld-theme-change' event) — same dual
+  // system-preference/manual-override listening as gridColorScheme.js.
+  useEffect(() => {
+    const recompute = () => setIsDark(effectiveDark())
+    const query = window.matchMedia('(prefers-color-scheme: dark)')
+    query.addEventListener('change', recompute)
+    window.addEventListener('geld-theme-change', recompute)
+    return () => {
+      query.removeEventListener('change', recompute)
+      window.removeEventListener('geld-theme-change', recompute)
+    }
+  }, [])
 
   function navigate(id) {
     onNavigate(id)
@@ -168,14 +229,16 @@ export default function NavShell({ activeView, onNavigate, year, years, onYearCh
               ))}
             </div>
           )}
-          {userEmail && (
-            <span className="hidden text-sm text-[var(--color-text-muted)] sm:inline">
-              {userEmail}
-              {usingCachedSession && ' (zwischengespeichert)'}
-            </span>
-          )}
-          <button type="button" onClick={() => setSignOutConfirmOpen(true)} className="text-sm text-[var(--color-text-muted)]">
-            Abmelden
+          {/* Day/night toggle, top-right of the header (Markus's own
+              placement request) — a manual override on top of the system
+              preference index.css already follows (theme.js). */}
+          <button
+            type="button"
+            onClick={() => setIsDark(toggleTheme() === 'dark')}
+            aria-label={isDark ? 'Zu Tagmodus wechseln' : 'Zu Nachtmodus wechseln'}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-lg hover:bg-[var(--color-bg)]"
+          >
+            {isDark ? '☀️' : '🌙'}
           </button>
         </div>
       </header>
@@ -216,10 +279,18 @@ export default function NavShell({ activeView, onNavigate, year, years, onYearCh
             just icons-only) when collapsed, per spec.md §1b.2: "so the
             content area can reclaim the full screen width." */}
         {!sidebarCollapsed && (
-          <nav className="hidden w-48 shrink-0 flex-col gap-1 overflow-y-auto overscroll-none border-r border-[var(--color-border)] bg-[var(--color-surface)] p-3 md:flex">
-            {ALL_ITEMS.map((item) => (
-              <NavButton key={item.id} item={item} active={item.id === activeView} onClick={() => navigate(item.id)} />
-            ))}
+          <nav className="hidden w-48 shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)] md:flex">
+            <div className="flex flex-1 flex-col gap-1 overflow-y-auto overscroll-none p-3">
+              {ALL_ITEMS.map((item) => (
+                <NavButton key={item.id} item={item} active={item.id === activeView} onClick={() => navigate(item.id)} />
+              ))}
+            </div>
+            <UserBadge
+              userEmail={userEmail}
+              photoURL={photoURL}
+              usingCachedSession={usingCachedSession}
+              onSignOutClick={() => setSignOutConfirmOpen(true)}
+            />
           </nav>
         )}
 
@@ -267,13 +338,19 @@ export default function NavShell({ activeView, onNavigate, year, years, onYearCh
       {moreOpen && (
         <div className="fixed inset-0 z-20 flex items-end md:hidden" onClick={() => setMoreOpen(false)}>
           <div className="absolute inset-0 bg-black/40" />
-          <div
-            className="relative flex w-full flex-col gap-1 rounded-t-lg bg-[var(--color-surface)] p-3 pb-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {MORE_ITEMS.map((item) => (
-              <NavButton key={item.id} item={item} active={item.id === activeView} onClick={() => navigate(item.id)} className="w-full" />
-            ))}
+          <div className="relative flex w-full flex-col rounded-t-lg bg-[var(--color-surface)]" onClick={(e) => e.stopPropagation()}>
+            <div className="flex flex-col gap-1 p-3">
+              {MORE_ITEMS.map((item) => (
+                <NavButton key={item.id} item={item} active={item.id === activeView} onClick={() => navigate(item.id)} className="w-full" />
+              ))}
+            </div>
+            <UserBadge
+              userEmail={userEmail}
+              photoURL={photoURL}
+              usingCachedSession={usingCachedSession}
+              onSignOutClick={() => setSignOutConfirmOpen(true)}
+              className="pb-6"
+            />
           </div>
         </div>
       )}

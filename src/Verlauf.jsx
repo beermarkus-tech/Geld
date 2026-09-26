@@ -5,7 +5,7 @@ import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-communi
 
 import { db } from './firebase'
 import { allocationMonthActual, budgetTopLineMonths, categoryMonthActual } from './lib/budget'
-import { centsToEuro } from './lib/format'
+import { centsToWholeEuro } from './lib/format'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 
 ModuleRegistry.registerModules([AllCommunityModule])
@@ -81,9 +81,12 @@ const ALLOCATION_TAG_ORDER = [
 ]
 
 // A cell whose value is exactly 0 shows empty, not "0" (spec.md §3b) —
-// across every numeric cell, month columns and Jahr alike.
+// across every numeric cell, month columns and Jahr alike. Rounded to
+// whole euros (Markus, Sept 2026) — a display-only rounding, checked
+// against the exact cent value above, not the rounded one, so a genuinely
+// nonzero but sub-euro residual still shows "0" rather than vanishing.
 function formatMonthCell(cents) {
-  return cents === 0 ? '' : centsToEuro(cents)
+  return cents === 0 ? '' : centsToWholeEuro(cents)
 }
 
 // Section background tint (spec.md §1b.4's one explicit red exception,
@@ -132,6 +135,21 @@ function blockBorderStyle(rowData) {
   return { borderBottom: '0px none' }
 }
 
+const SHOW_PLAN0_KEY = 'geld-verlauf-show-plan0'
+
+// Per-device convenience only, same reasoning as NavShell.jsx's own
+// sidebar-collapsed persistence (Markus, Sept 2026: "save the state of
+// show or hide plan0") — a read/write failure (private browsing, blocked
+// storage) just means it starts shown every time, never a crash.
+function readShowPlan0() {
+  try {
+    const stored = localStorage.getItem(SHOW_PLAN0_KEY)
+    return stored === null ? true : stored === '1'
+  } catch {
+    return true
+  }
+}
+
 export default function Verlauf({ year }) {
   const [categories, setCategories] = useState([])
   const [tags, setTags] = useState([])
@@ -141,7 +159,15 @@ export default function Verlauf({ year }) {
   // Two independent global controls (spec.md §3b) — breakdown-block
   // show/hide isn't built yet (no breakdown lines rendered at all this
   // round), so only Plan0's own toggle exists so far.
-  const [showPlan0, setShowPlan0] = useState(true)
+  const [showPlan0, setShowPlan0] = useState(readShowPlan0)
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SHOW_PLAN0_KEY, showPlan0 ? '1' : '0')
+    } catch {
+      // Per-device convenience only — nothing to recover from here.
+    }
+  }, [showPlan0])
 
   useEffect(() => {
     const unsubs = [
@@ -312,7 +338,7 @@ export default function Verlauf({ year }) {
         // briefly restoring the Prog/Plan1/Plan0 text label to check
         // something) — font color already tells the three rows apart. The
         // Jahr figure always carries the € sign, unlike every month column.
-        valueGetter: (p) => (p.data.yearTotal === 0 ? '' : `${centsToEuro(p.data.yearTotal)} €`),
+        valueGetter: (p) => (p.data.yearTotal === 0 ? '' : `${centsToWholeEuro(p.data.yearTotal)} €`),
       },
       ...monthCols,
     ]
