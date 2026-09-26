@@ -120,29 +120,38 @@ function monthTextColorVar(rowLabel, isClosed) {
   return isClosed ? '--color-text' : '--color-text-muted' // Prog, Rollup
 }
 
-// No gridline between the three sibling rows (Prog/Plan1/Plan0) of one
-// block (spec.md §3b) — they read as one visual unit; the line between one
-// block and the next stays.
+// **Deferred, not solved — see the long history in DEVLOG.md/CODEMAP.md:**
+// the gridline *between* the three sibling rows (Prog/Plan1/Plan0) of one
+// block is still faintly visible on Markus's own device despite three
+// separate fix attempts, each verified wrong only by an actual screenshot.
+// Rather than attempt a fourth guess at the same problem, Markus's own
+// call (Sept 2026): leave that alone for now, and instead make the
+// boundary *between* one block and the next unmistakably strong (a solid,
+// high-contrast line — "black," inverted to white in dark mode via
+// --color-border-strong) so the block structure itself still reads clearly
+// even with the faint internal lines still present. Both the first row's
+// own top edge and the last row's own bottom edge draw this — the shared
+// seam between two adjacent blocks ends up with both sides drawing the
+// same line, which is harmless (they overlap exactly, not double-thickness
+// in practice), and it's what correctly marks the very first/last block's
+// own outer edge too, which only one side could ever reach.
 //
-// **Found the real source of the line only after it was still visible,
-// thinner, past two earlier attempts (Markus's own report) — neither
-// `getRowStyle` nor a `cellStyle` override on `.ag-cell` was ever touching
-// the right element.** AG Grid's default per-row border isn't drawn by
-// `.ag-row` or `.ag-cell` at all for an ordinary row — it's
+// Historical note on *why* a colDef/row-level override is what's needed
+// here at all, not a plain AG Grid built-in: AG Grid's own default per-row
+// border isn't drawn by `.ag-row` or `.ag-cell` for an ordinary row — it's
 // `.ag-grid-scrolling-cells`/`.ag-grid-pinned-left-cells` (an internal
-// per-row wrapper around every cell in that row-section) that carries a
-// real `border-bottom: var(--ag-row-border-style) var(--ag-row-border-color)
-// var(--ag-row-border-width)`, with no colDef- or row-level hook able to
-// reach it. The actual fix (see the `verlauf-grid` CSS rule in index.css)
-// is to suppress that default at the grid level entirely
-// (`--ag-row-border-color: transparent`), leaving this function's own
-// per-cell border as the *only* one ever drawn — so it can finally be
-// exactly where it's wanted. Kategorie/Unterkategorie don't need this —
+// per-row wrapper) that carries a real `border-bottom`, with no colDef- or
+// row-level hook able to reach it — suppressed grid-wide via the
+// `verlauf-grid` CSS rule in index.css (`--ag-row-border-color:
+// transparent`), leaving this function's own per-cell border as the only
+// one ever deliberately drawn. Kategorie/Unterkategorie don't need this —
 // they're genuinely merged into one spanned cell per block via `spanRows`,
-// so there's no seam between sibling rows there to begin with.
+// so there's no seam there to begin with.
 function blockBorderStyle(rowData) {
-  if (rowData.isLastOfBlock) return { borderBottom: '1px solid var(--color-border)' }
-  return { borderBottom: '0px none' }
+  return {
+    borderTop: rowData.isFirstOfBlock ? '1px solid var(--color-border-strong)' : '0px none',
+    borderBottom: rowData.isLastOfBlock ? '1px solid var(--color-border-strong)' : '0px none',
+  }
 }
 
 // Deterministic budget-document id, exactly matching
@@ -433,10 +442,12 @@ export default function Verlauf({ year }) {
       const plan0Top = budgetTopLineMonths(targetKey, targetId, 'plan0', yearNum, budgets)
       rows.push(...planVersionRows(common, rowIdBase, 'plan0', plan0Top))
     }
-    // Marks the actual last row of this block after every filter above has
-    // already applied — used below to draw a real boundary line only
-    // between blocks, never between a block's own sibling/breakdown rows.
+    // Marks the actual first/last row of this block after every filter
+    // above has already applied — used below to draw a strong boundary
+    // line at each block's own top/bottom edge (Sept 2026, Markus — see
+    // blockBorderStyle()'s own comment for why).
     rows.forEach((r, i) => {
+      r.isFirstOfBlock = i === 0
       r.isLastOfBlock = i === rows.length - 1
     })
     return rows
@@ -599,24 +610,29 @@ export default function Verlauf({ year }) {
       cellStyle: (p) => {
         const isClosed = closedMonths.includes(i + 1)
         const style = { color: `var(${monthTextColorVar(p.data.rowLabel, isClosed)})`, ...blockBorderStyle(p.data) }
-        // Prog's own row (and its breakdown-group mirror, the automated
-        // rollup header) gets a light grey tint on a closed month's cells
+        // Prog's own row gets a light grey tint on a closed month's cells
         // specifically (spec.md §3b, corrected Sept 2026 — Markus caught
         // it applied to Plan0 instead) — a second, independent cue
         // alongside the grey text, not applied to Plan1/Plan0's cells.
-        if ((p.data.rowLabel === 'Prog' || p.data.rowLabel === 'Rollup') && isClosed) style.backgroundColor = 'var(--color-line-row-tint)'
-        // A breakdown line itself (not the rollup header) gets its own
-        // subtle tinted background regardless of closed-state (spec.md
-        // §3b: "visually distinguished by smaller text and a tinted
-        // background"), and Plan0's own breakdown rows are additionally
-        // italicized to match Plan0's own styling.
+        if (p.data.rowLabel === 'Prog' && isClosed) style.backgroundColor = 'var(--color-line-row-tint)'
+        // A breakdown line gets its own yellow-tinted background always,
+        // not just on a closed month (spec.md §3b: "visually distinguished
+        // by smaller text and a tinted background"), and Plan0's own
+        // breakdown rows are additionally italicized to match Plan0's own
+        // styling. The parent-tag rollup header (its own "sub sum" row)
+        // gets a step stronger yellow than its own children (Markus, Sept
+        // 2026) — same always-on treatment, not tied to closed-state.
+        if (p.data.rowLabel === 'Rollup') style.backgroundColor = 'var(--color-breakdown-rollup-tint)'
         if (p.data.rowLabel === 'Plan1-breakdown' || p.data.rowLabel === 'Plan0-breakdown') {
-          style.backgroundColor = 'var(--color-line-row-tint)'
+          style.backgroundColor = 'var(--color-breakdown-tint)'
           if (p.data.rowLabel === 'Plan0-breakdown') style.fontStyle = 'italic'
         }
         return style
       },
-      width: 110,
+      // Narrowed slightly (Markus, Sept 2026) to make room for the
+      // reintroduced row-title column (below) without widening the grid
+      // overall — 12 months × 8px freed matches that column's own width.
+      width: 102,
       // The cursor/focus rectangle should only ever land in a month column
       // (Markus) — every other column is suppressNavigable (below).
       // Editable: Plan1/Plan0 top-line rows once they're *not* in
@@ -772,15 +788,44 @@ export default function Verlauf({ year }) {
       },
       {
         headerName: '',
+        colId: 'rowTitle',
+        pinned: 'left',
+        suppressNavigable: true,
+        // Brought back (Markus, Sept 2026 — spec.md §3b's own original
+        // "third column... either the plan-line name (Prog/Plan1/Plan0)
+        // or, for a breakdown row, that breakdown item's name" design,
+        // dropped as redundant once font color told Prog/Plan1/Plan0 apart
+        // — reinstated once breakdown lines needed *some* column to show
+        // their own name in, since Unterkategorie stays one merged cell
+        // across the whole block and can't do it). Narrow — just the text
+        // label now, the € figure moved back to its own column ('label',
+        // below) rather than the two-line squeeze this replaces.
+        width: 96,
+        cellClass: (p) => `truncate${p.data.rowLabel?.includes('breakdown') || p.data.rowLabel === 'Rollup' ? ' text-xs' : ''}`,
+        cellStyle: (p) => {
+          const style = {
+            backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})`,
+            color: `var(${p.data.rowLabel === 'Plan0' || p.data.rowLabel === 'Plan0-breakdown' ? '--color-text-muted' : '--color-text'})`,
+            ...blockBorderStyle(p.data),
+          }
+          if (p.data.rowLabel === 'Rollup') style.backgroundColor = 'var(--color-breakdown-rollup-tint)'
+          if (p.data.rowLabel === 'Plan1-breakdown' || p.data.rowLabel === 'Plan0-breakdown') {
+            style.backgroundColor = 'var(--color-breakdown-tint)'
+            if (p.data.rowLabel === 'Plan0-breakdown') style.fontStyle = 'italic'
+          }
+          return style
+        },
+        valueGetter: (p) => (p.data.breakdownLabel ?? p.data.rowLabel),
+      },
+      {
+        headerName: '',
         colId: 'label',
         pinned: 'left',
         suppressNavigable: true,
-        // Narrower now that this column only holds the € figure (Markus —
-        // it was still reserving width for the Prog/Plan1/Plan0 text label
-        // dropped earlier) — a little wider than the month columns rather
-        // than exactly matching, since this one's own figure always has a
-        // trailing " €" the month columns never carry (spec.md §3b), which
-        // clipped at the exact same width.
+        // A little wider than the month columns rather than exactly
+        // matching, since this one's own figure always has a trailing
+        // " €" the month columns never carry (spec.md §3b), which clipped
+        // at the exact same width.
         width: 128,
         cellClass: (p) => `text-right tabular-figure${p.data.rowLabel?.includes('breakdown') || p.data.rowLabel === 'Rollup' ? ' text-xs' : ''}`,
         // The yearly total mixes closed and open months, so it doesn't get
@@ -793,32 +838,14 @@ export default function Verlauf({ year }) {
             color: `var(${p.data.rowLabel === 'Plan0' || p.data.rowLabel === 'Plan0-breakdown' ? '--color-text-muted' : '--color-text'})`,
             ...blockBorderStyle(p.data),
           }
-          if (p.data.rowLabel === 'Plan1-breakdown' || p.data.rowLabel === 'Plan0-breakdown' || p.data.rowLabel === 'Rollup') {
-            style.backgroundColor = 'var(--color-line-row-tint)'
+          if (p.data.rowLabel === 'Rollup') style.backgroundColor = 'var(--color-breakdown-rollup-tint)'
+          if (p.data.rowLabel === 'Plan1-breakdown' || p.data.rowLabel === 'Plan0-breakdown') {
+            style.backgroundColor = 'var(--color-breakdown-tint)'
             if (p.data.rowLabel === 'Plan0-breakdown') style.fontStyle = 'italic'
           }
           return style
         },
-        // Prog/Plan1/Plan0 show just the yearly € figure (font color
-        // already tells them apart, Markus — dropped their own text label
-        // last round). A breakdown/rollup row has no other column that
-        // could show *which* line it is (Unterkategorie stays one merged
-        // cell across the whole block, spec.md §3b: "breakdown item names
-        // live in this third column, never in Unterkategorie"), so those
-        // get a small two-line name-then-total instead.
-        cellRenderer: (p) => {
-          const { rowLabel, yearTotal, breakdownLabel } = p.data
-          const total = yearTotal === 0 ? '' : `${centsToWholeEuro(yearTotal)} €`
-          if (rowLabel === 'Plan1-breakdown' || rowLabel === 'Plan0-breakdown' || rowLabel === 'Rollup') {
-            return (
-              <div className="flex h-full w-full flex-col items-end justify-center overflow-hidden leading-tight">
-                <span className="w-full truncate text-left">{breakdownLabel}</span>
-                <span>{total}</span>
-              </div>
-            )
-          }
-          return total
-        },
+        valueGetter: (p) => (p.data.yearTotal === 0 ? '' : `${centsToWholeEuro(p.data.yearTotal)} €`),
       },
       ...monthCols,
     ]
@@ -899,6 +926,15 @@ export default function Verlauf({ year }) {
           // month header now stacks its label and the close-month checkbox.
           headerHeight={52}
           rowHeight={30}
+          // A breakdown line (and its own rollup header) already reads as
+          // a lighter-weight detail row via the smaller font above —
+          // Markus asked for a shorter row to match, and AG Grid's
+          // getRowHeight (plain Community option) is exactly this: a
+          // per-row override on top of the grid-wide default.
+          getRowHeight={(p) => {
+            const label = p.data?.rowLabel
+            return label === 'Plan1-breakdown' || label === 'Plan0-breakdown' || label === 'Rollup' ? 22 : 30
+          }}
         />
       </div>
     </div>

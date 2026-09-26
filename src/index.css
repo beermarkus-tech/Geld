@@ -17,6 +17,7 @@
   --color-text: #14181f;
   --color-text-muted: #6b7484; /* lightened slightly (Sept 2026, Markus — Verlauf's grey rows) */
   --color-border: #e2e5eb;
+  --color-border-strong: #000000; /* Verlauf's own block-boundary line (Sept 2026, Markus) — a deliberately high-contrast line between one Prog/Plan1/Plan0 block and the next, standing in for the still-unresolved internal-gridline removal (see Verlauf.jsx's blockBorderStyle()) */
 
   --color-computed: #2563eb; /* blue — computed account totals */
   --color-income: #16a34a; /* green — income */
@@ -28,6 +29,8 @@
   --color-income-tint: #dcfce7; /* pale green row background — an armed *undelete* (Konten); also Verlauf's Einnahmen section tint */
   --color-savings-tint: #ede9fe; /* pale purple — Verlauf's Rücklagen section tint */
   --color-line-row-tint: #eef0f4; /* subtle grey row background — a split transaction's own line rows (Konten), distinguishing them from ordinary transaction rows */
+  --color-breakdown-tint: #fef9c3; /* pale yellow — Verlauf's breakdown-line rows (Hotels, Fehmarn, ...), always tinted regardless of month open/closed state */
+  --color-breakdown-rollup-tint: #fde68a; /* a step stronger than the above — Verlauf's parent-tag "(automatisch)" rollup header row specifically (Markus: "tint the sub sum lines... in a slightly stronger yellow") */
 
   /* Tag class/groupingType color layer (spec.md §2.5) — extends the
      semantic palette above with a tag-specific one. `allocation` tags
@@ -48,6 +51,7 @@
     --color-text: #e7eaf0;
     --color-text-muted: #a9b1bf; /* lightened slightly (Sept 2026, Markus — Verlauf's grey rows) */
     --color-border: #2a3140;
+    --color-border-strong: #ffffff; /* inverted from light mode's black — same "high-contrast against the background" intent */
 
     --color-computed: #60a5fa;
     --color-income: #4ade80;
@@ -59,6 +63,8 @@
     --color-income-tint: #1c3324;
     --color-savings-tint: #2e2447;
     --color-line-row-tint: #1c2330;
+    --color-breakdown-tint: #3a3419;
+    --color-breakdown-rollup-tint: #4d431d;
 
     --color-tag-project: #2dd4bf;
     --color-tag-statement: #94a3b8;
@@ -79,6 +85,7 @@
   --color-text: #e7eaf0;
   --color-text-muted: #a9b1bf;
   --color-border: #2a3140;
+  --color-border-strong: #ffffff;
 
   --color-computed: #60a5fa;
   --color-income: #4ade80;
@@ -90,6 +97,8 @@
   --color-income-tint: #1c3324;
   --color-savings-tint: #2e2447;
   --color-line-row-tint: #1c2330;
+  --color-breakdown-tint: #3a3419;
+  --color-breakdown-rollup-tint: #4d431d;
 
   --color-tag-project: #2dd4bf;
   --color-tag-statement: #94a3b8;
