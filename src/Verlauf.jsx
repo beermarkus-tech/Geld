@@ -494,87 +494,45 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // guess" pattern Konten.jsx's own pendingFocusIdRef already established
   // for the same underlying problem.
   const pendingFocusRef = useRef(null)
-  // The active scroll guard, if any — see startScrollGuard()'s own comment
-  // below for why this exists as a continuous per-frame loop rather than a
-  // one-shot or rowData-triggered restore.
-  const scrollGuardRef = useRef(null)
+  // A *separate*, longer-lived claim from pendingFocusRef, on purpose (see
+  // claimPendingFocus's own comment below for why one claim wasn't enough).
+  const pendingScrollRef = useRef(null)
   // Bumped by onGridReady (below) — see its own comment on why the settle
   // effect needs this second trigger alongside `rowData`.
   const [gridReadyTick, setGridReadyTick] = useState(0)
   function currentScrollTop() {
     return gridWrapperRef.current?.querySelector('.ag-body-vertical-scroll-viewport')?.scrollTop ?? null
   }
+  function restoreScrollTop(value) {
+    if (value == null) return
+    const el = gridWrapperRef.current?.querySelector('.ag-body-vertical-scroll-viewport')
+    if (el) el.scrollTop = value
+  }
   function focusRowNow(rowId, colId = focusedColIdRef.current) {
     const node = gridApiRef.current?.getRowNode(rowId)
     if (node) gridApiRef.current.setFocusedCell(node.rowIndex, colId, node.rowPinned)
   }
-  // Pins the grid's scroll position to `value` on every single animation
-  // frame for 1.5s, actively fighting anything that moves it away — not a
-  // reactive "restore after rowData changes" (three earlier attempts at
-  // that, each catching one more case than the last: a one-shot restore
-  // right after focus landed; then restoring on every `rowData` change for
-  // a window, which closed the underlying jump but still let one wrong
-  // frame paint before correcting it, Markus: "it immediately jumps back...
-  // please avoid the jump flicker if you can"; then `suppressScrollOnNewData`
-  // to stop AG Grid's own "new data" auto-scroll-to-top at the source,
-  // which still didn't fully close it, Markus: "unfortunately the flicker
-  // is still there"). Whatever the remaining trigger actually is — a
-  // second, different AG Grid internal reset this grid option doesn't
-  // cover; `setFocusedCell`'s own scroll-into-view kicking in if the new
-  // row briefly computes as out of view during a mid-flight row-height
-  // recalculation; something else entirely — chasing the exact mechanism
-  // any further wasn't converging. This is deliberately cause-agnostic
-  // instead: correct the scroll position back on literally every frame,
-  // regardless of *why* it moved, so at most one single frame (under
-  // 17ms at 60Hz) is ever visibly wrong, indistinguishable from no jump at
-  // all rather than a fixed-but-still-visible correction a render or two
-  // later. Cancelled early by a genuine user scroll gesture (wheel/touch)
-  // on the grid, so it never fights someone who actually meant to scroll
-  // during the same window.
-  function startScrollGuard(value) {
-    if (value == null) return
-    if (scrollGuardRef.current) cancelAnimationFrame(scrollGuardRef.current.rafId)
-    const guard = { value, until: Date.now() + 1500, rafId: null }
-    scrollGuardRef.current = guard
-    const tick = () => {
-      if (scrollGuardRef.current !== guard) return // superseded by a newer guard
-      const el = gridWrapperRef.current?.querySelector('.ag-body-vertical-scroll-viewport')
-      if (el && el.scrollTop !== guard.value) el.scrollTop = guard.value
-      if (Date.now() < guard.until) {
-        guard.rafId = requestAnimationFrame(tick)
-      } else if (scrollGuardRef.current === guard) {
-        scrollGuardRef.current = null
-      }
-    }
-    guard.rafId = requestAnimationFrame(tick)
-  }
-  // Claiming focus also starts the scroll guard above, snapshotting the
-  // current position before whatever async work this claim is waiting on
-  // (a Firestore write, or several) gets a chance to move it.
+  // Claiming focus also snapshots the current scroll position, restored on
+  // every `rowData` change for a couple of seconds afterward (Markus, twice
+  // now: "after creating a breakdown row, the grid still jumps all the way
+  // back to the top" — still true after a first attempt that only restored
+  // scroll *once*, right after focus itself landed). Root cause, found on
+  // this second pass: adding a breakdown line is two genuinely separate
+  // Firestore writes a moment apart — creating the tag document, then
+  // writing the budget documents — each landing via its own `onSnapshot` at
+  // a slightly different time in real usage (a disposable test harness
+  // with a synchronous mock Firestore batched both into one render and
+  // never caught this the first time). Each write resets AG Grid's own
+  // scroll position as a side effect of rebuilding `rowData`, so a claim
+  // that fires once and clears itself only ever catches the *first* of the
+  // two resets. `pendingScrollRef` is a second, longer-lived claim
+  // specifically because of this — cleared by its own expiry, not by being
+  // "used" once, since there's no reliable way to know in advance how many
+  // separate row-data rebuilds one user action will actually trigger.
   function claimPendingFocus(rowId, colId = focusedColIdRef.current) {
     pendingFocusRef.current = { rowId, colId }
-    startScrollGuard(currentScrollTop())
+    pendingScrollRef.current = { value: currentScrollTop(), until: Date.now() + 2000 }
   }
-
-  // A genuine user scroll gesture cancels an active guard immediately —
-  // otherwise a deliberate scroll started during the guard's own 1.5s
-  // window would keep getting pinned back to wherever it was before,
-  // fighting the very person it's meant to help.
-  useEffect(() => {
-    const wrapper = gridWrapperRef.current
-    if (!wrapper) return
-    const onUserScroll = () => {
-      if (!scrollGuardRef.current) return
-      cancelAnimationFrame(scrollGuardRef.current.rafId)
-      scrollGuardRef.current = null
-    }
-    wrapper.addEventListener('wheel', onUserScroll, { passive: true })
-    wrapper.addEventListener('touchstart', onUserScroll, { passive: true })
-    return () => {
-      wrapper.removeEventListener('wheel', onUserScroll)
-      wrapper.removeEventListener('touchstart', onUserScroll)
-    }
-  }, [])
 
   useEffect(() => {
     try {
@@ -1195,10 +1153,27 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // on every rowData change, no-ops instantly unless a focus claim is
   // actually pending, and leaves it pending (rather than clearing it on a
   // miss) so a claim made just before the row set catches up isn't lost.
-  // The scroll guard (startScrollGuard, above) runs independently of this
-  // effect entirely now — its own rAF loop, not gated on rowData changes —
-  // so it isn't handled here any more.
+  //
+  // The scroll-restore half (pendingScrollRef) is deliberately separate and
+  // runs unconditionally on every one of these renders while its own claim
+  // hasn't expired yet — not just once, and not gated on the focus claim
+  // above having anything left to do. One user action here can trigger
+  // *several* separate rowData rebuilds a moment apart (creating a
+  // breakdown line writes a tag document and a batch of budget documents
+  // as two separate Firestore round-trips, each arriving via its own
+  // `onSnapshot` at a slightly different real-world time), and each one
+  // resets AG Grid's own scroll position independently — so this has to
+  // keep re-fighting that reset for as long as more of them might still be
+  // coming, not just the first time this effect happens to run afterward.
   useEffect(() => {
+    if (pendingScrollRef.current) {
+      if (Date.now() <= pendingScrollRef.current.until) {
+        const value = pendingScrollRef.current.value
+        requestAnimationFrame(() => restoreScrollTop(value))
+      } else {
+        pendingScrollRef.current = null
+      }
+    }
     if (!pendingFocusRef.current || !gridApiRef.current) return
     const { rowId, colId } = pendingFocusRef.current
     const node = gridApiRef.current.getRowNode(rowId)
@@ -1837,21 +1812,21 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
           suppressRowVirtualisation
           suppressMaxRenderedRowRestriction
           // Stops AG Grid auto-scrolling to the very top on every rowData
-          // change — one of at least two real contributors to the scroll-
-          // jump-on-add bug (Markus, four rounds running). A `rowData`
-          // *prop* change (even with `getRowId` matching every row) is
-          // still treated as "a whole new dataset" at this level of AG
-          // Grid, which auto-scrolls to the top by default unless told not
-          // to (`suppressScrollOnNewData`, a plain grid option, confirmed
-          // in AG Grid's own bundled source: `scrollToTopIfNewData()`,
-          // gated on exactly this flag). Didn't fully close the report on
-          // its own (Markus: "unfortunately the flicker is still there") —
-          // something else, never pinned down exactly, still moves the
-          // scroll position in at least some real cases this doesn't
-          // cover; `startScrollGuard()` (above) is the real, cause-agnostic
-          // backstop that actually closes it now. Kept anyway: a real fix
-          // for a real mechanism, not dead code, and removing it would just
-          // mean the guard has more resetting to fight.
+          // change — the real root cause of the scroll-jump-on-add bug
+          // (Markus, three rounds running: "the grid still jumps... please
+          // check again," "it immediately jumps back to the correct
+          // position" once a workaround existed). A `rowData` *prop* change
+          // (even with `getRowId` matching every row) is still treated as
+          // "a whole new dataset" at this level of AG Grid, which
+          // auto-scrolls to the top by default unless told not to
+          // (`suppressScrollOnNewData`, a plain grid option, confirmed in
+          // AG Grid's own bundled source: `scrollToTopIfNewData()`, gated
+          // on exactly this flag) — a much better fix than reacting to the
+          // reset after it's already visibly happened (the previous
+          // approach, `pendingScrollRef` below, kept as a defensive
+          // fallback in case some other path still triggers a reset this
+          // doesn't cover, but no longer doing the actual work in the
+          // common case).
           suppressScrollOnNewData
           // Double-click (or Enter/F2) opens the editor now, AG Grid's own
           // default — no `singleClickEdit` here. A first pass misread
