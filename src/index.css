@@ -139,15 +139,25 @@ body {
   --ag-row-border-color: transparent;
 }
 
-/* A stronger cursor/focus rectangle (Markus, Sept 2026: "can you make the
-   cursor a bit more visible") — AG Grid's own default is a plain 1px
-   border in --ag-range-selection-border-color (confirmed in its bundled
-   CSS, .ag-cell-focus:not(.ag-cell-range-selected)), easy to lose against
-   this screen's own tinted backgrounds. Scoped to Verlauf only — Konten's
-   own cursor wasn't reported as hard to see. */
-.verlauf-grid .ag-cell-focus:not(.ag-cell-range-selected) {
-  border-width: 2px !important;
-  border-color: var(--color-computed) !important;
+/* A stronger, non-clipping cursor/focus rectangle everywhere AG Grid is
+   used (Markus, Sept 2026: originally "make the cursor a bit more visible"
+   in Verlauf only, widened this round once the same underlying rendering
+   bug turned out to affect Konten too — "the cursor rectangle is strangely
+   cut off at the top and bottom... the same goes for the konten screen").
+   AG Grid's own default (and the first fix here, a plain thicker `border`)
+   both draw the focus indicator as a real border on the cell's own box —
+   which two *separate* DOM elements (this row's cell and its neighbor's)
+   never visually merge into one line the way adjacent table-cell borders
+   collapse; where the focused cell's own top/bottom edge lands exactly on
+   a row boundary, the neighboring row's own background can paint right up
+   to (and slightly over) that shared pixel line, making the rectangle read
+   as cut off there. `box-shadow: inset` instead draws entirely *inside*
+   the cell's own box — nothing to share or lose a paint-order race against
+   with the row next door — a strictly better mechanism for this than a
+   thicker border, not just a thicker version of the same one. */
+.ag-cell-focus:not(.ag-cell-range-selected) {
+  border-color: transparent !important;
+  box-shadow: inset 0 0 0 2px var(--color-computed) !important;
 }
 
 .tabular-figure {

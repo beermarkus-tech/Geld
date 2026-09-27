@@ -1417,7 +1417,7 @@ export default function Konten({ year, onYearChange, onYearsChange }) {
                   toggleExpanded(row.id)
                 }}
                 title={expanded ? 'Einklappen' : `${lineCount} Positionen anzeigen`}
-                className="flex h-full w-full items-center justify-center text-xs text-[var(--color-text-muted)]"
+                className="flex h-full w-full items-center justify-center text-base text-[var(--color-text-muted)]"
               >
                 {expanded ? '▾' : '▸'}
               </button>
@@ -2286,6 +2286,9 @@ export default function Konten({ year, onYearChange, onYearsChange }) {
                     <b>Strg+H</b> — Kürzlich gelöscht ein-/ausblenden
                   </li>
                   <li>
+                    <b>Strg+D</b> — Positionen ein-/ausklappen
+                  </li>
+                  <li>
                     <b>Strg+F</b> — Spalte filtern
                   </li>
                   <li>
@@ -2523,13 +2526,17 @@ export default function Konten({ year, onYearChange, onYearsChange }) {
               handleDeleteClick(p.data)
               return
             }
-            // Ctrl+Tab toggles the current transaction's own split-line
-            // rows visible/hidden (Markus, Sept 2026 — Verlauf's own
-            // breakdown blocks got this shortcut the same round; "do apply
-            // ctrl+tab to show/hide split transactions in konten, too").
-            // A no-op on a transaction that isn't actually split (≤1 line)
-            // — there's nothing to expand/collapse.
-            if (key === 'Tab' && (p.event.ctrlKey || p.event.metaKey)) {
+            // Ctrl+D ("details") toggles the current transaction's own
+            // split-line rows visible/hidden (Markus, Sept 2026 — Verlauf's
+            // own breakdown blocks got this shortcut the same round; "do
+            // apply ctrl+tab to show/hide split transactions in konten,
+            // too"). **Was Ctrl+Tab, changed the same round** (Markus:
+            // "ctrl+tab does not work" — real browsers reserve it for
+            // switching tabs at the OS/window-manager level, below where a
+            // page's own JS can ever see the keydown at all). A no-op on a
+            // transaction that isn't actually split (≤1 line) — there's
+            // nothing to expand/collapse.
+            if (key?.toLowerCase() === 'd' && (p.event.ctrlKey || p.event.metaKey)) {
               const row = p.data
               const tx = row.__isLine ? row.__parent : row
               if ((tx.lines?.length ?? 0) > 1) {
