@@ -154,16 +154,18 @@ Two families: **Inter** for interface text (labels, categories, navigation), **a
 id, name
 group: "cash" | "payment" | "savings" | "investment-cash" | "investment-tracking"
        | "physical-cash" | "receivable" | "system"
-reportingGroup: "Barkonten" | "Sparkonten" | "Geldanlage" | "Außenstände" | null   // null for Jahresabschluß only
+reportingGroup: "Barkonten" | "Bargeld" | "Sparkonten" | "Geldanlage" | "Außenstände" | null   // null for Jahresabschluß only
 parentAccountId: null | <id>
 isVirtual: boolean       // true for Aktien, Crypto, Edelmetalle, ESOP — tracks cost basis only, not market value
 tracked: boolean         // false = account exists conceptually but isn't actively used yet (e.g. Giro Sophia)
 ```
 (The `envelope` group is retired — see §2.1 and §2.5 for the allocation-tag replacement.)
 
-`reportingGroup` is the user's own top-level mental model, distinct from the technical `group` field: **Barkonten** = real, freely/easily movable-to-cash accounts, including the investment-cash settlement accounts; **Sparkonten** = the two Livrets; **Geldanlage** = the four investment-tracking accounts only (Aktien, Crypto, Edelmetalle, ESOP) — not their settlement accounts; **Außenstände** = the `receivable` accounts — Außenstände itself (the shared Amazon/loan account, see below), CPAM, and Reisekosten Airbus (the five Amazon/loan placeholder accounts it replaced, Sept 2026, are fully retired now that the historical migration is done).
+`reportingGroup` is the user's own top-level mental model, distinct from the technical `group` field: **Barkonten** = real bank/brokerage-settlement accounts freely/easily movable to cash, including the investment-cash settlement accounts; **Bargeld** = physical cash and voucher balances (added Sept 2026, split out of Barkonten below); **Sparkonten** = the two Livrets; **Geldanlage** = the four investment-tracking accounts only (Aktien, Crypto, Edelmetalle, ESOP) — not their settlement accounts; **Außenstände** = the `receivable` accounts — Außenstände itself (the shared Amazon/loan account, see below), CPAM, and Reisekosten Airbus (the five Amazon/loan placeholder accounts it replaced, Sept 2026, are fully retired now that the historical migration is done).
 
 **Revised Sept 2026 — receivables get their own reportingGroup, not folded into Barkonten:** the original reasoning ("money not yet arrived is still cash, liquidity-wise") was sound as a *liquidity* argument, but Markus's actual pinned-panel mental model treats open claims/loans as a genuinely different kind of thing from a real bank/cash balance — they're not "real accounts" the same way BNP or Bar Markus are. Nothing about the `receivable` `group` or the accounts themselves changes, only which reportingGroup block they show up under. (This also now matches the Gsheet's own header, which already shows "Barkonten" and "Verliehen" as separate figures — see the flag on §3c's Jahresanfang/Budget formula below, since that formula's already-checked worked numbers were never re-verified against this narrower definition.)
+
+**Revised again Sept 2026 — physical cash gets its own "Bargeld" reportingGroup, split out of Barkonten:** the five `physical-cash`-group accounts (Bar Markus/Julia/Haus, CheqVac, eCESU — already sharing that one technical `group` value, a pre-existing signal they were already conceptually distinct) move into their own pinned-panel block, between Barkonten and Sparkonten, purely a display reorganization — nothing about what these accounts *are* changes, same as the receivables split above. **Flagged, not yet resolved (non-blocking — nothing built yet depends on the answer):** §2.8's own Barkonten check and §3d's Jahresanfang/Budget formula both currently read "Barkonten" as a single reportingGroup value; whether they should now mean "Barkonten + Bargeld combined" or genuinely exclude physical cash needs a decision before Dashboard/Prognose get built, not before this split itself.
 
 **Populated accounts:**
 
@@ -178,11 +180,11 @@ tracked: boolean         // false = account exists conceptually but isn't active
 | Consors | investment-cash | Barkonten | – | freely movable to/from BNP/DKB |
 | Smartbroker | investment-cash | Barkonten | – | freely movable to/from BNP/DKB |
 | Coinbase | investment-cash | Barkonten | – | freely movable to/from BNP/DKB |
-| Bar Markus | physical-cash | Barkonten | – | |
-| Bar Julia | physical-cash | Barkonten | – | |
-| Bar Haus | physical-cash | Barkonten | – | |
-| CheqVac (chèques vacances) | physical-cash | Barkonten | – | voucher balance |
-| eCESU | physical-cash | Barkonten | – | voucher balance |
+| Bar Markus | physical-cash | Bargeld | – | |
+| Bar Julia | physical-cash | Bargeld | – | |
+| Bar Haus | physical-cash | Bargeld | – | |
+| CheqVac (chèques vacances) | physical-cash | Bargeld | – | voucher balance |
+| eCESU | physical-cash | Bargeld | – | voucher balance |
 | Aktien | investment-tracking | Geldanlage | – | isVirtual: true; cost basis only, no market value tracking; combined pool subdivided by allocation tags Anlage Familie/Sophia |
 | Crypto | investment-tracking | Geldanlage | – | isVirtual: true; part of the same Anlage Familie/Sophia pool |
 | Edelmetalle | investment-tracking | Geldanlage | – | isVirtual: true; part of the same Anlage Familie/Sophia pool |

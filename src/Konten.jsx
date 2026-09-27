@@ -218,12 +218,15 @@ function removeLine(tx, lineIndex) {
   persistTx(next)
 }
 
-// Barkonten/Sparkonten/Geldanlage/Außenstände — Markus's own top-level
-// mental model (spec.md §2.2's reportingGroup), not the technical account
-// `group`. Außenstände (the seven receivable accounts) got its own block
-// Sept 2026 — they're open claims/loans, not "real accounts" the same way
-// a bank or cash balance is (spec.md §2.2's revision note).
-const REPORTING_GROUPS = ['Barkonten', 'Sparkonten', 'Geldanlage', 'Außenstände']
+// Barkonten/Bargeld/Sparkonten/Geldanlage/Außenstände — Markus's own
+// top-level mental model (spec.md §2.2's reportingGroup), not the
+// technical account `group`. Außenstände (the seven receivable accounts)
+// got its own block Sept 2026 — they're open claims/loans, not "real
+// accounts" the same way a bank or cash balance is (spec.md §2.2's
+// revision note). Bargeld (physical cash + vouchers — Bar Markus/Julia/
+// Haus, CheqVac, eCESU) split out of Barkonten the same way, same round —
+// purely a display reorganization, nothing about the accounts changes.
+const REPORTING_GROUPS = ['Barkonten', 'Bargeld', 'Sparkonten', 'Geldanlage', 'Außenstände']
 
 // Amazon Julia (DE)/(FR), Amazon Markus (DE)/(FR), and Geld verliehen/
 // geliehen collapsed into this one shared receivable account (Markus's
@@ -2307,7 +2310,7 @@ export default function Konten({ year, onYearChange, onYearsChange }) {
           Phase 1a: every figure here should match the real Gsheet closing
           balance for that account/year. Each account is also a shortcut
           into the account filter above. */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {panel.map(({ group, items, total, tagItems }) => (
           <div key={group} data-group={group} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
             <div className="mb-1 flex items-baseline justify-between">
@@ -2347,8 +2350,8 @@ export default function Konten({ year, onYearChange, onYearsChange }) {
                     // you move* — Markus: arrow keys should act like the
                     // dropdown's, not just move a focus rectangle. Left/
                     // Right: jump to the first account of the adjacent
-                    // reportingGroup box (Barkonten/Sparkonten/Geldanlage/
-                    // Außenstände, in that fixed order) via the panel's own
+                    // reportingGroup box (Barkonten/Bargeld/Sparkonten/
+                    // Geldanlage/Außenstände, in that fixed order) via the panel's own
                     // data-group wrapper and DOM sibling order. Escape:
                     // back to "Alle Konten", then to the grid. Enter: keep
                     // whatever's currently highlighted as the filter, then

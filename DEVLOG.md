@@ -1203,3 +1203,19 @@ Real-usage feedback on the breakdown-lines feature from the previous round, plus
 `npm run build`, `npm test` (still 48 — this round was display/interaction only, no new pure-function surface), `npm run lint` all clean before pushing.
 
 **Next session:** the rollup-sum-in-closed-months report needs more detail from Markus (a screenshot of what's actually showing, or confirmation of how the real Fehmarn/Rostock transactions are tagged/categorized) before another round can meaningfully attempt a fix — noted here rather than guessed at blind. Otherwise unchanged: Planung and Verlauf's phone layout are the two remaining Phase 2 pieces; the "account totals" section ambiguity, Ctrl+H device confirmation, and the Außenstände migration/panel check are still open.
+
+## Session 36, continued a twenty-fifth time — 2026-09-26 — New Bargeld pinned panel, split out of Barkonten
+
+Markus: add a fifth pinned panel between Barkonten and Sparkonten for physical cash, moving Bar Haus/Bar Julia/Bar Markus/CheqVac/eCESU there.
+
+**Built:** a new `reportingGroup` value, `"Bargeld"` (spec.md §2.2), inserted between Barkonten and Sparkonten in `Konten.jsx`'s own `REPORTING_GROUPS` fixed order — the panel grid, the account-filter dropdown's `<optgroup>`s, and the roving keyboard navigation (Ctrl+K, arrow keys) all pick it up automatically since they already derive from that one list. Panel grid widened `lg:grid-cols-4` → `lg:grid-cols-5` so all five fit in one row. The five moved accounts already shared one technical `group: "physical-cash"` value — a pre-existing signal they were already conceptually distinct, not a coincidence.
+
+**A real constraint worth being explicit about: this session has no live Firestore access, and the five already-imported account documents' `reportingGroup` field lives only in Firestore, not in this repo.** `migration/seed/accounts.json` (the committed, non-personal source file) is updated correctly, but editing it alone doesn't touch what's already imported — per the file's own standing rule, that requires Markus re-running Import/Export → Datenimport with the updated file. Sent him the updated `accounts.json` directly; re-importing it is safe (upsert-by-id, only touches these 5 accounts' own `reportingGroup` field, doesn't affect their balances/history or anything else).
+
+**Flagged in spec.md itself, not yet resolved (non-blocking — nothing built today depends on the answer):** §2.8's Barkonten check and §3d's Jahresanfang/Budget formula both currently read "Barkonten" as a single reportingGroup value. Whether they should now mean "Barkonten + Bargeld combined" (same real liquid cash, just split for pinned-panel display) or genuinely treat physical cash as excluded needs a decision before Dashboard/Prognose get built — not urgent today, since neither exists yet.
+
+**Verified via a disposable Playwright harness**, seeded from the actual updated `migration/seed/accounts.json` (not synthetic data): the five accounts show under Bargeld in the right position, Barkonten no longer lists them, and all five panels lay out cleanly in one row at desktop width — confirmed with a screenshot.
+
+`npm run build`, `npm test` (still 48 — no pure-function surface touched, this was a pure data/display reorganization), `npm run lint` all clean before pushing.
+
+**Next session:** the Barkonten-vs-Bargeld question for the future Barkonten check needs Markus's answer before Dashboard/Prognose get built, not before. Otherwise unchanged: the Verlauf rollup-sum report still needs more detail to chase further; Planung and Verlauf's phone layout are the two remaining Phase 2 pieces; the Verlauf internal-gridline bug (deferred), the "account totals" section ambiguity, Ctrl+H device confirmation, and the Außenstände migration/panel check are all still open.
