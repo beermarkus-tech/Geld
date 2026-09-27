@@ -139,6 +139,17 @@ body {
   --ag-row-border-color: transparent;
 }
 
+/* A stronger cursor/focus rectangle (Markus, Sept 2026: "can you make the
+   cursor a bit more visible") — AG Grid's own default is a plain 1px
+   border in --ag-range-selection-border-color (confirmed in its bundled
+   CSS, .ag-cell-focus:not(.ag-cell-range-selected)), easy to lose against
+   this screen's own tinted backgrounds. Scoped to Verlauf only — Konten's
+   own cursor wasn't reported as hard to see. */
+.verlauf-grid .ag-cell-focus:not(.ag-cell-range-selected) {
+  border-width: 2px !important;
+  border-color: var(--color-computed) !important;
+}
+
 .tabular-figure {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-variant-numeric: tabular-nums;

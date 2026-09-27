@@ -2518,8 +2518,25 @@ export default function Konten({ year, onYearChange, onYearsChange }) {
           // arming row deletion underneath it.
           onCellKeyDown={(p) => {
             const key = p.event?.key
-            if (key !== 'Delete' || p.api.getEditingCells().length > 0) return
-            handleDeleteClick(p.data)
+            if (key === 'Delete') {
+              if (p.api.getEditingCells().length > 0) return
+              handleDeleteClick(p.data)
+              return
+            }
+            // Ctrl+Tab toggles the current transaction's own split-line
+            // rows visible/hidden (Markus, Sept 2026 — Verlauf's own
+            // breakdown blocks got this shortcut the same round; "do apply
+            // ctrl+tab to show/hide split transactions in konten, too").
+            // A no-op on a transaction that isn't actually split (≤1 line)
+            // — there's nothing to expand/collapse.
+            if (key === 'Tab' && (p.event.ctrlKey || p.event.metaKey)) {
+              const row = p.data
+              const tx = row.__isLine ? row.__parent : row
+              if ((tx.lines?.length ?? 0) > 1) {
+                p.event.preventDefault()
+                toggleExpanded(tx.id)
+              }
+            }
           }}
           // Datum sorted ascending on first load only (the underlying rows
           // are already date-sorted anyway — this is just the header

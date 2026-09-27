@@ -221,6 +221,146 @@ function budgetDoc(yearNum, targetKey, targetId, planVersion, month, breakdownTa
   }
 }
 
+// Replaces the old window.prompt()'s colon-syntax ("Schottland:Hotels")
+// with two real fields (Markus, Sept 2026): a parent-tag combobox —
+// existing parent/standalone tags already used somewhere in this same
+// category (e.g. "Schottland"/"Fehmarn"/"Rostock" for a travel
+// subcategory), pick one or type a new name to create it — and a plain
+// subtag text field, optional. Parent alone creates one standalone total
+// row under that name; parent + subtag creates a child row grouped under
+// that parent's own automatic rollup header (spec.md §2.7). A plain
+// `<input>` + filtered list rather than Konten's own TagEditor: that one's
+// built as an AG Grid cell editor (api.stopEditing() etc.) and multi-
+// select, neither of which applies here — this only ever resolves to at
+// most one parent and one child, and isn't editing a grid cell at all.
+function AddBreakdownModal({ parentOptions, tagExistsGloballyByName, onSubmit, onCancel }) {
+  const [parentText, setParentText] = useState('')
+  const [subtagText, setSubtagText] = useState('')
+  const [parentOpen, setParentOpen] = useState(false)
+  const parentInputRef = useRef(null)
+
+  useEffect(() => {
+    parentInputRef.current?.focus()
+  }, [])
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') onCancel()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onCancel])
+
+  const text = parentText.trim().toLowerCase()
+  // The suggestion *list* stays scoped to this one category/allocation tag
+  // (parentOptions, "available parent tags in that subcategory") — but
+  // whether typing an exact name will reuse an existing tag or create a
+  // brand new one checks *every* tag, not just this category's own
+  // (tagExistsGloballyByName) — otherwise typing a name already used as a
+  // breakdown parent for some *other* category (a real tag, just not one
+  // suggested here) would silently create a duplicate tag under a
+  // disambiguated id instead of reusing it, the same "reuse by exact name"
+  // rule Konten.jsx's own createTag() already applies globally.
+  const matches = parentOptions.filter((t) => text === '' || t.name.toLowerCase().includes(text))
+  const willReuse = text !== '' && tagExistsGloballyByName(text)
+
+  function pick(name) {
+    setParentText(name)
+    setParentOpen(false)
+  }
+
+  function submit() {
+    const trimmedParent = parentText.trim()
+    if (!trimmedParent) return
+    onSubmit({ parentName: trimmedParent, subtagName: subtagText.trim() })
+  }
+
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center" onClick={onCancel}>
+      <div className="absolute inset-0 bg-black/40" />
+      <div
+        className="relative flex w-full max-w-sm flex-col gap-3 rounded-lg bg-[var(--color-surface)] p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="text-sm font-medium">Neue Aufschlüsselungszeile</p>
+        <label className="flex flex-col gap-1 text-xs text-[var(--color-text-muted)]">
+          Übergruppe (z. B. „Schottland“) — bestehende wählen oder neuen Namen eingeben
+          <input
+            ref={parentInputRef}
+            type="text"
+            value={parentText}
+            onChange={(e) => {
+              setParentText(e.target.value)
+              setParentOpen(true)
+            }}
+            onFocus={() => setParentOpen(true)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                submit()
+              }
+            }}
+            className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-sm text-[var(--color-text)]"
+          />
+        </label>
+        {parentOpen && matches.length > 0 && (
+          <ul className="max-h-32 overflow-auto rounded border border-[var(--color-border)] text-sm">
+            {matches.map((t) => (
+              <li key={t.id}>
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    pick(t.name)
+                  }}
+                  className="flex w-full px-2 py-1 text-left hover:bg-[var(--color-bg)]"
+                >
+                  {t.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {parentText.trim() !== '' && !willReuse && (
+          <p className="text-xs italic text-[var(--color-text-muted)]">Neu „{parentText.trim()}“ wird angelegt</p>
+        )}
+        <label className="flex flex-col gap-1 text-xs text-[var(--color-text-muted)]">
+          Unterzeile (optional, z. B. „Hotels“) — leer lassen für eine reine Summenzeile
+          <input
+            type="text"
+            value={subtagText}
+            onChange={(e) => setSubtagText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                submit()
+              }
+            }}
+            className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-sm text-[var(--color-text)]"
+          />
+        </label>
+        <div className="mt-1 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]"
+          >
+            Abbrechen
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={!parentText.trim()}
+            className="rounded-md bg-[var(--color-computed)] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+          >
+            Hinzufügen
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Verlauf({ year }) {
   const [categories, setCategories] = useState([])
   const [tags, setTags] = useState([])
@@ -229,17 +369,43 @@ export default function Verlauf({ year }) {
   const [closedMonths, setClosedMonths] = useState([])
   // Global controls (spec.md §3b): Plan0's own show/hide, and (Sept 2026)
   // "Aufschlüsselung anzeigen/ausblenden" for every breakdown block at
-  // once. A block not individually touched defaults to expanded once
-  // breakdowns are shown at all (`collapsedBlocks` below) — nothing
-  // pre-populates that set, absence from it just means "expanded."
+  // once — corrected the same round (Markus: unchecking it should only
+  // *collapse* every block, not stop a block being shown at all, since he
+  // still needs to be able to expand one specific block back open even
+  // with the global checkbox off). So this is no longer a hard gate on
+  // whether breakdown rows exist at all — see planVersionRows() below —
+  // just the *default* a block falls back to until individually
+  // overridden. `blockOverrides` (a Map, not a Set) is exactly that
+  // per-block override: absent means "follow showBreakdowns," present
+  // means "this block was explicitly expanded/collapsed on its own and
+  // keeps that until touched again," regardless of what the global
+  // checkbox does afterward.
   const [showPlan0, setShowPlan0] = useState(() => readBoolSetting(SHOW_PLAN0_KEY))
   const [showBreakdowns, setShowBreakdowns] = useState(() => readBoolSetting(SHOW_BREAKDOWNS_KEY))
-  const [collapsedBlocks, setCollapsedBlocks] = useState(() => new Set())
-  // Two-click arm/confirm for removing a breakdown line (Sept 2026,
-  // Markus's own established convention elsewhere — Konten's delete
-  // column) — a real, permanent loss of that line's planned figures, so
-  // one click alone shouldn't be enough.
-  const [confirmRemoveRowId, setConfirmRemoveRowId] = useState(null)
+  const [blockOverrides, setBlockOverrides] = useState(() => new Map())
+  function isBlockExpanded(blockKey) {
+    return blockOverrides.has(blockKey) ? blockOverrides.get(blockKey) : showBreakdowns
+  }
+  function setBlockExpanded(blockKey, expanded) {
+    setBlockOverrides((prev) => {
+      const next = new Map(prev)
+      next.set(blockKey, expanded)
+      return next
+    })
+  }
+  // A real confirmation modal for removing a breakdown line (Sept 2026,
+  // Markus: reuse the Abmelden modal's design, not the icon's own two-
+  // click arm/confirm — there's no undo, so a stray second click
+  // shouldn't be enough on its own either) — holds the row itself (or
+  // null when closed), not just its id, since the modal's own text needs
+  // the row's label.
+  const [confirmRemoveRow, setConfirmRemoveRow] = useState(null)
+  // The (targetKey, targetId, planVersion) a "neue Aufschlüsselungszeile"
+  // modal is currently open for — null when closed. Always exactly one
+  // plan version (Sept 2026: Plan1/Plan0 breakdown lines are now
+  // independent, each with its own add affordance, rather than always
+  // created symmetrically in both at once).
+  const [addModalTarget, setAddModalTarget] = useState(null)
   const gridApiRef = useRef(null)
 
   useEffect(() => {
@@ -259,13 +425,13 @@ export default function Verlauf({ year }) {
   }, [showBreakdowns])
 
   useEffect(() => {
-    if (!confirmRemoveRowId) return
+    if (!confirmRemoveRow) return
     const onKeyDown = (e) => {
-      if (e.key === 'Escape') setConfirmRemoveRowId(null)
+      if (e.key === 'Escape') setConfirmRemoveRow(null)
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [confirmRemoveRowId])
+  }, [confirmRemoveRow])
 
   useEffect(() => {
     const unsubs = [
@@ -356,10 +522,14 @@ export default function Verlauf({ year }) {
       isPlan0,
       rowHasBreakdown,
       blockKey,
-      blockExpanded: !collapsedBlocks.has(blockKey),
+      blockExpanded: isBlockExpanded(blockKey),
     }
     const out = [topRow]
-    if (!rowHasBreakdown || !showBreakdowns || !topRow.blockExpanded) return out
+    // Breakdown rows exist independent of the global "Aufschlüsselung
+    // anzeigen" checkbox now (Sept 2026 — see blockOverrides' own comment
+    // above) — only rowHasBreakdown and this one block's own expanded
+    // state gate them, never showBreakdowns directly.
+    if (!rowHasBreakdown || !topRow.blockExpanded) return out
 
     const breakdownTagIds = breakdownTagIdsFor(common.targetKey, common.targetId, planVersion)
     const byParent = new Map()
@@ -384,17 +554,21 @@ export default function Verlauf({ year }) {
         rowLabel: isPlan0 ? 'Plan0-breakdown' : 'Plan1-breakdown',
         planVersion,
         isPlan0,
+        blockKey,
         breakdownTagId: tagId,
         breakdownLabel: tagName(tagId),
         months: line.months,
         yearTotal: line.yearTotal,
-        // Plan1's own last line also gets the "add another line" action
-        // (Konten's own split-column convention: the last line is always
-        // where the next one gets added) — never Plan0's, since a
-        // breakdown line is only ever created via Plan1 (spec.md §2.7:
-        // "always both, in parallel" — the app keeps that symmetric on its
-        // own, not by offering two independent creation points).
-        canAddAfter: !isPlan0 && isLastInBlock,
+        // The last line of *either* plan version's own block gets the
+        // "add another line" action (Konten's own split-column convention
+        // — the last line is always where the next one gets added). Both
+        // plan versions get their own independent add affordance now
+        // (Sept 2026, Markus: "both plan1 and plan0 need their own add
+        // buttons... adding a breakdown row in plan1 [used to create] the
+        // same breakdown row in plan0" — that forced symmetry was the bug,
+        // corrected the same round in addBreakdownLine/removeBreakdownLine
+        // below).
+        canAddAfter: isLastInBlock,
       }
     }
 
@@ -416,6 +590,7 @@ export default function Verlauf({ year }) {
           ...common,
           rowId: `${rowIdBase}:${planVersion}:rollup:${parentId}`,
           rowLabel: 'Rollup',
+          blockKey,
           breakdownLabel: `${tagName(parentId)} (automatisch)`,
           months: rollupMonths,
           yearTotal: rollupMonths.reduce((a, b) => a + b, 0),
@@ -477,11 +652,7 @@ export default function Verlauf({ year }) {
   // grouping tag), and the whole function is short enough that forcing a
   // shared abstraction across two screens isn't worth the indirection —
   // flagged in CODEMAP.md as accepted, deliberate duplication to watch,
-  // same discipline already applied elsewhere in this codebase. "Schottland:
-  // Hotels" reuses an existing top-level "Schottland" tag by name
-  // (case-insensitive) or creates one, then creates a real child under it
-  // (spec.md §2.5's hierarchy) — the id actually used as breakdownTagId is
-  // always the child's.
+  // same discipline already applied elsewhere in this codebase.
   function createPlainGroupingTag(name, parentTag) {
     let id = slugify(name)
     if (tags.some((t) => t.id === id)) id = `${id}-${Math.random().toString(36).slice(2, 6)}`
@@ -496,79 +667,121 @@ export default function Verlauf({ year }) {
     })
     return id
   }
-  function createBreakdownTag(name) {
-    const colon = name.indexOf(':')
-    if (colon === -1) return createPlainGroupingTag(name, null)
-    const parentName = name.slice(0, colon).trim()
-    const childName = name.slice(colon + 1).trim()
-    if (!parentName || !childName) return createPlainGroupingTag(name, null)
-    const existingParent = tags.find(
-      (t) => t.class === 'grouping' && !t.parentTag && t.name.toLowerCase() === parentName.toLowerCase(),
-    )
-    const parentId = existingParent ? existingParent.id : createPlainGroupingTag(parentName, null)
-    return createPlainGroupingTag(childName, parentId)
+
+  // Every top-level tag already used as a breakdown line (standalone) or
+  // as some breakdown line's own parent, anywhere for this one category/
+  // allocation tag (any plan version, any year already loaded) — the
+  // "Übergruppe" combobox's own option list in AddBreakdownModal (Sept
+  // 2026, Markus: "parent tag is a dropdown field with available parent
+  // tags **in that subcategory**... that have been created earlier").
+  function parentTagOptionsFor(targetKey, targetId) {
+    const usedTagIds = new Set(budgets.filter((b) => b[targetKey] === targetId && b.breakdownTagId != null).map((b) => b.breakdownTagId))
+    const parentIds = new Set()
+    for (const tagId of usedTagIds) {
+      const t = tagById.get(tagId)
+      parentIds.add(t?.parentTag ?? tagId)
+    }
+    return [...parentIds]
+      .map((id) => tagById.get(id))
+      .filter(Boolean)
+      .sort((a, b) => a.name.localeCompare(b.name))
   }
 
-  // Adding a breakdown line (Sept 2026, Markus) — always writes all 12
-  // months for both plan versions right away, even where the value is 0,
-  // rather than migration's own "skip a zero month" convention: a brand
-  // new line otherwise has *no* budget document anywhere yet, and nothing
-  // in the schema records "this breakdown tag exists for this category"
-  // independent of having at least one real document — an all-zero line
-  // would be undiscoverable (breakdownTagIdsFor() reads it straight off
-  // budgets, there's no separate registry).
-  async function addBreakdownLine(row) {
-    const name = window.prompt('Neue Aufschlüsselungszeile — Name (z. B. "Hotels" oder "Schottland:Hotels" für eine Gruppe):')
-    if (!name || !name.trim()) return
-    const tagId = createBreakdownTag(name.trim())
-    const isFirstLine = !row.rowHasBreakdown
+  // Adding a breakdown line (Sept 2026, Markus, reworked the same round —
+  // see AddBreakdownModal below for the actual parent/subtag UI this
+  // feeds). Always writes all 12 months right away, even where the value
+  // is 0, rather than migration's own "skip a zero month" convention: a
+  // brand new line otherwise has *no* budget document anywhere yet, and
+  // nothing in the schema records "this breakdown tag exists for this
+  // category" independent of having at least one real document
+  // (breakdownTagIdsFor() reads it straight off budgets, there's no
+  // separate registry).
+  //
+  // Scoped to exactly *one* plan version now, never both together — the
+  // forced Plan1→Plan0 symmetry this used to have was a real bug (Markus:
+  // adding a second breakdown line duplicated the first line's already-
+  // carried-over total into the new line too, "each breakdown row added
+  // to that block gets the same numbers duplicated again"). Root cause:
+  // "is this the first line?" used to read a flag only ever set on the
+  // *top-line* row object, so clicking "add another" from an existing
+  // breakdown row's own ✚ (which isn't the top-line row) always saw that
+  // flag as absent/falsy → wrongly treated every line as the first one →
+  // re-carried-over the *already-summed* top-line total each time. Fixed
+  // by asking breakdownTagIdsFor() fresh, right here, instead of trusting
+  // a caller-supplied flag — and, since that's now checked per plan
+  // version anyway, Plan1 and Plan0 fall out independent for free (each
+  // plan version gets its own carry-over exactly once, the first time
+  // *that version* gains a line, never touching the other).
+  async function commitAddBreakdownLine(targetKey, targetId, planVersion, tagId) {
+    const existing = breakdownTagIdsFor(targetKey, targetId, planVersion)
+    const isFirstLine = existing.length === 0
+    const carryOver = isFirstLine ? budgetTopLineMonths(targetKey, targetId, planVersion, yearNum, budgets) : null
     const batch = writeBatch(db)
-    for (const planVersion of ['plan1', 'plan0']) {
-      // Converting a previously-flat category: whatever was already
-      // planned on the top line must survive into this new first line,
-      // for both plan versions symmetrically (spec.md §2.7) — never
-      // discarded just because the line didn't exist an instant earlier.
-      const carryOver = isFirstLine ? budgetTopLineMonths(row.targetKey, row.targetId, planVersion, yearNum, budgets) : null
-      for (let month = 1; month <= 12; month++) {
-        const cents = carryOver ? carryOver.months[month - 1] : 0
-        const id = budgetDocId(yearNum, planVersion, row.targetId, month, tagId)
-        batch.set(doc(db, 'budgets', id), budgetDoc(yearNum, row.targetKey, row.targetId, planVersion, month, tagId, cents, ''))
-        if (isFirstLine) {
-          const flatId = budgetDocId(yearNum, planVersion, row.targetId, month, null)
-          if (budgets.some((b) => b.id === flatId)) batch.delete(doc(db, 'budgets', flatId))
-        }
+    for (let month = 1; month <= 12; month++) {
+      const cents = carryOver ? carryOver.months[month - 1] : 0
+      const id = budgetDocId(yearNum, planVersion, targetId, month, tagId)
+      batch.set(doc(db, 'budgets', id), budgetDoc(yearNum, targetKey, targetId, planVersion, month, tagId, cents, ''))
+      if (isFirstLine) {
+        const flatId = budgetDocId(yearNum, planVersion, targetId, month, null)
+        if (budgets.some((b) => b.id === flatId)) batch.delete(doc(db, 'budgets', flatId))
       }
     }
     await batch.commit()
-    setCollapsedBlocks((prev) => {
-      const next = new Set(prev)
-      next.delete(`${row.targetKey}:${row.targetId}:plan1`)
-      next.delete(`${row.targetKey}:${row.targetId}:plan0`)
-      return next
-    })
+    setBlockExpanded(`${targetKey}:${targetId}:${planVersion}`, true)
   }
 
-  // Removing a breakdown line always deletes both its plan1 and plan0
-  // documents together (spec.md §2.7: the two plan versions stay
-  // symmetric, so a line can't exist for one but not the other). If it was
-  // the *last* remaining line, its own final values fold back up into a
-  // real flat top-line row instead of just vanishing — mirroring
-  // addBreakdownLine()'s own value-preserving carry-over, in reverse.
+  // AddBreakdownModal's own onSubmit — resolves the chosen/typed parent by
+  // exact name match against *every* tag (same global "reuse by exact
+  // name" rule Konten's own createTag() applies, not just this category's
+  // own parentOptions suggestions — see AddBreakdownModal's own comment on
+  // willReuse for why that distinction matters), creating a fresh one only
+  // if truly nothing matches. Only if a subtag was typed does a child tag
+  // get created under it; a bare parent with no subtag uses the parent
+  // tag's own id directly as the breakdownTagId (Markus: "when i select or
+  // type only a parent tag, a totals row is created").
+  async function handleAddBreakdownSubmit({ parentName, subtagName }) {
+    const target = addModalTarget
+    setAddModalTarget(null)
+    if (!target) return
+    const existingParent = tags.find((t) => t.class === 'grouping' && !t.parentTag && t.name.toLowerCase() === parentName.toLowerCase())
+    const resolvedParentId = existingParent ? existingParent.id : createPlainGroupingTag(parentName, null)
+    const tagId = subtagName ? createPlainGroupingTag(subtagName, resolvedParentId) : resolvedParentId
+    await commitAddBreakdownLine(target.targetKey, target.targetId, target.planVersion, tagId)
+  }
+
+  // Removing a breakdown line — scoped to that one line's own plan
+  // version only now, same independence fix as commitAddBreakdownLine()
+  // above (Markus: "in the end only totals matter for the underlying
+  // math," so there's no longer any reason to force Plan0 to lose a line
+  // just because Plan1 did). If it was the *last* remaining line in that
+  // plan version, its own final values fold back up into a real flat
+  // top-line row instead of just vanishing — mirroring
+  // commitAddBreakdownLine()'s own value-preserving carry-over, in
+  // reverse.
   async function removeBreakdownLine(row) {
-    const remaining = breakdownTagIdsFor(row.targetKey, row.targetId, 'plan1')
+    const remaining = breakdownTagIdsFor(row.targetKey, row.targetId, row.planVersion)
     const isLastLine = remaining.length <= 1
+    const own = isLastLine
+      ? budgetBreakdownLineMonths(row.targetKey, row.targetId, row.breakdownTagId, row.planVersion, yearNum, budgets)
+      : null
     const batch = writeBatch(db)
-    for (const planVersion of ['plan1', 'plan0']) {
-      const own = isLastLine ? budgetBreakdownLineMonths(row.targetKey, row.targetId, row.breakdownTagId, planVersion, yearNum, budgets) : null
-      for (let month = 1; month <= 12; month++) {
-        batch.delete(doc(db, 'budgets', budgetDocId(yearNum, planVersion, row.targetId, month, row.breakdownTagId)))
-        if (isLastLine) {
-          const id = budgetDocId(yearNum, planVersion, row.targetId, month, null)
-          batch.set(doc(db, 'budgets', id), budgetDoc(yearNum, row.targetKey, row.targetId, planVersion, month, null, own.months[month - 1], ''))
-        }
+    for (let month = 1; month <= 12; month++) {
+      batch.delete(doc(db, 'budgets', budgetDocId(yearNum, row.planVersion, row.targetId, month, row.breakdownTagId)))
+      if (isLastLine) {
+        const id = budgetDocId(yearNum, row.planVersion, row.targetId, month, null)
+        batch.set(doc(db, 'budgets', id), budgetDoc(yearNum, row.targetKey, row.targetId, row.planVersion, month, null, own.months[month - 1], ''))
       }
     }
     await batch.commit()
+  }
+
+  // Opens the "neue Aufschlüsselungszeile" modal for whichever block a ✚
+  // click (or the Ctrl++ shortcut, below) came from — a plain top-line row
+  // already carries its own planVersion; Prog doesn't (it has no plan
+  // version of its own), so Ctrl++ pressed there defaults to Plan1, the
+  // more common case.
+  function openAddModalFor(row) {
+    setAddModalTarget({ targetKey: row.targetKey, targetId: row.targetId, planVersion: row.planVersion ?? 'plan1' })
   }
 
   const rowData = useMemo(() => {
@@ -592,8 +805,8 @@ export default function Verlauf({ year }) {
       out.push(...planLineRows('Rücklagen', 'ruecklagen', tag.name, 'allocationTagId', tag.id, true))
     }
     return out
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- planLineRows and everything it calls close over categories/tags/transactions/budgets/closedMonths/showPlan0/showBreakdowns/collapsedBlocks/yearNum, all already current each render
-  }, [categories, tags, transactions, budgets, closedMonths, showPlan0, showBreakdowns, collapsedBlocks, yearNum])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- planLineRows and everything it calls close over categories/tags/transactions/budgets/closedMonths/showPlan0/showBreakdowns/blockOverrides/yearNum, all already current each render
+  }, [categories, tags, transactions, budgets, closedMonths, showPlan0, showBreakdowns, blockOverrides, yearNum])
 
   const columnDefs = useMemo(() => {
     const monthCols = MONTH_LABELS.map((label, i) => ({
@@ -629,10 +842,19 @@ export default function Verlauf({ year }) {
         }
         return style
       },
-      // Narrowed slightly (Markus, Sept 2026) to make room for the
-      // reintroduced row-title column (below) without widening the grid
-      // overall — 12 months × 8px freed matches that column's own width.
-      width: 102,
+      // Flexed rather than a fixed width (Markus, Sept 2026: "configure the
+      // months columns such that they fit the available screen size... i
+      // dont want to have a horizontal scrollbar") — the 12 month columns
+      // now always share out whatever width is left after the pinned
+      // columns' own fixed widths, instead of a fixed 102px each that only
+      // happened to fit some screens and forced a horizontal scrollbar on
+      // narrower ones. minWidth keeps a month column from being squeezed
+      // down to unreadable on a genuinely narrow viewport (a horizontal
+      // scrollbar can still appear there — unavoidable short of the
+      // phone/one-month-card layout PLAN.md still has as a separate,
+      // unbuilt Phase 2 piece).
+      flex: 1,
+      minWidth: 64,
       // The cursor/focus rectangle should only ever land in a month column
       // (Markus) — every other column is suppressNavigable (below).
       // Editable: Plan1/Plan0 top-line rows once they're *not* in
@@ -678,7 +900,20 @@ export default function Verlauf({ year }) {
         // check at all) — the grid's own onCellFocused handler below
         // redirects a click here back to that row's first month cell.
         suppressNavigable: true,
-        cellStyle: (p) => ({ backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})` }),
+        // The block-boundary border now continues into these two spanned
+        // columns too (Markus, Sept 2026: "make sure the black separation
+        // grid lines between categorys and subcategories continue into
+        // the first two columns") — only the top edge, since a spanned
+        // cell's own cellStyle only ever sees the *first* row's data
+        // object of the whole span (there's no separate call per
+        // constituent row the way an ordinary column gets), so
+        // isLastOfBlock here would always read as that first row's own
+        // (almost always false). Every internal boundary still draws
+        // correctly regardless — it's the very next block's own top edge
+        // that draws the shared seam — only the very last block's own
+        // outer bottom edge can't be reached this way; a cosmetic gap the
+        // other columns' own per-row borders don't have.
+        cellStyle: (p) => ({ backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})`, borderTop: blockBorderStyle(p.data).borderTop }),
         // Rotated 90° counterclockwise, vertically centered, bold (Markus)
         // — the column can stay narrow now that the text runs vertically,
         // freeing width for Unterkategorie and the row-total column below.
@@ -698,7 +933,7 @@ export default function Verlauf({ year }) {
         pinned: 'left',
         width: 170,
         suppressNavigable: true,
-        cellStyle: (p) => ({ backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})` }),
+        cellStyle: (p) => ({ backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})`, borderTop: blockBorderStyle(p.data).borderTop }),
         // Vertically centered within its own spanned (merged) cell (Markus)
         // — AG Grid's default cell rendering doesn't center content inside
         // a tall spanned cell on its own.
@@ -711,73 +946,51 @@ export default function Verlauf({ year }) {
         width: 26,
         suppressNavigable: true,
         cellStyle: (p) => ({ backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})`, ...blockBorderStyle(p.data) }),
-        // One narrow action column covering every breakdown-line
-        // interaction (Sept 2026, Markus) — mirrors Konten.jsx's own
-        // pinned "split" column conventions closely on purpose (✚ to
-        // add/split further, a chevron to expand/collapse, 🗑 per line):
-        // ▸/▾ toggles a Plan1/Plan0 block that already has breakdown lines
-        // (independent per plan version, spec.md §2.7); a bare ✚ on the
-        // top-line row itself starts the *first* breakdown line; once a
-        // block is showing, ✚ moves to Plan1's own last line (only Plan1
-        // — a line is always created symmetrically for both plan versions
-        // together, never independently on Plan0); every breakdown row
-        // gets 🗑, arm-then-confirm exactly like Konten's own delete.
+        // The add/expand affordances only now — the trashcan moved to its
+        // own pinned-*right* column below (Markus, Sept 2026: "place the
+        // trashcan icons to the right of the months columns like in
+        // konten," which keeps its own delete column separate from the
+        // split/expand column the same way). Mirrors Konten.jsx's own
+        // pinned "split" column conventions on purpose (✚ to add/split
+        // further, a chevron to expand/collapse): ▸/▾ toggles a Plan1/
+        // Plan0 block that already has breakdown lines; a bare ✚ on
+        // either plan version's own top-line row starts *that version's*
+        // first breakdown line — Plan1 and Plan0 each get their own now
+        // (Markus: "both plan1 and plan0 need their own add buttons"),
+        // no longer forced to stay symmetric.
         cellRenderer: (p) => {
           const row = p.data
           if (row.rowLabel === 'Plan1-breakdown' || row.rowLabel === 'Plan0-breakdown') {
-            const armed = confirmRemoveRowId === row.rowId
-            return (
-              <div className="flex h-full w-full items-center justify-center gap-0.5">
-                <button
-                  type="button"
-                  title={armed ? 'Nochmal klicken zum Entfernen' : 'Aufschlüsselungszeile entfernen'}
-                  className="text-xs leading-none"
-                  style={armed ? { color: 'var(--color-alert)' } : undefined}
-                  onClick={() => {
-                    if (armed) {
-                      setConfirmRemoveRowId(null)
-                      removeBreakdownLine(row)
-                    } else {
-                      setConfirmRemoveRowId(row.rowId)
-                    }
-                  }}
-                >
-                  {armed ? '⚠︎' : '🗑'}
-                </button>
-                {row.canAddAfter && (
-                  <button type="button" title="Weitere Aufschlüsselungszeile hinzufügen" className="text-xs leading-none" onClick={() => addBreakdownLine(row)}>
-                    ✚
-                  </button>
-                )}
-              </div>
-            )
+            return row.canAddAfter ? (
+              <button
+                type="button"
+                title="Weitere Aufschlüsselungszeile hinzufügen"
+                className="flex h-full w-full items-center justify-center text-xs leading-none"
+                onClick={() => openAddModalFor(row)}
+              >
+                ✚
+              </button>
+            ) : null
           }
           if ((row.rowLabel === 'Plan1' || row.rowLabel === 'Plan0') && row.rowHasBreakdown) {
             return (
               <button
                 type="button"
-                title={row.blockExpanded ? 'Aufschlüsselung einklappen' : 'Aufschlüsselung ausklappen'}
+                title={row.blockExpanded ? 'Aufschlüsselung einklappen (Strg+Tab)' : 'Aufschlüsselung ausklappen (Strg+Tab)'}
                 className="flex h-full w-full items-center justify-center text-xs leading-none"
-                onClick={() =>
-                  setCollapsedBlocks((prev) => {
-                    const next = new Set(prev)
-                    if (next.has(row.blockKey)) next.delete(row.blockKey)
-                    else next.add(row.blockKey)
-                    return next
-                  })
-                }
+                onClick={() => setBlockExpanded(row.blockKey, !row.blockExpanded)}
               >
                 {row.blockExpanded ? '▾' : '▸'}
               </button>
             )
           }
-          if (row.rowLabel === 'Plan1') {
+          if (row.rowLabel === 'Plan1' || row.rowLabel === 'Plan0') {
             return (
               <button
                 type="button"
-                title="Aufschlüsselungszeile hinzufügen"
+                title="Aufschlüsselungszeile hinzufügen (Strg++)"
                 className="flex h-full w-full items-center justify-center text-xs leading-none"
-                onClick={() => addBreakdownLine(row)}
+                onClick={() => openAddModalFor(row)}
               >
                 ✚
               </button>
@@ -848,9 +1061,38 @@ export default function Verlauf({ year }) {
         valueGetter: (p) => (p.data.yearTotal === 0 ? '' : `${centsToWholeEuro(p.data.yearTotal)} €`),
       },
       ...monthCols,
+      {
+        headerName: '',
+        colId: 'breakdownDelete',
+        pinned: 'right',
+        width: 30,
+        resizable: false,
+        suppressNavigable: true,
+        // The trashcan itself, moved out to its own pinned-right column
+        // (Markus, Sept 2026 — see breakdownActions' own comment above).
+        // A plain click opens the real confirmation modal now (below,
+        // "Aufschlüsselungszeile wirklich entfernen?") instead of arming a
+        // second click on the icon itself — there's no undo, same
+        // reasoning Markus already applied to Abmelden.
+        cellStyle: (p) => ({ backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})` }),
+        cellRenderer: (p) => {
+          const row = p.data
+          if (row.rowLabel !== 'Plan1-breakdown' && row.rowLabel !== 'Plan0-breakdown') return null
+          return (
+            <button
+              type="button"
+              title="Aufschlüsselungszeile entfernen (Entf)"
+              className="flex h-full w-full items-center justify-center text-xs text-[var(--color-text-muted)] hover:text-[var(--color-alert)]"
+              onClick={() => setConfirmRemoveRow(row)}
+            >
+              🗑
+            </button>
+          )
+        },
+      },
     ]
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- cellStyle/cellRenderer callbacks close over closedMonths/confirmRemoveRowId; valueSetter's persistBudgetMonth and the add/remove handlers' createBreakdownTag close over budgets/tags/yearNum — all already current each render
-  }, [closedMonths, budgets, tags, yearNum, confirmRemoveRowId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cellStyle/cellRenderer callbacks close over closedMonths; valueSetter's persistBudgetMonth closes over budgets/tags/yearNum — all already current each render
+  }, [closedMonths, budgets, tags, yearNum])
 
   return (
     <div className="flex h-full flex-col gap-3 px-4 py-3">
@@ -868,6 +1110,9 @@ export default function Verlauf({ year }) {
             closer to spec.md §3b's own mockup ("their own header row...
             directly under the month labels") than the separate toolbar row
             this replaces. */}
+        <span className="text-xs text-[var(--color-text-muted)]">
+          Strg++ fügt eine Zeile hinzu · Strg+Tab klappt auf/zu · Entf entfernt
+        </span>
       </div>
 
       {/* verlauf-grid: see the matching CSS rule in index.css — it
@@ -909,12 +1154,75 @@ export default function Verlauf({ year }) {
           // straight to that row's January cell instead.
           onCellFocused={(e) => {
             if (e.rowIndex == null || !e.column) return
-            if (['groupName', 'subcatName', 'breakdownActions', 'label'].includes(e.column.getColId())) {
+            if (['groupName', 'subcatName', 'breakdownActions', 'label', 'breakdownDelete'].includes(e.column.getColId())) {
               gridApiRef.current?.setFocusedCell(e.rowIndex, 'm1', e.rowPinned)
+            }
+          }}
+          // Del/Ctrl+Tab/Ctrl++ (Markus, Sept 2026) — all three act on
+          // whichever row currently has the cursor/focus rectangle:
+          // - Delete: only a real breakdown line can be removed this way
+          //   (opens the same confirmation modal the trashcan does, not an
+          //   instant delete — see confirmRemoveRow above).
+          // - Ctrl+Tab: directional, not a plain toggle — "show: from the
+          //   subcategory totals row [Plan1/Plan0], collapse: from
+          //   anywhere within the breakdown rows [a breakdown line or its
+          //   own automatic rollup header]." A no-op from Prog (it has no
+          //   plan version, so no single block it could unambiguously
+          //   mean).
+          // - Ctrl++: opens the "neue Aufschlüsselungszeile" modal for
+          //   whichever block the cursor is in (openAddModalFor's own
+          //   Prog→Plan1 default applies here too).
+          onCellKeyDown={(p) => {
+            const key = p.event?.key
+            const row = p.data
+            if (!row) return
+            if (key === 'Delete') {
+              if (row.rowLabel === 'Plan1-breakdown' || row.rowLabel === 'Plan0-breakdown') {
+                p.event.preventDefault()
+                setConfirmRemoveRow(row)
+              }
+              return
+            }
+            if (key === 'Tab' && (p.event.ctrlKey || p.event.metaKey)) {
+              p.event.preventDefault()
+              if (row.rowLabel === 'Plan1' || row.rowLabel === 'Plan0') setBlockExpanded(row.blockKey, true)
+              else if (row.rowLabel === 'Plan1-breakdown' || row.rowLabel === 'Plan0-breakdown' || row.rowLabel === 'Rollup') {
+                setBlockExpanded(row.blockKey, false)
+              }
+              return
+            }
+            if (key === '+' && (p.event.ctrlKey || p.event.metaKey)) {
+              p.event.preventDefault()
+              openAddModalFor(row)
             }
           }}
           columnDefs={columnDefs}
           defaultColDef={{ suppressMovable: true, sortable: false, filter: false, resizable: true }}
+          // No row-add/remove/reorder animation on this screen (Markus,
+          // Sept 2026: "is there a way to stop ag grid animations for this
+          // screen") — a breakdown block expanding/collapsing or the
+          // Plan0/Aufschlüsselung toggles both add or remove many rows at
+          // once, and the animation made that transition (and the
+          // blank-row rendering glitch below) more noticeable, not less.
+          animateRows={false}
+          // Every row always in the DOM, never virtualized (Markus: rows
+          // going blank after scrolling away and back, only fixed by
+          // toggling a show/hide checkbox again) — root cause: Kategorie/
+          // Unterkategorie's own spanned cell (enableCellSpan, above)
+          // stretches across every row of a whole block, but row
+          // virtualization only keeps a scroll-position-relative window of
+          // rows in the DOM at all; once a block is taller than that
+          // window (a subcategory with several breakdown lines easily is),
+          // scrolling could leave rows inside the span's own range un-
+          // rendered, and nothing forced them to catch up again short of a
+          // full rowData rebuild (exactly what re-toggling a checkbox
+          // does). Verlauf's own total row count (every category/
+          // allocation-tag block, breakdown lines included) stays well
+          // under the 500-row default cap this requires lifting, so
+          // rendering every row unconditionally is a safe trade here, not
+          // a performance risk.
+          suppressRowVirtualisation
+          suppressMaxRenderedRowRestriction
           // A colDef's own `spanRows: true` does nothing on its own — this
           // grid-level flag is what actually turns the feature on (found
           // the hard way: every Kategorie/Unterkategorie cell was silently
@@ -937,6 +1245,55 @@ export default function Verlauf({ year }) {
           }}
         />
       </div>
+
+      {addModalTarget && (
+        <AddBreakdownModal
+          parentOptions={parentTagOptionsFor(addModalTarget.targetKey, addModalTarget.targetId)}
+          tagExistsGloballyByName={(name) => tags.some((t) => t.class === 'grouping' && !t.parentTag && t.name.toLowerCase() === name)}
+          onSubmit={handleAddBreakdownSubmit}
+          onCancel={() => setAddModalTarget(null)}
+        />
+      )}
+
+      {/* Reuses NavShell.jsx's own Abmelden confirmation modal design
+          (Markus, Sept 2026: "deleting a breakdown row should lead to a
+          real confirmation modal... reuse the abmelden confirmation modal
+          design") — a real, permanent loss of that line's planned
+          figures, same "no undo" reasoning Abmelden's own modal already
+          exists for. */}
+      {confirmRemoveRow && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center" onClick={() => setConfirmRemoveRow(null)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div
+            className="relative flex w-full max-w-sm flex-col gap-4 rounded-lg bg-[var(--color-surface)] p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-sm">
+              „{confirmRemoveRow.breakdownLabel}“ wirklich entfernen? Das kann nicht rückgängig gemacht werden.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmRemoveRow(null)}
+                className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]"
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const row = confirmRemoveRow
+                  setConfirmRemoveRow(null)
+                  removeBreakdownLine(row)
+                }}
+                className="rounded-md bg-[var(--color-alert)] px-3 py-1.5 text-sm font-medium text-white"
+              >
+                Entfernen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
