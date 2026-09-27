@@ -821,7 +821,27 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
       // computed row (Sept 2026, Markus: "plan0 should also render dark
       // yellow rows" — corrected from the original "Plan1's own block
       // only" design once Markus reconsidered it).
-      const tagIdSet = new Set([parentId, ...childIds])
+      //
+      // Real bug found and fixed here (Sept 2026, Markus: "none of the
+      // bookings just has Schottland as a tag, they all have a child...
+      // the dark yellow rows need to look for the parent tags plus pure
+      // parent tags: Schottland:Anything + Schottland (only)") — the
+      // actual-computation's own tag set was built from `childIds`, which
+      // is deliberately narrower than "every real child of this parent": it
+      // only ever includes a child that *already has its own planned
+      // breakdown line* (that's what makes it show up as its own row at
+      // all), never a child that only ever exists on real transactions
+      // with no plan of its own. A real Schottland:Haustiere booking, with
+      // no "Haustiere" breakdown line ever planned, was therefore silently
+      // excluded from Schottland's own rollup actual — every closed month
+      // whose real spending happened to land entirely on never-planned
+      // children summed to 0. Fixed by widening the *actual*-side tag set
+      // (not the *displayed rows*, which correctly stay scoped to childIds
+      // — a row needs a plan value to show/edit in the first place) to
+      // every tag in the whole app whose own `parentTag` is this group,
+      // planned or not.
+      const allRealChildIds = tags.filter((t) => t.parentTag === parentId).map((t) => t.id)
+      const tagIdSet = new Set([parentId, ...allRealChildIds])
       const rollupMonths = Array.from({ length: 12 }, (_, i) => {
         if (isPlan0 || !closedMonths.includes(i + 1)) return plannedSum(i)
         const month = i + 1
@@ -1791,6 +1811,23 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
           // a performance risk.
           suppressRowVirtualisation
           suppressMaxRenderedRowRestriction
+          // Stops AG Grid auto-scrolling to the very top on every rowData
+          // change — the real root cause of the scroll-jump-on-add bug
+          // (Markus, three rounds running: "the grid still jumps... please
+          // check again," "it immediately jumps back to the correct
+          // position" once a workaround existed). A `rowData` *prop* change
+          // (even with `getRowId` matching every row) is still treated as
+          // "a whole new dataset" at this level of AG Grid, which
+          // auto-scrolls to the top by default unless told not to
+          // (`suppressScrollOnNewData`, a plain grid option, confirmed in
+          // AG Grid's own bundled source: `scrollToTopIfNewData()`, gated
+          // on exactly this flag) — a much better fix than reacting to the
+          // reset after it's already visibly happened (the previous
+          // approach, `pendingScrollRef` below, kept as a defensive
+          // fallback in case some other path still triggers a reset this
+          // doesn't cover, but no longer doing the actual work in the
+          // common case).
+          suppressScrollOnNewData
           // Double-click (or Enter/F2) opens the editor now, AG Grid's own
           // default — no `singleClickEdit` here. A first pass misread
           // Markus's original wording ("verlauf needs a double click to
