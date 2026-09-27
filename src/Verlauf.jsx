@@ -115,10 +115,14 @@ const SECTION_TINT_VAR = {
 // three its own plan-line rule already covers — a Plan1 breakdown line
 // reads like Plan1, a Plan0 one like Plan0, and the automated rollup
 // header like Prog (same mirror-then-lock behavior).
-function monthTextColorVar(rowLabel, isClosed) {
+function monthTextColorVar(rowLabel, isClosed, isPlan0) {
   if (rowLabel === 'Plan0' || rowLabel === 'Plan0-breakdown') return '--color-text-muted'
   if (rowLabel === 'Plan1' || rowLabel === 'Plan1-breakdown') return isClosed ? '--color-text-muted' : '--color-text'
-  return isClosed ? '--color-text' : '--color-text-muted' // Prog, Rollup
+  // A Plan0 Rollup row reads like Plan0 (always muted) rather than Prog's
+  // mirror-then-lock rule — it's a plain sum of planned values, never a
+  // real actual, same as every other Plan0 row (Sept 2026).
+  if (rowLabel === 'Rollup' && isPlan0) return '--color-text-muted'
+  return isClosed ? '--color-text' : '--color-text-muted' // Prog, Plan1's own Rollup
 }
 
 // **Deferred, not solved — see the long history in DEVLOG.md/CODEMAP.md:**
@@ -490,6 +494,9 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // guess" pattern Konten.jsx's own pendingFocusIdRef already established
   // for the same underlying problem.
   const pendingFocusRef = useRef(null)
+  // A *separate*, longer-lived claim from pendingFocusRef, on purpose (see
+  // claimPendingFocus's own comment below for why one claim wasn't enough).
+  const pendingScrollRef = useRef(null)
   // Bumped by onGridReady (below) — see its own comment on why the settle
   // effect needs this second trigger alongside `rowData`.
   const [gridReadyTick, setGridReadyTick] = useState(0)
@@ -505,19 +512,26 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     const node = gridApiRef.current?.getRowNode(rowId)
     if (node) gridApiRef.current.setFocusedCell(node.rowIndex, colId, node.rowPinned)
   }
-  // Claiming focus also snapshots the current scroll position and restores
-  // it once the claim settles (Markus: "after creating a breakdown row, the
-  // grid still jumps all the way back to the top") — root cause: rebuilding
-  // `rowData` (a brand new tag or budget document changes `tags`/`budgets`,
-  // both dependencies of the `rowData` useMemo) apparently resets AG Grid's
-  // own scroll position as a side effect of however it recomputes this
-  // screen's `spanRows`-merged Kategorie/Unterkategorie cells, even though
-  // every row keeps the exact same `rowId` and nothing else about the
-  // update should call for re-scrolling anywhere. `setFocusedCell` alone
-  // doesn't fight that reset, so this restores the real scrollTop
-  // explicitly right after focus lands.
+  // Claiming focus also snapshots the current scroll position, restored on
+  // every `rowData` change for a couple of seconds afterward (Markus, twice
+  // now: "after creating a breakdown row, the grid still jumps all the way
+  // back to the top" — still true after a first attempt that only restored
+  // scroll *once*, right after focus itself landed). Root cause, found on
+  // this second pass: adding a breakdown line is two genuinely separate
+  // Firestore writes a moment apart — creating the tag document, then
+  // writing the budget documents — each landing via its own `onSnapshot` at
+  // a slightly different time in real usage (a disposable test harness
+  // with a synchronous mock Firestore batched both into one render and
+  // never caught this the first time). Each write resets AG Grid's own
+  // scroll position as a side effect of rebuilding `rowData`, so a claim
+  // that fires once and clears itself only ever catches the *first* of the
+  // two resets. `pendingScrollRef` is a second, longer-lived claim
+  // specifically because of this — cleared by its own expiry, not by being
+  // "used" once, since there's no reliable way to know in advance how many
+  // separate row-data rebuilds one user action will actually trigger.
   function claimPendingFocus(rowId, colId = focusedColIdRef.current) {
-    pendingFocusRef.current = { rowId, colId, scrollTop: currentScrollTop() }
+    pendingFocusRef.current = { rowId, colId }
+    pendingScrollRef.current = { value: currentScrollTop(), until: Date.now() + 2000 }
   }
 
   useEffect(() => {
@@ -794,41 +808,48 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
 
     for (const parentId of parentIds) {
       const childIds = byParent.get(parentId).sort(byOrder)
-      if (!isPlan0) {
-        const tagIdSet = new Set([parentId, ...childIds])
-        const rollupMonths = Array.from({ length: 12 }, (_, i) => {
-          const month = i + 1
-          if (!closedMonths.includes(month)) {
-            return childIds.reduce(
-              (sum, cid) => sum + budgetBreakdownLineMonths(common.targetKey, common.targetId, cid, planVersion, yearNum, budgets).months[i],
-              0,
-            )
-          }
-          // Real bug fixed here (Sept 2026, Markus: "the übergruppe
-          // autocalculated rows dont show the totals for checked months
-          // while they should") — a Rücklagen (allocationTagId) breakdown's
-          // own rollup used to hardcode 0 for a closed month instead of
-          // computing anything real, since only the category side had an
-          // actual-computation function at all.
-          return common.targetKey === 'categoryId'
-            ? breakdownGroupMonthActual(common.targetId, tagIdSet, yearNum, month, transactions)
-            : breakdownGroupAllocationMonthActual(common.targetId, tagIdSet, yearNum, month, transactions, tags)
-        })
-        out.push({
-          ...common,
-          rowId: `${rowIdBase}:${planVersion}:rollup:${parentId}`,
-          rowLabel: 'Rollup',
-          blockKey,
-          breakdownActionsSpanKey: blockKey,
-          // Just the Übergruppe's own name now (Markus: "remove the
-          // (automatisch) behind the übergruppe label") — the row's own
-          // tint/style already distinguishes it as the computed rollup,
-          // the suffix was redundant.
-          breakdownLabel: tagName(parentId),
-          months: rollupMonths,
-          yearTotal: rollupMonths.reduce((a, b) => a + b, 0),
-        })
-      }
+      const plannedSum = (i) =>
+        childIds.reduce(
+          (sum, cid) => sum + budgetBreakdownLineMonths(common.targetKey, common.targetId, cid, planVersion, yearNum, budgets).months[i],
+          0,
+        )
+      // Plan0's own rollup row is a plain sum of its children's *planned*
+      // values, every month, never switching to a real actual — Plan0
+      // never reflects actuals anywhere else in this screen either (its
+      // top-line and breakdown rows both stay planned-only, always muted),
+      // so its rollup shouldn't behave differently just because it's a
+      // computed row (Sept 2026, Markus: "plan0 should also render dark
+      // yellow rows" — corrected from the original "Plan1's own block
+      // only" design once Markus reconsidered it).
+      const tagIdSet = new Set([parentId, ...childIds])
+      const rollupMonths = Array.from({ length: 12 }, (_, i) => {
+        if (isPlan0 || !closedMonths.includes(i + 1)) return plannedSum(i)
+        const month = i + 1
+        // Real bug fixed here (Sept 2026, Markus: "the übergruppe
+        // autocalculated rows dont show the totals for checked months
+        // while they should") — a Rücklagen (allocationTagId) breakdown's
+        // own rollup used to hardcode 0 for a closed month instead of
+        // computing anything real, since only the category side had an
+        // actual-computation function at all.
+        return common.targetKey === 'categoryId'
+          ? breakdownGroupMonthActual(common.targetId, tagIdSet, yearNum, month, transactions)
+          : breakdownGroupAllocationMonthActual(common.targetId, tagIdSet, yearNum, month, transactions, tags)
+      })
+      out.push({
+        ...common,
+        rowId: `${rowIdBase}:${planVersion}:rollup:${parentId}`,
+        rowLabel: 'Rollup',
+        isPlan0,
+        blockKey,
+        breakdownActionsSpanKey: blockKey,
+        // Just the Übergruppe's own name now (Markus: "remove the
+        // (automatisch) behind the übergruppe label") — the row's own
+        // tint/style already distinguishes it as the computed rollup,
+        // the suffix was redundant.
+        breakdownLabel: tagName(parentId),
+        months: rollupMonths,
+        yearTotal: rollupMonths.reduce((a, b) => a + b, 0),
+      })
       childIds.forEach((tagId) => out.push(breakdownRow(tagId)))
     }
     const standaloneSorted = [...standalone].sort(byOrder)
@@ -1112,17 +1133,32 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // on every rowData change, no-ops instantly unless a focus claim is
   // actually pending, and leaves it pending (rather than clearing it on a
   // miss) so a claim made just before the row set catches up isn't lost.
+  //
+  // The scroll-restore half (pendingScrollRef) is deliberately separate and
+  // runs unconditionally on every one of these renders while its own claim
+  // hasn't expired yet — not just once, and not gated on the focus claim
+  // above having anything left to do. One user action here can trigger
+  // *several* separate rowData rebuilds a moment apart (creating a
+  // breakdown line writes a tag document and a batch of budget documents
+  // as two separate Firestore round-trips, each arriving via its own
+  // `onSnapshot` at a slightly different real-world time), and each one
+  // resets AG Grid's own scroll position independently — so this has to
+  // keep re-fighting that reset for as long as more of them might still be
+  // coming, not just the first time this effect happens to run afterward.
   useEffect(() => {
+    if (pendingScrollRef.current) {
+      if (Date.now() <= pendingScrollRef.current.until) {
+        const value = pendingScrollRef.current.value
+        requestAnimationFrame(() => restoreScrollTop(value))
+      } else {
+        pendingScrollRef.current = null
+      }
+    }
     if (!pendingFocusRef.current || !gridApiRef.current) return
-    const { rowId, colId, scrollTop } = pendingFocusRef.current
+    const { rowId, colId } = pendingFocusRef.current
     const node = gridApiRef.current.getRowNode(rowId)
     if (!node) return
     gridApiRef.current.setFocusedCell(node.rowIndex, colId, node.rowPinned)
-    // Restored on the next frame, not synchronously — whatever resets
-    // scrollTop to 0 (see claimPendingFocus's own comment above) happens as
-    // part of the same render/layout pass this effect runs in, so setting
-    // it back immediately here can still lose to that reset.
-    requestAnimationFrame(() => restoreScrollTop(scrollTop))
     pendingFocusRef.current = null
     // eslint-disable-next-line react-hooks/exhaustive-deps -- gridReadyTick is a second trigger alongside rowData (see onGridReady's own comment) — whichever of "data ready" and "grid ready" finishes last is what actually applies a pending claim
   }, [rowData, gridReadyTick])
@@ -1170,7 +1206,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         // `display: flex` is what's actually positioning the content, not
         // `text-align` anymore.
         const style = {
-          color: `var(${monthTextColorVar(p.data.rowLabel, isClosed)})`,
+          color: `var(${monthTextColorVar(p.data.rowLabel, isClosed, p.data.isPlan0)})`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'flex-end',
@@ -1430,7 +1466,10 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
             justifyContent: 'flex-start',
             ...blockBorderStyle(p.data),
           }
-          if (p.data.rowLabel === 'Rollup') style.backgroundColor = 'var(--color-breakdown-rollup-tint)'
+          if (p.data.rowLabel === 'Rollup') {
+            style.backgroundColor = 'var(--color-breakdown-rollup-tint)'
+            if (p.data.isPlan0) style.fontStyle = 'italic'
+          }
           if (p.data.rowLabel === 'Plan1-breakdown' || p.data.rowLabel === 'Plan0-breakdown') {
             style.backgroundColor = 'var(--color-breakdown-tint)'
             if (p.data.rowLabel === 'Plan0-breakdown') style.fontStyle = 'italic'
@@ -1472,7 +1511,10 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
             justifyContent: 'flex-end',
             ...blockBorderStyle(p.data),
           }
-          if (p.data.rowLabel === 'Rollup') style.backgroundColor = 'var(--color-breakdown-rollup-tint)'
+          if (p.data.rowLabel === 'Rollup') {
+            style.backgroundColor = 'var(--color-breakdown-rollup-tint)'
+            if (p.data.isPlan0) style.fontStyle = 'italic'
+          }
           if (p.data.rowLabel === 'Plan1-breakdown' || p.data.rowLabel === 'Plan0-breakdown') {
             style.backgroundColor = 'var(--color-breakdown-tint)'
             if (p.data.rowLabel === 'Plan0-breakdown') style.fontStyle = 'italic'
