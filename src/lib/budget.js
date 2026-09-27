@@ -139,3 +139,39 @@ export function breakdownGroupMonthActual(categoryId, tagIds, year, month, trans
   }
   return total
 }
+
+// The same rollup header, generalized to an allocation-tag-targeted
+// breakdown group (Sept 2026 — real bug found: a Rücklagen breakdown's own
+// "(automatisch)" row always showed blank in a closed month, since this
+// case fell through a `targetKey === 'categoryId'` check in Verlauf.jsx
+// with a hardcoded `: 0` for anything else, never actually computing an
+// allocation-side actual at all). Mirrors `allocationMonthActual()`'s own
+// position-based sign rule (+ arriving at one of the allocation tag's own
+// `reconciliationTargetAccountIds`, − leaving one) rather than
+// `breakdownGroupMonthActual()`'s plain category-sum rule — matches a
+// savings-transfer's actual being a signed *change*, not a raw sum — but
+// filtered to lines carrying the *breakdown group's* tag (the parent or one
+// of its children), the same "which sub-lines does this rollup cover"
+// question `breakdownGroupMonthActual()` already answers for a category.
+//
+// @param {string} allocationTagId
+// @param {Set<string>} tagIds  the parent tag's own id plus every child's
+// @param {number} year
+// @param {number} month  1-12
+// @param {Array} transactions
+// @param {Array} tags
+export function breakdownGroupAllocationMonthActual(allocationTagId, tagIds, year, month, transactions, tags) {
+  const tag = tags.find((t) => t.id === allocationTagId)
+  const targets = new Set(tag?.reconciliationTargetAccountIds ?? [])
+  const prefix = `${year}-${String(month).padStart(2, '0')}`
+  let delta = 0
+  for (const tx of transactions) {
+    if (!tx.date.startsWith(prefix)) continue
+    for (const line of tx.lines ?? []) {
+      if (!(line.tags ?? []).some((t) => tagIds.has(t))) continue
+      if (targets.has(tx.fromAccountId)) delta -= line.amountCents
+      if (targets.has(tx.toAccountId)) delta += line.amountCents
+    }
+  }
+  return delta === 0 ? 0 : -delta
+}

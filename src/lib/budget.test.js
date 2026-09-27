@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   allocationMonthActual,
+  breakdownGroupAllocationMonthActual,
   breakdownGroupMonthActual,
   budgetBreakdownLineMonths,
   budgetTopLineMonths,
@@ -190,5 +191,57 @@ describe('breakdownGroupMonthActual()', () => {
       lines: [{ amountCents: -18000, categoryId: 'sonstiges-urlaube', note: '', tags: ['schottland-hotels'] }],
     }
     expect(breakdownGroupMonthActual('sonstiges-urlaube', new Set(['schottland-hotels']), 2025, 6, [laterBooking])).toBe(0)
+  })
+})
+
+describe('breakdownGroupAllocationMonthActual()', () => {
+  // Real bug (Sept 2026): a Rücklagen breakdown's own rollup header always
+  // showed blank in a closed month, since Verlauf.jsx's own rollupMonths
+  // computation only ever called the category-side breakdownGroupMonthActual,
+  // hardcoding 0 for an allocation-tag target instead of computing anything.
+  const SPAREN_FAMILIE = { id: 'sparen-familie', reconciliationTargetAccountIds: ['livret-a-sparen'] }
+
+  it('sums the signed change for lines carrying the parent or a child tag, same sign convention as allocationMonthActual()', () => {
+    const fondsContribution = {
+      date: '2025-06-05',
+      fromAccountId: 'bnp-konto',
+      toAccountId: 'livret-a-sparen',
+      lines: [{ amountCents: 10000, categoryId: null, note: '', tags: ['sparen-familie', 'fonds-a'] }],
+    }
+    const fondsBContribution = {
+      date: '2025-06-10',
+      fromAccountId: 'bnp-konto',
+      toAccountId: 'livret-a-sparen',
+      lines: [{ amountCents: 5000, categoryId: null, note: '', tags: ['sparen-familie', 'fonds-b'] }],
+    }
+    const untaggedContribution = {
+      date: '2025-06-12',
+      fromAccountId: 'bnp-konto',
+      toAccountId: 'livret-a-sparen',
+      lines: [{ amountCents: 2000, categoryId: null, note: '', tags: ['sparen-familie'] }],
+    }
+    const tagIds = new Set(['fonds', 'fonds-a', 'fonds-b'])
+    expect(
+      breakdownGroupAllocationMonthActual(
+        'sparen-familie',
+        tagIds,
+        2025,
+        6,
+        [fondsContribution, fondsBContribution, untaggedContribution],
+        [SPAREN_FAMILIE],
+      ),
+    ).toBe(-15000)
+  })
+
+  it('excludes a matching-tag line dated in a different month', () => {
+    const laterContribution = {
+      date: '2025-07-01',
+      fromAccountId: 'bnp-konto',
+      toAccountId: 'livret-a-sparen',
+      lines: [{ amountCents: 10000, categoryId: null, note: '', tags: ['fonds-a'] }],
+    }
+    expect(
+      breakdownGroupAllocationMonthActual('sparen-familie', new Set(['fonds-a']), 2025, 6, [laterContribution], [SPAREN_FAMILIE]),
+    ).toBe(0)
   })
 })

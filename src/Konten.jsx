@@ -297,7 +297,7 @@ function allocationSideOrder(t, targets) {
 // back up via `onYearsChange`, since it's the one screen that currently
 // loads transactions at all; the shell just renders whatever list it's
 // told about.
-export default function Konten({ year, onYearChange, onYearsChange }) {
+export default function Konten({ year, onYearChange, onYearsChange, initialFocus, onFocusChange }) {
   const [accounts, setAccounts] = useState([])
   const [categories, setCategories] = useState([])
   const [tags, setTags] = useState([])
@@ -345,6 +345,11 @@ export default function Konten({ year, onYearChange, onYearsChange }) {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
   const confirmTimeoutRef = useRef(null)
   const gridRef = useRef(null)
+  const gridWrapperRef = useRef(null)
+  // Bumped by onGridReady (below) — see the pendingFocusIdRef settle
+  // effect's own comment on why it needs this second trigger alongside
+  // `rows`.
+  const [gridReadyTick, setGridReadyTick] = useState(0)
   const accountSelectRef = useRef(null)
   // The id (and target column) of a row waiting to be scrolled into view,
   // selected, and cell-focused once it actually settles into `rows` —
@@ -403,6 +408,57 @@ export default function Konten({ year, onYearChange, onYearsChange }) {
     focusClaimRef.current += 1
     pendingFocusClaimRef.current = focusClaimRef.current
   }
+  // Restores the cursor to wherever it was when this screen was last left
+  // (Markus: "generally, save the cursor position both in konten and
+  // verlauf, and place the cursor there again upon switching") — App.jsx
+  // holds the saved position across a full unmount/remount (switching
+  // screens conditionally unmounts whichever one isn't active), and this
+  // just seeds the existing claimPendingFocus()/settle-effect machinery
+  // with it on mount, the same as any other row this screen waits for.
+  useEffect(() => {
+    if (initialFocus?.id) claimPendingFocus(initialFocus.id, initialFocus.colId, initialFocus.lineIndex ?? null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount only, deliberately ignoring subsequent initialFocus prop changes (this screen owns the position from here on, via onFocusChange)
+  }, [])
+
+  // A mitigation, not a proven root-cause fix, for a real but hard-to-pin-
+  // down report (Markus: "sometimes i am unable to move the cursor with
+  // the arrow keys... after switching screens via the hotkeys and placing
+  // the cursor in any cell while accidentally placing and scrolling, the
+  // cursor is frozen in place until i displace it again"). Real DOM focus
+  // has to be on the cell's own element for arrow keys to reach AG Grid's
+  // keyboard handling at all — if it ever ends up elsewhere, the very next
+  // arrow-key press here notices real focus isn't inside the grid and
+  // restores it to the last row/column this screen actually knows about
+  // (the same identity claimPendingFocus() itself uses). A direct,
+  // synchronous restore, not routed through claimPendingFocus()/the settle
+  // effect — that pair is built to *wait* for `rows` to next change, which
+  // nothing here is about to do; the target row already exists right now.
+  const lastFocusedRef = useRef(null)
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return
+      const wrapper = gridWrapperRef.current
+      if (!wrapper || wrapper.contains(document.activeElement)) return
+      const target = lastFocusedRef.current
+      const api = gridRef.current?.api
+      if (!target || !api) return
+      let node = api.getRowNode(target.id)
+      if (target.lineIndex != null) {
+        let lineNode = null
+        api.forEachNode((n) => {
+          if (n.data?.__isLine && n.data.__parent.id === target.id && n.data.__lineIndex === target.lineIndex) lineNode = n
+        })
+        if (lineNode) node = lineNode
+      }
+      if (!node) return
+      api.ensureIndexVisible(node.rowIndex)
+      api.setFocusedCell(node.rowIndex, target.colId)
+      node.setSelected(true, true)
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [])
+
   // Which split transactions currently show their line rows expanded
   // (§3a: "parent row with an expand chevron... plus its detail rows
   // revealed on expand"). Keyed by the real transaction id, not the
@@ -1249,13 +1305,24 @@ export default function Konten({ year, onYearChange, onYearsChange }) {
   useEffect(() => {
     const id = pendingFocusIdRef.current
     if (!id || !rows.some((r) => r.id === id)) return
+    // The API can genuinely not exist yet even once `id` is in `rows` — a
+    // fresh mount's own AG Grid instance takes longer to finish its
+    // internal init than one macrotask tick (found via harness testing the
+    // cross-screen cursor restore, below: this used to bail out here and
+    // silently drop the claim, clearing pendingFocusIdRef regardless of
+    // whether the restore actually happened). `gridReadyTick` (bumped by
+    // onGridReady, above) re-runs this same effect once the API is
+    // actually ready, so simply waiting here — without clearing the claim
+    // — is enough; every other existing case (addRow, an edit) already had
+    // a ready API by the time its own Firestore round-trip landed, so this
+    // never mattered for them.
+    const api = gridRef.current?.api
+    if (!api) return
     const myClaim = pendingFocusClaimRef.current
     pendingFocusIdRef.current = null
     const colId = pendingFocusColRef.current
     const lineIndex = pendingFocusLineIndexRef.current
     pendingFocusLineIndexRef.current = null
-    const api = gridRef.current?.api
-    if (!api) return
     setTimeout(() => {
       // A newer claim (another edit, or focusGridMidViewport returning
       // focus from the panel) has since been made — let it stand rather
@@ -1284,7 +1351,8 @@ export default function Konten({ year, onYearChange, onYearsChange }) {
       node.setSelected(true, true)
       api.setFocusedCell(node.rowIndex, colId)
     }, 0)
-  }, [rows])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- gridReadyTick is a second trigger alongside rows (see onGridReady's own comment) — whichever of "data ready" and "grid ready" finishes last is what actually applies a pending claim
+  }, [rows, gridReadyTick])
 
   // What the grid actually renders: `rows` (real transactions) with each
   // expanded split transaction's lines interleaved right after it as
@@ -2417,9 +2485,10 @@ export default function Konten({ year, onYearChange, onYearsChange }) {
           reach the grid at all). This way the grid always has its own
           working internal scroll, and the page itself scrolls normally if
           the panel above is tall. */}
-      <div className="h-[70vh] min-h-[360px]">
+      <div ref={gridWrapperRef} className="h-[70vh] min-h-[360px]">
         <AgGridReact
           ref={gridRef}
+          onGridReady={() => setGridReadyTick((t) => t + 1)}
           theme={themeQuartz}
           rowData={displayRows}
           columnDefs={columnDefs}
@@ -2503,6 +2572,11 @@ export default function Konten({ year, onYearChange, onYearsChange }) {
             const data = node?.data
             const targetId = data?.__isLine ? data.__parent.id : data?.id
             const targetLineIndex = data?.__isLine ? data.__lineIndex : null
+            if (targetId) {
+              const focus = { id: targetId, colId: p.column?.getColId(), lineIndex: targetLineIndex }
+              lastFocusedRef.current = focus
+              onFocusChange?.(focus)
+            }
             const stillPending =
               pendingFocusIdRef.current != null &&
               pendingFocusIdRef.current === targetId &&

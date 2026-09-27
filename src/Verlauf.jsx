@@ -6,6 +6,7 @@ import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-communi
 import { db } from './firebase'
 import {
   allocationMonthActual,
+  breakdownGroupAllocationMonthActual,
   breakdownGroupMonthActual,
   budgetBreakdownLineMonths,
   budgetTopLineMonths,
@@ -408,7 +409,7 @@ function AddBreakdownModal({ parentOptions, tagExistsGloballyByName, onSubmit, o
   )
 }
 
-export default function Verlauf({ year }) {
+export default function Verlauf({ year, initialFocus, onFocusChange }) {
   const [categories, setCategories] = useState([])
   const [tags, setTags] = useState([])
   const [transactions, setTransactions] = useState([])
@@ -458,6 +459,21 @@ export default function Verlauf({ year }) {
   // created symmetrically in both at once).
   const [addModalTarget, setAddModalTarget] = useState(null)
   const gridApiRef = useRef(null)
+  const gridWrapperRef = useRef(null)
+  // The most recently focused *month* column (m1..m12) — every other
+  // column redirects focus back here (below), so this is always a real,
+  // editable column, never one of the suppressed ones. Used to restore the
+  // cursor to the *same column* it was already in whenever a row-changing
+  // action (collapsing a block, removing a line, adding one) has to move
+  // focus to a different row (Sept 2026, Markus: several requests all
+  // boiling down to "keep me in the same column" — previously every such
+  // restore hardcoded 'm1').
+  const focusedColIdRef = useRef('m1')
+  // The row half of the same tracking — kept separately from
+  // `pendingFocusRef` (which is a one-shot claim, cleared once used) since
+  // this one needs to persist indefinitely as "wherever the cursor last
+  // genuinely was," for the frozen-cursor mitigation below.
+  const lastFocusedRowIdRef = useRef(null)
   // The grid loses real browser focus entirely once a modal (add or
   // remove-confirm) opens and then closes — arrow keys stopped doing
   // anything, or scrolled the page instead, until the grid was clicked
@@ -465,17 +481,24 @@ export default function Verlauf({ year }) {
   // delete-confirmation modal, and after creating a new breakdown line).
   // `focusRowNow()` handles the immediate case (the target row still
   // exists synchronously — a plain cancel, or a fresh add-modal open);
-  // `pendingFocusRowIdRef` handles the case where the row doesn't exist
-  // yet/anymore at the moment of the action (a newly created line, or the
-  // block's top-line row after its last line was just removed) — set
-  // right before the write, picked up once `rowData` actually contains it
-  // by the settle effect below, the same "wait for the real row set to
-  // settle rather than guess" pattern Konten.jsx's own pendingFocusIdRef
-  // already established for the same underlying problem.
-  const pendingFocusRowIdRef = useRef(null)
-  function focusRowNow(rowId, colId = 'm1') {
+  // `pendingFocusRef` (`{ rowId, colId }`) handles the case where the row
+  // doesn't exist yet/anymore at the moment of the action (a newly created
+  // line, or the block's top-line row after its last line was just removed
+  // or its block just collapsed) — set right before the write, picked up
+  // once `rowData` actually contains the target row by the settle effect
+  // below, the same "wait for the real row set to settle rather than
+  // guess" pattern Konten.jsx's own pendingFocusIdRef already established
+  // for the same underlying problem.
+  const pendingFocusRef = useRef(null)
+  // Bumped by onGridReady (below) — see its own comment on why the settle
+  // effect needs this second trigger alongside `rowData`.
+  const [gridReadyTick, setGridReadyTick] = useState(0)
+  function focusRowNow(rowId, colId = focusedColIdRef.current) {
     const node = gridApiRef.current?.getRowNode(rowId)
     if (node) gridApiRef.current.setFocusedCell(node.rowIndex, colId, node.rowPinned)
+  }
+  function claimPendingFocus(rowId, colId = focusedColIdRef.current) {
+    pendingFocusRef.current = { rowId, colId }
   }
 
   useEffect(() => {
@@ -497,6 +520,12 @@ export default function Verlauf({ year }) {
   // Same Ctrl/Cmd+I toggle + capture-phase Escape as Konten.jsx's own
   // shortcuts popover — see that file's own comment on why capture phase
   // matters (winning the race against other things that also want Escape).
+  // Also Ctrl+Shift+D (Markus: "assign ctrl+shift+d to aufschlüsselung
+  // anzeigen check box") and Ctrl+P ("assign ctrl+p to plan0 anzeigen") —
+  // global, not scoped to a grid cell, so they work regardless of where
+  // the cursor currently is, same as the checkboxes themselves. Ctrl+Shift+D
+  // reuses the checkbox's own onChange logic exactly (clearing
+  // blockOverrides too), not just the bare setShowBreakdowns toggle.
   useEffect(() => {
     const onKeyDown = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i') {
@@ -507,6 +536,17 @@ export default function Verlauf({ year }) {
       if (e.key === 'Escape' && shortcutsOpen) {
         e.stopPropagation()
         setShortcutsOpen(false)
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'd') {
+        e.preventDefault()
+        setShowBreakdowns((v) => !v)
+        setBlockOverrides(new Map())
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault()
+        setShowPlan0((v) => !v)
       }
     }
     window.addEventListener('keydown', onKeyDown, true)
@@ -531,6 +571,45 @@ export default function Verlauf({ year }) {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [confirmRemoveRow])
+
+  // The grid stays fully interactive underneath either modal by default —
+  // a click or arrow key could still move the cursor or start editing a
+  // cell behind the overlay (Markus: "while i am in the modal, i should
+  // not be able to move the cursor with the arrow keys or make any edits
+  // to the grid"). `inert` (a real HTML attribute, not a React prop here
+  // since it needs to toggle on an already-mounted DOM node reliably)
+  // makes the whole grid subtree genuinely non-interactive and
+  // non-focusable for as long as either modal is open — not just visually
+  // covered by the overlay.
+  useEffect(() => {
+    const el = gridWrapperRef.current
+    if (!el) return
+    el.inert = Boolean(confirmRemoveRow || addModalTarget)
+  }, [confirmRemoveRow, addModalTarget])
+
+  // A mitigation, not a proven root-cause fix, for a real but hard-to-pin-
+  // down report (Markus: "sometimes i am unable to move the cursor with
+  // the arrow keys... after switching screens via the hotkeys and placing
+  // the cursor in any cell while accidentally placing and scrolling, the
+  // cursor is frozen in place until i displace it again"). Real DOM focus
+  // (not just AG Grid's own internal "focused cell" model) has to be on
+  // the cell's own element for arrow keys to reach AG Grid's keyboard
+  // handling at all — if focus ever ends up elsewhere (the safest general
+  // explanation for "frozen until I click again," without being able to
+  // reproduce the exact click-while-scrolling sequence directly), the very
+  // next arrow-key press here notices real focus isn't inside the grid and
+  // restores it to the last cell this screen actually knows about, instead
+  // of silently doing nothing.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return
+      const wrapper = gridWrapperRef.current
+      if (!wrapper || wrapper.contains(document.activeElement)) return
+      if (lastFocusedRowIdRef.current) focusRowNow(lastFocusedRowIdRef.current, focusedColIdRef.current)
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [])
 
   useEffect(() => {
     const unsubs = [
@@ -624,15 +703,12 @@ export default function Verlauf({ year }) {
       blockKey,
       blockExpanded: isBlockExpanded(blockKey),
     }
-    // Which rows the breakdownActions column's own `spanRows` should merge
-    // into one tall cell (Sept 2026, Markus: "vertically merge the cells
-    // in the +/chevron column that belong to the same breakdown rows
-    // block... and vertically center the + signs") — every row sharing
-    // this exact value merges with its (consecutive) siblings; the
-    // top-line row only shares its `blockKey` with its own breakdown/
-    // rollup rows while they're actually showing, otherwise its own rowId
-    // keeps it a private, unmerged span of one.
-    topRow.breakdownActionsSpanKey = rowHasBreakdown && topRow.blockExpanded ? blockKey : topRow.rowId
+    // The top-line row's own breakdownActions cell always stays its own
+    // unmerged span (Markus, second round: "keep the chevron next to
+    // plan0 or plan1, do not combine it into the merged cells with the +
+    // sign") — only the breakdown/rollup rows under it (below) share
+    // `blockKey` to merge into one ✚ cell together.
+    topRow.breakdownActionsSpanKey = topRow.rowId
     const out = [topRow]
     // Breakdown rows exist independent of the global "Aufschlüsselung
     // anzeigen" checkbox now (Sept 2026 — see blockOverrides' own comment
@@ -694,7 +770,15 @@ export default function Verlauf({ year }) {
               0,
             )
           }
-          return common.targetKey === 'categoryId' ? breakdownGroupMonthActual(common.targetId, tagIdSet, yearNum, month, transactions) : 0
+          // Real bug fixed here (Sept 2026, Markus: "the übergruppe
+          // autocalculated rows dont show the totals for checked months
+          // while they should") — a Rücklagen (allocationTagId) breakdown's
+          // own rollup used to hardcode 0 for a closed month instead of
+          // computing anything real, since only the category side had an
+          // actual-computation function at all.
+          return common.targetKey === 'categoryId'
+            ? breakdownGroupMonthActual(common.targetId, tagIdSet, yearNum, month, transactions)
+            : breakdownGroupAllocationMonthActual(common.targetId, tagIdSet, yearNum, month, transactions, tags)
         })
         out.push({
           ...common,
@@ -884,11 +968,13 @@ export default function Verlauf({ year }) {
       const existing = findTopLevel(name)
       tagId = existing ? existing.id : createPlainGroupingTag(name, null)
     }
-    // Focus follows the newly created/reused line once it renders (Markus:
-    // "after the creation of a new breakdown line" the cursor needs to be
-    // back on the grid) — the settle effect below picks this up once
-    // `rowData` actually contains it.
-    pendingFocusRowIdRef.current = `${target.targetKey}:${target.targetId}:${target.planVersion}:${tagId}`
+    // Focus follows the newly created/reused line once it renders, in the
+    // *same column* it was already in (Markus: "after creating a
+    // breakdown row, prevent the screen from jumping somewhere else, stay
+    // in place and place the cursor into the new row, same column as
+    // before") — the settle effect below picks this up once `rowData`
+    // actually contains it.
+    claimPendingFocus(`${target.targetKey}:${target.targetId}:${target.planVersion}:${tagId}`)
     await commitAddBreakdownLine(target.targetKey, target.targetId, target.planVersion, tagId)
   }
 
@@ -923,8 +1009,11 @@ export default function Verlauf({ year }) {
   // changed). Confirming instead removes it and, since that row won't
   // exist anymore once `rowData` updates, claims focus on the block's own
   // top-line row instead (always exists — even a just-emptied block folds
-  // back to a real flat row, never disappears) via pendingFocusRowIdRef,
-  // picked up by the settle effect above once the removal actually lands.
+  // back to a real flat row, never disappears), *same column as before*
+  // (Markus: "after deleting a breakdown row... set the cursor back into
+  // the plan0 or plan1 cell of that hidden block, same column"), via
+  // `claimPendingFocus()`, picked up by the settle effect above once the
+  // removal actually lands.
   function closeConfirmRemove() {
     const row = confirmRemoveRow
     setConfirmRemoveRow(null)
@@ -934,7 +1023,7 @@ export default function Verlauf({ year }) {
     const row = confirmRemoveRow
     if (!row) return
     setConfirmRemoveRow(null)
-    pendingFocusRowIdRef.current = `${row.targetKey}:${row.targetId}:${row.isPlan0 ? 'Plan0' : 'Plan1'}`
+    claimPendingFocus(`${row.targetKey}:${row.targetId}:${row.isPlan0 ? 'Plan0' : 'Plan1'}`)
     removeBreakdownLine(row)
   }
 
@@ -985,17 +1074,34 @@ export default function Verlauf({ year }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- planLineRows and everything it calls close over categories/tags/transactions/budgets/closedMonths/showPlan0/showBreakdowns/blockOverrides/yearNum, all already current each render
   }, [categories, tags, transactions, budgets, closedMonths, showPlan0, showBreakdowns, blockOverrides, yearNum])
 
-  // The settle half of pendingFocusRowIdRef (see its own comment above) —
-  // fires on every rowData change, no-ops instantly unless a focus claim
-  // is actually pending, and leaves it pending (rather than clearing it on
-  // a miss) so a claim made just before the row set catches up isn't lost.
+  // The settle half of pendingFocusRef (see its own comment above) — fires
+  // on every rowData change, no-ops instantly unless a focus claim is
+  // actually pending, and leaves it pending (rather than clearing it on a
+  // miss) so a claim made just before the row set catches up isn't lost.
   useEffect(() => {
-    if (!pendingFocusRowIdRef.current) return
-    const node = gridApiRef.current?.getRowNode(pendingFocusRowIdRef.current)
+    if (!pendingFocusRef.current || !gridApiRef.current) return
+    const { rowId, colId } = pendingFocusRef.current
+    const node = gridApiRef.current.getRowNode(rowId)
     if (!node) return
-    gridApiRef.current.setFocusedCell(node.rowIndex, 'm1', node.rowPinned)
-    pendingFocusRowIdRef.current = null
-  }, [rowData])
+    gridApiRef.current.setFocusedCell(node.rowIndex, colId, node.rowPinned)
+    pendingFocusRef.current = null
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- gridReadyTick is a second trigger alongside rowData (see onGridReady's own comment) — whichever of "data ready" and "grid ready" finishes last is what actually applies a pending claim
+  }, [rowData, gridReadyTick])
+
+  // Restores the cursor to wherever it was when this screen was last left
+  // (Markus: "generally, save the cursor position both in konten and
+  // verlauf, and place the cursor there again upon switching") — `App.jsx`
+  // holds the actual saved position across a full unmount/remount (this
+  // component's own state/refs don't survive switching screens and back,
+  // since `App.jsx` conditionally renders only the active one). Claimed
+  // once, on mount, through the exact same settle mechanism as every other
+  // focus restore here — no special-casing needed, it just waits for
+  // `rowData` to contain the saved row the same way a freshly added line
+  // does.
+  useEffect(() => {
+    if (initialFocus?.rowId) claimPendingFocus(initialFocus.rowId, initialFocus.colId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount only, deliberately ignoring subsequent initialFocus prop changes (this screen owns the position from here on, via onFocusChange)
+  }, [])
 
   const columnDefs = useMemo(() => {
     const monthCols = MONTH_LABELS.map((label, i) => ({
@@ -1011,7 +1117,26 @@ export default function Verlauf({ year }) {
       cellClass: (p) => `text-right tabular-figure${p.data.rowLabel?.includes('breakdown') || p.data.rowLabel === 'Rollup' ? ' text-xs' : ''}`,
       cellStyle: (p) => {
         const isClosed = closedMonths.includes(i + 1)
-        const style = { color: `var(${monthTextColorVar(p.data.rowLabel, isClosed)})`, ...blockBorderStyle(p.data) }
+        // Real vertical centering (Markus, Sept 2026: "center the text /
+        // values inside the breakdown rows vertically, like all other
+        // rows") — turned out to be a pre-existing gap on *every* row, not
+        // something breakdown rows were specifically missing: AG Grid's
+        // own default cell isn't flex-centered here at all (confirmed via
+        // harness — `display: block`, text sits at the top of the line
+        // box, a few px of empty space left at the bottom always). Only
+        // ever visible on a breakdown row because its shorter 22px height
+        // (getRowHeight, below) makes the same few px a much bigger
+        // fraction of the row. `justifyContent: 'flex-end'` keeps this
+        // column's own right alignment (`text-right`, cellClass) once
+        // `display: flex` is what's actually positioning the content, not
+        // `text-align` anymore.
+        const style = {
+          color: `var(${monthTextColorVar(p.data.rowLabel, isClosed)})`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          ...blockBorderStyle(p.data),
+        }
         // Prog's own row gets a light grey tint on a closed month's cells
         // specifically (spec.md §3b, corrected Sept 2026 — Markus caught
         // it applied to Plan0 instead) — a second, independent cue
@@ -1139,13 +1264,25 @@ export default function Verlauf({ year }) {
         colId: 'subcatName',
         spanRows: true,
         pinned: 'left',
-        width: 170,
+        // Narrowed 170→145px to help fund the € total column's own widening
+        // (Markus, Sept 2026: "totals column is too narrow, increase its
+        // width... at the cost of column unterkategorie" — paired with real
+        // text-wrapping so a longer subcategory name still reads fully,
+        // just over two lines now instead of needing the column wide
+        // enough for its longest name on one line).
+        width: 145,
         suppressNavigable: true,
         cellStyle: (p) => ({ backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})`, borderTop: blockBorderStyle(p.data).borderTop }),
         // Vertically centered within its own spanned (merged) cell (Markus)
         // — AG Grid's default cell rendering doesn't center content inside
-        // a tall spanned cell on its own.
-        cellRenderer: (p) => <div className="flex h-full w-full items-center">{p.value}</div>,
+        // a tall spanned cell on its own. `whiteSpace: normal` overrides
+        // AG Grid's own default single-line cell text (nowrap + ellipsis)
+        // so a name too long for one line wraps instead of clipping.
+        cellRenderer: (p) => (
+          <div className="flex h-full w-full items-center" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+            {p.value}
+          </div>
+        ),
       },
       {
         headerName: '',
@@ -1170,49 +1307,40 @@ export default function Verlauf({ year }) {
         // konten," which keeps its own delete column separate from the
         // split/expand column the same way). Mirrors Konten.jsx's own
         // pinned "split" column conventions on purpose (✚ to add, a
-        // chevron to expand/collapse). **Vertically merged across a whole
-        // expanded breakdown block (Sept 2026, Markus: "vertically merge
-        // the cells in the +/chevron column that belong to the same
-        // breakdown rows block... and vertically center the + signs")** —
-        // `spanRows`/`breakdownActionsSpanKey` (above) does the merging;
-        // the merged cell's own renderer only ever sees the *top-line*
-        // row's data (the anchor), so it shows both the chevron (collapse)
-        // and ✚ (add another) together rather than the chevron living on
-        // the top row and ✚ trailing the last breakdown line the way two
-        // separate per-row cells used to split them.
+        // chevron to expand/collapse). **The chevron always stays on its
+        // own top-line row's own cell, never merged (Markus, second round:
+        // "keep the chevron next to plan0 or plan1, do not combine it into
+        // the merged cells with the + sign")** — a first pass had the
+        // top-line row share one merged cell with its own breakdown/rollup
+        // rows, showing chevron+✚ stacked together; `breakdownActionsSpanKey`
+        // (above) now only merges a block's *breakdown/rollup rows* with
+        // each other (the top-line row's own key is always just its own
+        // rowId, an unmerged span of one) — the ✚ for adding another line
+        // still shows once, centered across just those merged child rows,
+        // it just no longer shares a cell with the chevron above it.
         cellRenderer: (p) => {
           const row = p.data
-          if ((row.rowLabel === 'Plan1' || row.rowLabel === 'Plan0') && row.rowHasBreakdown && row.blockExpanded) {
+          if (row.rowLabel === 'Plan1-breakdown' || row.rowLabel === 'Plan0-breakdown' || row.rowLabel === 'Rollup') {
             return (
-              <div className="flex h-full w-full flex-col items-center justify-center gap-1">
-                <button
-                  type="button"
-                  title="Aufschlüsselung einklappen (Strg+D)"
-                  className="flex items-center justify-center text-base leading-none"
-                  onClick={() => setBlockExpanded(row.blockKey, false)}
-                >
-                  ▾
-                </button>
-                <button
-                  type="button"
-                  title="Aufschlüsselungszeile hinzufügen (Strg++)"
-                  className="flex items-center justify-center text-xs leading-none"
-                  onClick={() => openAddModalFor(row)}
-                >
-                  ✚
-                </button>
-              </div>
+              <button
+                type="button"
+                title="Aufschlüsselungszeile hinzufügen (Strg++)"
+                className="flex h-full w-full items-center justify-center text-xs leading-none"
+                onClick={() => openAddModalFor(row)}
+              >
+                ✚
+              </button>
             )
           }
           if ((row.rowLabel === 'Plan1' || row.rowLabel === 'Plan0') && row.rowHasBreakdown) {
             return (
               <button
                 type="button"
-                title="Aufschlüsselung ausklappen (Strg+D)"
+                title={row.blockExpanded ? 'Aufschlüsselung einklappen (Strg+D)' : 'Aufschlüsselung ausklappen (Strg+D)'}
                 className="flex h-full w-full items-center justify-center text-base leading-none"
-                onClick={() => setBlockExpanded(row.blockKey, true)}
+                onClick={() => setBlockExpanded(row.blockKey, !row.blockExpanded)}
               >
-                ▸
+                {row.blockExpanded ? '▾' : '▸'}
               </button>
             )
           }
@@ -1252,9 +1380,15 @@ export default function Verlauf({ year }) {
         width: 124,
         cellClass: (p) => `truncate${p.data.rowLabel?.includes('breakdown') || p.data.rowLabel === 'Rollup' ? ' text-xs' : ''}`,
         cellStyle: (p) => {
+          // Real vertical centering, same fix/reasoning as the month
+          // columns' own cellStyle above — `justifyContent: 'flex-start'`
+          // keeps this column's existing left alignment.
           const style = {
             backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})`,
             color: `var(${p.data.rowLabel === 'Plan0' || p.data.rowLabel === 'Plan0-breakdown' ? '--color-text-muted' : '--color-text'})`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-start',
             ...blockBorderStyle(p.data),
           }
           if (p.data.rowLabel === 'Rollup') style.backgroundColor = 'var(--color-breakdown-rollup-tint)'
@@ -1277,16 +1411,26 @@ export default function Verlauf({ year }) {
         // (positive) or -60.000 € (negative)") — narrowed from the
         // month-column-matching 128px down to 96px, still with room for
         // the trailing " €" the month columns never carry (spec.md §3b).
-        width: 96,
+        // **Widened again the same round, 96→110px (Markus: "totals column
+        // is too narrow, increase its width a slight little bit at the
+        // cost of column unterkategorie")** — 96px still clipped a real
+        // six-digit figure; funded by narrowing Unterkategorie instead of
+        // widening the grid overall.
+        width: 110,
         cellClass: (p) => `text-right tabular-figure${p.data.rowLabel?.includes('breakdown') || p.data.rowLabel === 'Rollup' ? ' text-xs' : ''}`,
         // The yearly total mixes closed and open months, so it doesn't get
         // the same per-month grey/black toggle the month columns do (that
         // rule is only meaningful per-month) — Plan0 (and its own
         // breakdown rows) stay grey, everything else reads as plain text.
         cellStyle: (p) => {
+          // Real vertical centering, same fix/reasoning as the month
+          // columns' own cellStyle above.
           const style = {
             backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})`,
             color: `var(${p.data.rowLabel === 'Plan0' || p.data.rowLabel === 'Plan0-breakdown' ? '--color-text-muted' : '--color-text'})`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
             ...blockBorderStyle(p.data),
           }
           if (p.data.rowLabel === 'Rollup') style.backgroundColor = 'var(--color-breakdown-rollup-tint)'
@@ -1400,6 +1544,12 @@ export default function Verlauf({ year }) {
                   <b>Entf</b> — Aufschlüsselungszeile entfernen
                 </li>
                 <li>
+                  <b>Strg+Umschalt+D</b> — Aufschlüsselung anzeigen
+                </li>
+                <li>
+                  <b>Strg+P</b> — Plan0 anzeigen
+                </li>
+                <li>
                   <b>Strg+I</b> — diese Übersicht ein-/ausblenden
                 </li>
               </ul>
@@ -1413,7 +1563,7 @@ export default function Verlauf({ year }) {
           comment on blockBorderStyle() above for why that border can't be
           reached from a cellStyle/getRowStyle override at all), leaving
           blockBorderStyle()'s own per-cell border as the only one drawn. */}
-      <div className="verlauf-grid min-h-0 flex-1">
+      <div ref={gridWrapperRef} className="verlauf-grid min-h-0 flex-1">
         <AgGridReact
           theme={themeQuartz}
           rowData={rowData}
@@ -1435,6 +1585,17 @@ export default function Verlauf({ year }) {
           getRowId={(p) => p.data.rowId}
           onGridReady={(p) => {
             gridApiRef.current = p.api
+            // A fresh mount's own settle effect can otherwise run before
+            // this ever fires — `gridApiRef.current` still null even after
+            // a deferred setTimeout(0) (found via harness testing the
+            // cross-screen restore: a brand new AG Grid instance's own
+            // internal init takes longer than one macrotask tick, unlike
+            // an existing grid just re-rendering with updated rowData).
+            // Bumping this re-runs the settle effect once the API is
+            // actually ready, same as `rowData` changing does once the
+            // *data* is ready — whichever of the two finishes last is what
+            // actually applies a pending claim.
+            setGridReadyTick((t) => t + 1)
           }}
           // The cursor/focus rectangle should only ever land in a month
           // column (Markus) — suppressNavigable (above) keeps keyboard
@@ -1444,11 +1605,24 @@ export default function Verlauf({ year }) {
           // unconditionally, with no suppressNavigable check at all — found
           // by reading its bundled source once suppressNavigable alone
           // turned out not to be enough). This redirects any such click
-          // straight to that row's January cell instead.
+          // straight back to the *last real month column* (`focusedColIdRef`,
+          // its own comment above) instead of always January — also where
+          // `focusedColIdRef` itself gets updated, and where this screen's
+          // own saved cursor position (`onFocusChange`, Markus: "save the
+          // cursor position... place the cursor there again upon
+          // switching") is reported up to `App.jsx`.
           onCellFocused={(e) => {
             if (e.rowIndex == null || !e.column) return
-            if (['groupName', 'subcatName', 'breakdownActions', 'label', 'breakdownDelete'].includes(e.column.getColId())) {
-              gridApiRef.current?.setFocusedCell(e.rowIndex, 'm1', e.rowPinned)
+            const colId = e.column.getColId()
+            if (['groupName', 'subcatName', 'breakdownActions', 'label', 'breakdownDelete'].includes(colId)) {
+              gridApiRef.current?.setFocusedCell(e.rowIndex, focusedColIdRef.current, e.rowPinned)
+              return
+            }
+            focusedColIdRef.current = colId
+            const rowId = gridApiRef.current?.getDisplayedRowAtIndex(e.rowIndex)?.data?.rowId
+            if (rowId) {
+              lastFocusedRowIdRef.current = rowId
+              onFocusChange?.({ rowId, colId })
             }
           }}
           // Del/Ctrl+D/Ctrl++ (Markus, Sept 2026) — all three act on
@@ -1480,10 +1654,19 @@ export default function Verlauf({ year }) {
               }
               return
             }
-            if (key?.toLowerCase() === 'd' && (p.event.ctrlKey || p.event.metaKey)) {
+            // !shiftKey excludes Ctrl+Shift+D (Aufschlüsselung anzeigen,
+            // below) from also triggering this per-block shortcut.
+            if (key?.toLowerCase() === 'd' && (p.event.ctrlKey || p.event.metaKey) && !p.event.shiftKey) {
               p.event.preventDefault()
               if (row.rowLabel === 'Plan1' || row.rowLabel === 'Plan0') setBlockExpanded(row.blockKey, true)
               else if (row.rowLabel === 'Plan1-breakdown' || row.rowLabel === 'Plan0-breakdown' || row.rowLabel === 'Rollup') {
+                // Collapsing moves the focused row itself out of the row
+                // set, so the cursor lands on the block's own top-line row
+                // instead — *same column* as before (Markus: "after hiding
+                // a breakdown block with ctrl+d, set the cursor back into
+                // the plan0 or plan1 cell of that hidden block, same
+                // column").
+                claimPendingFocus(`${row.targetKey}:${row.targetId}:${row.isPlan0 ? 'Plan0' : 'Plan1'}`)
                 setBlockExpanded(row.blockKey, false)
               }
               return
@@ -1520,6 +1703,12 @@ export default function Verlauf({ year }) {
           // a performance risk.
           suppressRowVirtualisation
           suppressMaxRenderedRowRestriction
+          // One click opens the editor instead of two (Markus: "verlauf
+          // needs a double click to enter a cell or open a modal") — AG
+          // Grid's own default requires a double-click (or Enter/F2) to
+          // start editing; Konten.jsx already had this set, Verlauf never
+          // did.
+          singleClickEdit
           // A colDef's own `spanRows: true` does nothing on its own — this
           // grid-level flag is what actually turns the feature on (found
           // the hard way: every Kategorie/Unterkategorie cell was silently

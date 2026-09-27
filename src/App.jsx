@@ -25,6 +25,16 @@ export default function App() {
   // actually has data for.
   const [year, setYear] = useState(null)
   const [years, setYears] = useState([])
+  // The cursor's last known position on each of these two grid screens
+  // (Markus: "generally, save the cursor position both in konten and
+  // verlauf, and place the cursor there again upon switching") — has to
+  // live here, not in Konten/Verlauf's own state, since switching `view`
+  // away conditionally unmounts whichever screen isn't active (below),
+  // destroying any state/refs it held. Plain in-memory state (not
+  // localStorage) is enough — this is about switching screens within one
+  // session, not surviving a reload.
+  const [kontenFocus, setKontenFocus] = useState(null)
+  const [verlaufFocus, setVerlaufFocus] = useState(null)
 
   useEffect(() => {
     let active = true
@@ -94,8 +104,10 @@ export default function App() {
       usingCachedSession={usingCachedSession}
       onSignOut={() => signOut(auth)}
     >
-      {view === 'konten' && <Konten year={year} onYearChange={setYear} onYearsChange={setYears} />}
-      {view === 'verlauf' && <Verlauf year={year} />}
+      {view === 'konten' && (
+        <Konten year={year} onYearChange={setYear} onYearsChange={setYears} initialFocus={kontenFocus} onFocusChange={setKontenFocus} />
+      )}
+      {view === 'verlauf' && <Verlauf year={year} initialFocus={verlaufFocus} onFocusChange={setVerlaufFocus} />}
       {view === 'importexport' && <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} />}
       {/* Every other nav item (Dashboard, Planung, Quickview, Fortschritt,
           Monatsabschluss, Außenstände, Settings) isn't built yet —
