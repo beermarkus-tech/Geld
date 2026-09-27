@@ -104,10 +104,52 @@ export default function App() {
       usingCachedSession={usingCachedSession}
       onSignOut={() => signOut(auth)}
     >
-      {view === 'konten' && (
-        <Konten year={year} onYearChange={setYear} onYearsChange={setYears} initialFocus={kontenFocus} onFocusChange={setKontenFocus} />
-      )}
-      {view === 'verlauf' && <Verlauf year={year} initialFocus={verlaufFocus} onFocusChange={setVerlaufFocus} />}
+      {/* Konten and Verlauf both stay mounted permanently once first
+          visited, hidden via plain CSS rather than conditionally rendered
+          (Markus: "it seems like the tables are reconstructed every time i
+          switch between screens — is this really necessary?"). It wasn't:
+          conditionally rendering `{view === 'x' && <X />}` fully unmounts
+          whichever screen isn't active, destroying every bit of local
+          state/refs it held — including cursor position, which is exactly
+          why that got its own elaborate initialFocus/onFocusChange
+          plumbing in the first place, and why that plumbing still had
+          real gaps (Markus: "saving the cursor position doesn't seem to
+          work on all cells"). Keeping both mounted removes the need to
+          reconstruct anything (a real, if modest, performance cost too —
+          the whole categories×months grid was being rebuilt from scratch
+          on every switch) and makes cursor/scroll persistence automatic
+          and complete, for free, rather than something to keep patching
+          case by case. `hidden` (Tailwind's `display: none`) rather than
+          an unmount — AG Grid re-measures its own size via a ResizeObserver
+          once its container becomes visible again, so nothing else needs
+          to change for the grid to redraw correctly on switching back.
+          Both mount immediately, right away, not lazily on first visit —
+          simpler than tracking "has this screen ever been opened" for a
+          cost (two grids' worth of Firestore listeners instead of one)
+          this app's real scale doesn't need to avoid. The wrapper div
+          itself needs `flex flex-1 flex-col min-h-0` while visible —
+          NavShell's own `<main>` is a flex column, and Verlauf's internal
+          layout (`flex-1 min-h-0` on its own root) depends on its direct
+          parent actually being one; a plain wrapper div would otherwise
+          silently break that. The existing initialFocus/onFocusChange
+          props are left in place — harmless now (each screen only ever
+          mounts once, so the seed effect fires once and onFocusChange
+          keeps mirroring state that no longer needs mirroring for this
+          purpose) rather than worth the risk of also ripping out this
+          round. */}
+      <div className={view === 'konten' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
+        <Konten
+          year={year}
+          onYearChange={setYear}
+          onYearsChange={setYears}
+          initialFocus={kontenFocus}
+          onFocusChange={setKontenFocus}
+          active={view === 'konten'}
+        />
+      </div>
+      <div className={view === 'verlauf' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
+        <Verlauf year={year} initialFocus={verlaufFocus} onFocusChange={setVerlaufFocus} active={view === 'verlauf'} />
+      </div>
       {view === 'importexport' && <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} />}
       {/* Every other nav item (Dashboard, Planung, Quickview, Fortschritt,
           Monatsabschluss, Außenstände, Settings) isn't built yet —

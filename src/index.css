@@ -164,3 +164,16 @@ body {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
 }
+
+/* A cell's own inline edit input keeps the same text alignment the cell has
+   while displaying, not AG Grid's own default left-aligned edit box
+   (Markus, Sept 2026: "when i enter a cell, keep the cell content aligned
+   the same way as the unentered cell — numbers: aligned right"). Both
+   Verlauf's month/€-total columns and Konten's Betrag column apply
+   Tailwind's `text-right` via their own `cellClass`, on the `.ag-cell`
+   wrapper the edit input renders inside — this just carries that same
+   alignment onto the actual `<input>` AG Grid puts there. */
+.ag-cell.text-right .ag-input-field-input,
+.ag-cell.text-right .ag-text-field-input {
+  text-align: right;
+}

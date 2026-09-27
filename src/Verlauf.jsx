@@ -409,7 +409,7 @@ function AddBreakdownModal({ parentOptions, tagExistsGloballyByName, onSubmit, o
   )
 }
 
-export default function Verlauf({ year, initialFocus, onFocusChange }) {
+export default function Verlauf({ year, initialFocus, onFocusChange, active = true }) {
   const [categories, setCategories] = useState([])
   const [tags, setTags] = useState([])
   const [transactions, setTransactions] = useState([])
@@ -493,12 +493,31 @@ export default function Verlauf({ year, initialFocus, onFocusChange }) {
   // Bumped by onGridReady (below) — see its own comment on why the settle
   // effect needs this second trigger alongside `rowData`.
   const [gridReadyTick, setGridReadyTick] = useState(0)
+  function currentScrollTop() {
+    return gridWrapperRef.current?.querySelector('.ag-body-vertical-scroll-viewport')?.scrollTop ?? null
+  }
+  function restoreScrollTop(value) {
+    if (value == null) return
+    const el = gridWrapperRef.current?.querySelector('.ag-body-vertical-scroll-viewport')
+    if (el) el.scrollTop = value
+  }
   function focusRowNow(rowId, colId = focusedColIdRef.current) {
     const node = gridApiRef.current?.getRowNode(rowId)
     if (node) gridApiRef.current.setFocusedCell(node.rowIndex, colId, node.rowPinned)
   }
+  // Claiming focus also snapshots the current scroll position and restores
+  // it once the claim settles (Markus: "after creating a breakdown row, the
+  // grid still jumps all the way back to the top") — root cause: rebuilding
+  // `rowData` (a brand new tag or budget document changes `tags`/`budgets`,
+  // both dependencies of the `rowData` useMemo) apparently resets AG Grid's
+  // own scroll position as a side effect of however it recomputes this
+  // screen's `spanRows`-merged Kategorie/Unterkategorie cells, even though
+  // every row keeps the exact same `rowId` and nothing else about the
+  // update should call for re-scrolling anywhere. `setFocusedCell` alone
+  // doesn't fight that reset, so this restores the real scrollTop
+  // explicitly right after focus lands.
   function claimPendingFocus(rowId, colId = focusedColIdRef.current) {
-    pendingFocusRef.current = { rowId, colId }
+    pendingFocusRef.current = { rowId, colId, scrollTop: currentScrollTop() }
   }
 
   useEffect(() => {
@@ -610,6 +629,21 @@ export default function Verlauf({ year, initialFocus, onFocusChange }) {
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [])
+
+  // Since App.jsx keeps both screens permanently mounted now, hidden via
+  // plain CSS rather than unmounted, switching *back* to this screen is no
+  // longer a fresh mount — the one-time initialFocus seed effect (above)
+  // already fired long ago and won't fire again. Real DOM focus still
+  // needs re-establishing explicitly on every switch, though: the browser
+  // drops focus from an element the instant its container goes
+  // `display: none`, and nothing restores it automatically just because
+  // the container becomes visible again. Reuses the exact same restore the
+  // frozen-cursor mitigation above already does — same target, same
+  // reasoning, just a different trigger (becoming visible, not an arrow
+  // key pressed while already visible but unfocused).
+  useEffect(() => {
+    if (active && lastFocusedRowIdRef.current) focusRowNow(lastFocusedRowIdRef.current, focusedColIdRef.current)
+  }, [active])
 
   useEffect(() => {
     const unsubs = [
@@ -1080,10 +1114,15 @@ export default function Verlauf({ year, initialFocus, onFocusChange }) {
   // miss) so a claim made just before the row set catches up isn't lost.
   useEffect(() => {
     if (!pendingFocusRef.current || !gridApiRef.current) return
-    const { rowId, colId } = pendingFocusRef.current
+    const { rowId, colId, scrollTop } = pendingFocusRef.current
     const node = gridApiRef.current.getRowNode(rowId)
     if (!node) return
     gridApiRef.current.setFocusedCell(node.rowIndex, colId, node.rowPinned)
+    // Restored on the next frame, not synchronously — whatever resets
+    // scrollTop to 0 (see claimPendingFocus's own comment above) happens as
+    // part of the same render/layout pass this effect runs in, so setting
+    // it back immediately here can still lose to that reset.
+    requestAnimationFrame(() => restoreScrollTop(scrollTop))
     pendingFocusRef.current = null
     // eslint-disable-next-line react-hooks/exhaustive-deps -- gridReadyTick is a second trigger alongside rowData (see onGridReady's own comment) — whichever of "data ready" and "grid ready" finishes last is what actually applies a pending claim
   }, [rowData, gridReadyTick])
@@ -1634,12 +1673,19 @@ export default function Verlauf({ year, initialFocus, onFocusChange }) {
           //   Markus: "ctrl+tab does not work", real browsers reserve it
           //   for switching tabs at the OS/window-manager level, below
           //   where a page's own JS can ever intercept it, unlike this
-          //   confirmed-working replacement**): directional, not a plain
-          //   toggle — "show: from the subcategory totals row [Plan1/
-          //   Plan0], collapse: from anywhere within the breakdown rows [a
-          //   breakdown line or its own automatic rollup header]." A no-op
-          //   from Prog (it has no plan version, so no single block it
-          //   could unambiguously mean).
+          //   confirmed-working replacement**): a real toggle from the
+          //   Plan1/Plan0 top-line row now (Markus, second follow-up: "i
+          //   need to be able to hide a breakdown block also from the
+          //   plan0 or plan1 rows, not only unhide from there") — the
+          //   first version only ever showed from there, never hid, since
+          //   the chevron click already covered that case and the
+          //   keyboard shortcut was built as "show from the top, collapse
+          //   from within" without also asking whether the top row was
+          //   already expanded. Pressed from anywhere within the
+          //   breakdown rows (a line or its own rollup header) it still
+          //   always collapses, same as before. A no-op from Prog (it has
+          //   no plan version, so no single block it could unambiguously
+          //   mean).
           // - Ctrl++: opens the "neue Aufschlüsselungszeile" modal for
           //   whichever block the cursor is in (openAddModalFor's own
           //   Prog→Plan1 default applies here too).
@@ -1658,7 +1704,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange }) {
             // below) from also triggering this per-block shortcut.
             if (key?.toLowerCase() === 'd' && (p.event.ctrlKey || p.event.metaKey) && !p.event.shiftKey) {
               p.event.preventDefault()
-              if (row.rowLabel === 'Plan1' || row.rowLabel === 'Plan0') setBlockExpanded(row.blockKey, true)
+              if (row.rowLabel === 'Plan1' || row.rowLabel === 'Plan0') setBlockExpanded(row.blockKey, !row.blockExpanded)
               else if (row.rowLabel === 'Plan1-breakdown' || row.rowLabel === 'Plan0-breakdown' || row.rowLabel === 'Rollup') {
                 // Collapsing moves the focused row itself out of the row
                 // set, so the cursor lands on the block's own top-line row
@@ -1703,12 +1749,17 @@ export default function Verlauf({ year, initialFocus, onFocusChange }) {
           // a performance risk.
           suppressRowVirtualisation
           suppressMaxRenderedRowRestriction
-          // One click opens the editor instead of two (Markus: "verlauf
-          // needs a double click to enter a cell or open a modal") — AG
-          // Grid's own default requires a double-click (or Enter/F2) to
-          // start editing; Konten.jsx already had this set, Verlauf never
-          // did.
-          singleClickEdit
+          // Double-click (or Enter/F2) opens the editor now, AG Grid's own
+          // default — no `singleClickEdit` here. A first pass misread
+          // Markus's original wording ("verlauf needs a double click to
+          // enter a cell... apply the same principle in konten") as a
+          // request for single-click, and added `singleClickEdit` here to
+          // match Konten's own (at the time). Markus's later, unambiguous
+          // correction ("konten is also still single click to enter...")
+          // confirmed the opposite: single-click-to-edit was never wanted
+          // in either screen, it should take a real double-click or Enter —
+          // removed here, and from Konten.jsx too (see that file's own
+          // grid props).
           // A colDef's own `spanRows: true` does nothing on its own — this
           // grid-level flag is what actually turns the feature on (found
           // the hard way: every Kategorie/Unterkategorie cell was silently

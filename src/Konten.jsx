@@ -297,7 +297,7 @@ function allocationSideOrder(t, targets) {
 // back up via `onYearsChange`, since it's the one screen that currently
 // loads transactions at all; the shell just renders whatever list it's
 // told about.
-export default function Konten({ year, onYearChange, onYearsChange, initialFocus, onFocusChange }) {
+export default function Konten({ year, onYearChange, onYearsChange, initialFocus, onFocusChange, active = true }) {
   const [accounts, setAccounts] = useState([])
   const [categories, setCategories] = useState([])
   const [tags, setTags] = useState([])
@@ -434,30 +434,46 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // effect — that pair is built to *wait* for `rows` to next change, which
   // nothing here is about to do; the target row already exists right now.
   const lastFocusedRef = useRef(null)
+  function restoreLastFocusDirect() {
+    const target = lastFocusedRef.current
+    const api = gridRef.current?.api
+    if (!target || !api) return
+    let node = api.getRowNode(target.id)
+    if (target.lineIndex != null) {
+      let lineNode = null
+      api.forEachNode((n) => {
+        if (n.data?.__isLine && n.data.__parent.id === target.id && n.data.__lineIndex === target.lineIndex) lineNode = n
+      })
+      if (lineNode) node = lineNode
+    }
+    if (!node) return
+    api.ensureIndexVisible(node.rowIndex)
+    api.setFocusedCell(node.rowIndex, target.colId)
+    node.setSelected(true, true)
+  }
   useEffect(() => {
     const onKeyDown = (e) => {
       if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return
       const wrapper = gridWrapperRef.current
       if (!wrapper || wrapper.contains(document.activeElement)) return
-      const target = lastFocusedRef.current
-      const api = gridRef.current?.api
-      if (!target || !api) return
-      let node = api.getRowNode(target.id)
-      if (target.lineIndex != null) {
-        let lineNode = null
-        api.forEachNode((n) => {
-          if (n.data?.__isLine && n.data.__parent.id === target.id && n.data.__lineIndex === target.lineIndex) lineNode = n
-        })
-        if (lineNode) node = lineNode
-      }
-      if (!node) return
-      api.ensureIndexVisible(node.rowIndex)
-      api.setFocusedCell(node.rowIndex, target.colId)
-      node.setSelected(true, true)
+      restoreLastFocusDirect()
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [])
+
+  // Same re-establish-real-DOM-focus need as the frozen-cursor mitigation
+  // above, on a different trigger: App.jsx keeps both screens permanently
+  // mounted now (hidden via CSS, not unmounted — Markus: "it seems like
+  // the tables are reconstructed every time i switch... is this really
+  // necessary?"), so switching back to Konten is never a fresh mount that
+  // the one-time initialFocus seed effect would catch again — the browser
+  // drops real focus the instant this screen's container goes
+  // `display: none`, and nothing restores it automatically just because
+  // it becomes visible again.
+  useEffect(() => {
+    if (active) restoreLastFocusDirect()
+  }, [active])
 
   // Which split transactions currently show their line rows expanded
   // (§3a: "parent row with an expand chevron... plus its detail rows
@@ -2512,12 +2528,19 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           // follows scrolling (Markus). The selection tint already marks the
           // current row.
           suppressRowHoverHighlight
-          // One click starts editing an editable cell, not AG Grid's
-          // default double-click — Markus's date-field report ("double
-          // click... then a third click to open the date selector") was
-          // partly this: the first click was only ever selecting the row,
-          // never starting the edit at all.
-          singleClickEdit={true}
+          // Double-click (or Enter/F2) starts editing an editable cell —
+          // AG Grid's own default. Was `singleClickEdit={true}` for a
+          // while (added for an early date-field report: "double click...
+          // then a third click to open the date selector" — a single click
+          // wasn't starting the edit at all back then, only selecting the
+          // row). Removed per Markus's later, explicit correction ("konten
+          // is also still single click to enter...", confirming the same
+          // fix mistakenly applied to Verlauf too — see that file's own
+          // grid props) — single-click-to-edit was never actually wanted in
+          // either screen; a genuine double-click (one gesture, not two
+          // separate clicks) opens a cell directly regardless of whether it
+          // was already focused, so this doesn't reintroduce the original
+          // three-click problem.
           getRowId={(p) => p.data.id}
           onCellValueChanged={handleCellValueChanged}
           undoRedoCellEditingLimit={20}
