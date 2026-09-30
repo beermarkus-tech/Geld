@@ -10,6 +10,7 @@ import { jahresende } from './lib/balance'
 import { centsToEuro } from './lib/format'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { withRemainder } from './lib/split'
+import { visibleSum } from './lib/visibleSum'
 import { tagFilterMatchIds, tagFilterTotal, tagJahresende } from './lib/tagBalance'
 import { qualifiedTagName, tagColorVar, tagParent } from './lib/tagStyle'
 import TagEditor, { slugify } from './TagEditor'
@@ -326,6 +327,10 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // the filter can match them one by one; the booking rows themselves
   // still filter on their own "(mehrere)" text and drop out.
   const [categoryFilterActive, setCategoryFilterActive] = useState(false)
+  // The total of whatever rows the grid currently shows (visibleSum(),
+  // src/lib/visibleSum.js) — recomputed on every grid model update (filter,
+  // sort or data change); null when adding the rows up isn't meaningful.
+  const [visibleSumCents, setVisibleSumCents] = useState(null)
   // Shared by the "Filter zurücksetzen" button and its Ctrl/Cmd+Shift+F
   // shortcut (Markus) — clears both kinds of filter at once, same as the
   // button always has.
@@ -2226,12 +2231,33 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // an expense breakdown, a claim/loan, or an unresolved legacy string)
   // goes through tagFilterTotal.
   const filteredTagForSum = accountFilter && !filteredAccountId ? tagById[accountFilter] : null
+  function recomputeVisibleSum(api) {
+    const visible = []
+    api.forEachNodeAfterFilterAndSort((n) => {
+      const d = n.data
+      if (!d) return
+      const tx = d.__isLine ? d.__parent : d
+      visible.push({
+        id: d.id,
+        parentId: d.__isLine ? tx.id : null,
+        cents: d.__isLine ? (tx.lines[d.__lineIndex]?.amountCents ?? 0) : betragValue(tx),
+        fromAccountId: tx.fromAccountId,
+        toAccountId: tx.toAccountId,
+        deleted: Boolean(tx.deletedAt),
+      })
+    })
+    setVisibleSumCents(visibleSum(visible, Boolean(filteredAccountId)))
+  }
+
   const tagFilterSum =
     accountFilter && !filteredAccountId
       ? filteredTagForSum?.class === 'allocation'
         ? tagJahresende(accountFilter, Number(year), activeTransactions, tags)
         : tagFilterTotal(accountFilter, `${year}-12-31`, activeTransactions, AUSSENSTAENDE_ACCOUNT_ID, tags)
       : null
+  // Shown for any column filter or account filter (Markus, Sept 2026) — a
+  // tag filter keeps its own tag balance above instead (his call).
+  const showVisibleSum = (anyColumnFilter || !!filteredAccountId) && tagFilterSum === null && visibleSumCents !== null
 
   return (
     <div className="flex min-h-full flex-col gap-3 px-4 py-3">
@@ -2329,6 +2355,12 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
               no column filter shows only the sum; a plain column filter
               with no tag shows only the reset button; either way both stay
               pinned to the right edge, next to the (i) icon below). */}
+          {showVisibleSum && (
+            <span className="text-sm text-[var(--color-text-muted)]">
+              Angezeigt:{' '}
+              <span className="tabular-figure font-medium text-[var(--color-computed)]">{centsToEuro(visibleSumCents)} €</span>
+            </span>
+          )}
           {tagFilterSum !== null && (
             <span className="text-sm text-[var(--color-text-muted)]">
               Angezeigt:{' '}
@@ -2521,6 +2553,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           // programmatically (the tag-chip-click sync effect above), not
           // just a header icon the user opened by hand, which is exactly
           // right: either way there's a real active filter to show/clear.
+          onModelUpdated={(e) => recomputeVisibleSum(e.api)}
           onFilterChanged={(e) => {
             setAnyColumnFilter(e.api.isAnyFilterPresent())
             const model = e.api.getFilterModel()

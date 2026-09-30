@@ -1482,3 +1482,26 @@ The previous entry's approach was wrong for what Markus actually wanted. His Bui
 `npm run lint`, `npx vitest run` and `npm run build` are all clean.
 
 **Standing rule added to CLAUDE.md:** tell Markus the build number (the commit count on main) after every push.
+
+## Session 37, continued a fifth time — 2026-09-30 — Konten: visible total for every filter
+
+Markus asked for the "Angezeigt" sum whenever any filter is set, but only when the booking directions are consistent. Two follow-up questions, answered by Markus:
+1. Rows on different accounts with no transfer arrow (e.g. fuel paid from BNP and from Bar Markus) **do** get a total. Only transfers between the same two accounts in opposite directions block it.
+2. Tag filters from the pinned panel **keep** their existing tag-balance figure.
+
+One call I made myself and flagged to him: with an account filter set, every row is already signed from that account's side, so the total always shows (it's the account's net change over the visible rows).
+
+**Built:**
+- `src/lib/visibleSum.js` with 7 tests.
+- `Konten.jsx` recomputes on every grid model update (`onModelUpdated` → `recomputeVisibleSum()`), using the Betrag values as displayed. Split lines are counted on their own, and skipped when their booking row is visible too.
+- Shown in the toolbar's right-hand group as "Angezeigt: … €".
+- spec.md §3a and CODEMAP updated.
+
+**Verified** in a disposable Konten harness through the real filter UI:
+- Gehalt Markus: 8.000,00 (split line + plain booking).
+- Tanken across two accounts: −100,00.
+- "Umbuchung" matching both BNP→Livret and Livret→BNP: no sum.
+- Only the reverse transfer: −200,00.
+- Konto = BNP: 6.640,00, matching a hand calculation.
+
+Harness deleted before commit. `npm run lint`, `npx vitest run` (71) and `npm run build` are all clean.
