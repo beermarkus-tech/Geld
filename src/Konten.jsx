@@ -319,6 +319,13 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // Grid column filter at all. Drives the "Filter zurücksetzen" button
   // below (Markus): visible whenever *either* kind of filter is active.
   const [anyColumnFilter, setAnyColumnFilter] = useState(false)
+  // Whether a Kategorie/Unterkategorie header filter is set (Markus, Sept
+  // 2026: filtering "Gehalt Markus" must show the matching split *lines*,
+  // not their "(mehrere)" booking rows). While true, every split booking's
+  // lines are included in the grid as if expanded (displayRows below), so
+  // the filter can match them one by one; the booking rows themselves
+  // still filter on their own "(mehrere)" text and drop out.
+  const [categoryFilterActive, setCategoryFilterActive] = useState(false)
   // Shared by the "Filter zurücksetzen" button and its Ctrl/Cmd+Shift+F
   // shortcut (Markus) — clears both kinds of filter at once, same as the
   // button always has.
@@ -703,16 +710,6 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     if (ids.length === 0) return '—'
     return ids.length === 1 ? categoryName(ids[0]) : '(mehrere)'
   }
-  // What the Kategorie/Unterkategorie header filters match a parent row
-  // against (Markus, Sept 2026: filtering "Gehalt Markus" must find a
-  // collapsed split salary booking) — its displayed value plus every
-  // line's own name, so a split booking matches if any of its lines does,
-  // and "(mehrere)" itself stays findable. A line row still filters on its
-  // own category only.
-  const kategorieFilterText = (t) =>
-    [kategorieValue(t), ...new Set((t.lines ?? []).map((l) => l.categoryId).filter(Boolean).map(groupName))].join(', ')
-  const unterkategorieFilterText = (t) =>
-    [unterkategorieValue(t), ...new Set((t.lines ?? []).map((l) => l.categoryId).filter(Boolean).map(categoryName))].join(', ')
   // Resolved names, not raw ids (sorting by cryptic slugs would be
   // meaningless) — falls back to the raw string itself for a legacy
   // pre-tag-mechanism free-text entry that doesn't resolve to any real
@@ -1395,7 +1392,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     const out = []
     for (const tx of rows) {
       out.push(tx)
-      if ((tx.lines?.length ?? 0) > 1 && expandedIds.has(tx.id)) {
+      if ((tx.lines?.length ?? 0) > 1 && (expandedIds.has(tx.id) || categoryFilterActive)) {
         // The line count is baked into every line's own id here, not just
         // its index — a line has no stable id of its own in the schema
         // (§2.6), so removing/adding a line shifts every later line's
@@ -1416,7 +1413,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       }
     }
     return out
-  }, [rows, expandedIds])
+  }, [rows, expandedIds, categoryFilterActive])
 
   // Confirmed column order (spec.md §3a): Datum → Konto → Empfänger →
   // Betrag → Kategorie → Unterkategorie → Details → Tags (plus a narrow,
@@ -1772,11 +1769,6 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         },
         comparator: glueToParent(kategorieValue),
         filter: 'agTextColumnFilter',
-        filterValueGetter: (p) => {
-          if (!p.data.__isLine) return kategorieFilterText(p.data)
-          const catId = p.data.__parent.lines[p.data.__lineIndex]?.categoryId
-          return catId ? groupName(catId) : '—'
-        },
         // Same cascading Kategorie→Unterkategorie picker as the
         // Unterkategorie column below — Kategorie has no stored value of
         // its own, so editing it here writes the same categoryId. A
@@ -1842,11 +1834,6 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         },
         comparator: glueToParent(unterkategorieValue),
         filter: 'agTextColumnFilter',
-        filterValueGetter: (p) => {
-          if (!p.data.__isLine) return unterkategorieFilterText(p.data)
-          const catId = p.data.__parent.lines[p.data.__lineIndex]?.categoryId
-          return catId ? categoryName(catId) : '—'
-        },
         // Same fallback-path reasoning as Kategorie's valueSetter above.
         valueSetter: (p) => {
           if (p.data.__isLine) {
@@ -2534,7 +2521,11 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           // programmatically (the tag-chip-click sync effect above), not
           // just a header icon the user opened by hand, which is exactly
           // right: either way there's a real active filter to show/clear.
-          onFilterChanged={(e) => setAnyColumnFilter(e.api.isAnyFilterPresent())}
+          onFilterChanged={(e) => {
+            setAnyColumnFilter(e.api.isAnyFilterPresent())
+            const model = e.api.getFilterModel()
+            setCategoryFilterActive(!!(model.kategorie || model.unterkategorie))
+          }}
           // suppressMovable (not just per-column, so it also covers the
           // default column menu) keeps the spec'd column order fixed —
           // Markus's request: no accidental drag-reordering or hiding.

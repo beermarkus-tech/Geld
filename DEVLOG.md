@@ -1466,3 +1466,19 @@ Markus: typing "Gehalt Markus" into the Unterkategorie filter (or "Einnahmen" in
 Harness deleted before commit. `npm run lint`, `npx vitest run` and `npm run build` are all clean.
 
 **Next session:** unchanged. First Markus's Außenstände repair run and panel confirmation, then his Planung comparison against the Gsheet.
+
+## Session 37, continued a fourth time — 2026-09-30 — Correction: category filters show matching split lines only
+
+The previous entry's approach was wrong for what Markus actually wanted. His Build 117 screenshot showed the "(mehrere)" booking rows appearing for an "Unterkategorie = Gehalt Markus" filter. He wants **only the matching split lines**, not the booking rows.
+
+**Now:** while a Kategorie or Unterkategorie header filter is set (`categoryFilterActive`, set from `onFilterChanged`'s filter model), `displayRows` includes every split booking's lines as if expanded. The booking rows filter on their own "(mehrere)" text again, so they drop out, and each line matches on its own category. The previous entry's `filterValueGetter`s were removed. Clearing the filter (or "Filter zurücksetzen") returns to the normal collapsed view. spec.md §3a corrected to match.
+
+**Verified** in a disposable Konten harness through the real header filter UI:
+- "Gehalt Markus" shows exactly the 3 Gehalt Markus lines (2 split, 1 plain) and no "(mehrere)" rows.
+- "mehrere" shows only the 2 booking rows.
+- "Sonstiges" in Kategorie shows the 2 Steuerausgaben lines.
+- Clearing or resetting restores the original 4 rows.
+
+`npm run lint`, `npx vitest run` and `npm run build` are all clean.
+
+**Standing rule added to CLAUDE.md:** tell Markus the build number (the commit count on main) after every push.
