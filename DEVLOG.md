@@ -1438,3 +1438,15 @@ New tested functions: `regularShare()`, `splitYear()`, `planungSummary()`. The l
 4. Confirm the Außenstände panel now shows the expected open claims (Dirk, Amazon, …) and totals.
 
 That finally closes the long-standing "Außenstände migration/panel check". **After that, remove the repair section and `retiredAccounts.js`.** Then continue with Markus's Planung comparison against the Gsheet; its "Alle Barkonten" figures are only meaningful after this repair.
+
+## Session 37, continued a second time — 2026-09-30 — Planung layout brought in line with Konten/Verlauf
+
+Markus's four layout requests after seeing Planung live, all done. The decisions are recorded in spec.md §3c ("Layout corrections").
+- **Same look as Konten/Verlauf.** Figures now use the app's own tabular JetBrains Mono (`tabular-figure`); the first build used Tailwind's `font-mono`, which is a different font. Text is 14px with ~30px rows, zeros are blank, the headers match the grids' white/medium style, and the category name cells carry the same section tints as Verlauf (green Einnahmen, red Fixkosten/Ausgaben, purple Rücklagen). "Alle Barkonten" and "Jahresanfang" are blue, as computed account totals.
+- **Group totals in the group headers,** in the group's own color. The separate "… gesamt" rows are gone.
+- **New "Ausgaben inkl. Rücklagen" total,** as the header that opens the Ausgaben block.
+- **Three visibly separate blocks:** Jahresanfang/Einnahmen/Fixkosten, then the Budget band, then Ausgaben. The phone card view got the same treatment: group headers with totals, and the Budget band as its own outlined card between the two halves.
+
+Verified in a disposable harness, rendered side by side with Verlauf. The number cells measure the same font, size (14px) and row height (29 vs. 30px). Light, dark and phone layouts were checked by screenshot. Harness deleted before commit. `npm run lint`, `npx vitest run` (64) and `npm run build` are all clean.
+
+**Next session:** unchanged from the entry above. First Markus's repair run and Außenstände panel confirmation, then his Planung comparison against the Gsheet.

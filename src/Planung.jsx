@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { collection, doc, onSnapshot, setDoc } from 'firebase/firestore'
 
 import { db } from './firebase'
@@ -59,6 +59,15 @@ const SECTION_COLOR = {
   fixkosten: 'var(--color-expense)',
   ausgaben: 'var(--color-expense)',
   ruecklagen: 'var(--color-savings)',
+}
+
+// Section background tint — the same tokens Verlauf's category columns use
+// (§1b.4, including its one deliberate red exception for Ausgaben).
+const SECTION_TINT = {
+  einnahmen: 'var(--color-income-tint)',
+  fixkosten: 'var(--color-alert-tint)',
+  ausgaben: 'var(--color-alert-tint)',
+  ruecklagen: 'var(--color-savings-tint)',
 }
 
 // Ausgaben vs. Budget — "should be near zero"; negative means the plan
@@ -214,10 +223,14 @@ export default function Planung({ year }) {
       .sort((a, b) => ALLOCATION_TAG_ORDER.indexOf(a.id) - ALLOCATION_TAG_ORDER.indexOf(b.id))
       .map((t) => row('allocationTagId', t.id, `Für ${t.name}`))
 
-    const einnahmenTotal = total('Einnahmen gesamt', einnahmen)
-    const fixkostenTotal = total('Fixkosten gesamt', fixkosten)
+    const einnahmenTotal = total('Einnahmen', einnahmen)
+    const fixkostenTotal = total('Fixkosten', fixkosten)
     const ausgabenTotal = total('Ausgaben gesamt', ausgabenGroups.flatMap((g) => g.rows))
-    const ruecklagenTotal = total('Rücklagen gesamt', ruecklagen)
+    const ruecklagenTotal = total('Rücklagen', ruecklagen)
+    // The grand total above the per-group breakdown (§3c: "Ausgaben +
+    // Rücklagen is the grand total row that sits just above the per-group
+    // breakdown").
+    const ausgabenInklTotal = total('Ausgaben inkl. Rücklagen', [...ausgabenGroups.flatMap((g) => g.rows), ...ruecklagen])
 
     const startCashAccounts = accounts.filter((a) => START_CASH_GROUPS.includes(a.reportingGroup))
     const startCash = (y) => startCashAccounts.reduce((a, acc) => a + jahresanfang(acc.id, y, transactions), 0)
@@ -244,12 +257,13 @@ export default function Planung({ year }) {
     return {
       einnahmen: einnahmen.filter(visible),
       fixkosten: fixkosten.filter(visible),
-      ausgabenGroups: ausgabenGroups.map((g) => ({ ...g, rows: g.rows.filter(visible), total: total(`${g.name} gesamt`, g.rows) })),
+      ausgabenGroups: ausgabenGroups.map((g) => ({ ...g, rows: g.rows.filter(visible), total: total(g.name, g.rows) })),
       ruecklagen: ruecklagen.filter(visible),
       einnahmenTotal,
       fixkostenTotal,
       ausgabenTotal,
       ruecklagenTotal,
+      ausgabenInklTotal,
       ref: summary(refYear, 'ref'),
       plan: summary(planYear, 'plan'),
     }
@@ -261,7 +275,7 @@ export default function Planung({ year }) {
 
   return (
     <div className="min-h-0 flex-1 overflow-auto px-4 py-4 md:px-5">
-      <div className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-[var(--color-text-muted)]">
+      <div className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-[var(--color-text-muted)]">
         <span>
           Referenzjahr <b className="text-[var(--color-text)]">{refYear}</b> · immer Plan 0
         </span>
@@ -275,7 +289,7 @@ export default function Planung({ year }) {
                 role="radio"
                 aria-checked={lens === l.id}
                 onClick={() => chooseLens(l.id)}
-                className={`rounded-md px-2.5 py-0.5 text-[11px] font-semibold ${
+                className={`whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ${
                   lens === l.id ? 'bg-[var(--color-surface)] text-[var(--color-computed)] shadow-sm' : ''
                 }`}
               >
@@ -312,27 +326,27 @@ function BudgetChart({ years }) {
   const max = Math.max(1, ...bars.flatMap((b) => [b.budget, b.ausgaben + b.ruecklagen]))
   const pct = (v) => `${(v / max) * 100}%`
   return (
-    <section className="mb-5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
-      <h3 className="mb-3 text-sm font-semibold">Budget vs. Ausgaben + Rücklagen</h3>
+    <section className="mb-5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-sm">
+      <h3 className="mb-3 font-semibold">Budget vs. Ausgaben + Rücklagen</h3>
       <div className="flex flex-col gap-4">
         {bars.map((b) => (
-          <div key={b.year} className="grid grid-cols-[3rem_1fr] items-center gap-x-3 gap-y-1 text-xs">
+          <div key={b.year} className="grid grid-cols-[3rem_1fr] items-center gap-x-3 gap-y-1">
             <span className="row-span-2 font-semibold">{b.year}</span>
             <div className="flex items-center gap-2">
               <div className="h-4 rounded-sm bg-[var(--color-income)]" style={{ width: pct(b.budget) }} />
-              <span className="font-mono whitespace-nowrap">{euro(b.budget)}</span>
+              <span className="tabular-figure whitespace-nowrap">{euro(b.budget)}</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="flex h-4" style={{ width: pct(b.ausgaben + b.ruecklagen) }}>
                 <div className="h-full rounded-l-sm bg-[var(--color-expense)]" style={{ width: `${(b.ausgaben / (b.ausgaben + b.ruecklagen || 1)) * 100}%` }} />
                 <div className="h-full rounded-r-sm bg-[var(--color-savings)]" style={{ width: `${(b.ruecklagen / (b.ausgaben + b.ruecklagen || 1)) * 100}%` }} />
               </div>
-              <span className="font-mono whitespace-nowrap">{euro(b.ausgaben + b.ruecklagen)}</span>
+              <span className="tabular-figure whitespace-nowrap">{euro(b.ausgaben + b.ruecklagen)}</span>
             </div>
           </div>
         ))}
       </div>
-      <div className="mt-3 flex gap-4 text-[11px] text-[var(--color-text-muted)]">
+      <div className="mt-3 flex gap-4 text-xs text-[var(--color-text-muted)]">
         <Legend color="var(--color-income)" label="Budget" />
         <Legend color="var(--color-expense)" label="Ausgaben" />
         <Legend color="var(--color-savings)" label="Rücklagen" />
@@ -361,7 +375,7 @@ function PufferCell({ cents, onSave, label }) {
         onClick={() => setDraft(cents ? centsToWholeEuro(cents) : '')}
         title="Puffer bearbeiten"
         aria-label={`${label} bearbeiten`}
-        className="font-mono underline decoration-dotted underline-offset-2"
+        className="tabular-figure underline decoration-dotted underline-offset-2"
       >
         {euro(-cents)}
       </button>
@@ -384,7 +398,7 @@ function PufferCell({ cents, onSave, label }) {
         if (e.key === 'Enter') commit()
         if (e.key === 'Escape') setDraft(null)
       }}
-      className="w-24 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-1 text-right font-mono"
+      className="tabular-figure w-24 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-1 text-right"
     />
   )
 }
@@ -398,7 +412,7 @@ function CommentIcon({ y, target, commentFor, openComment, setOpenComment }) {
       onClick={() => setOpenComment(openComment === key ? null : key)}
       title={text ?? `${y}: Kein Kommentar — klicken zum Hinzufügen`}
       aria-label={`Kommentar ${y} ${target.label}`}
-      className={`ml-1 text-[13px] leading-none ${text ? '' : 'opacity-30 grayscale hover:opacity-70'}`}
+      className={`ml-1 text-xs leading-none ${text ? '' : 'opacity-30 grayscale hover:opacity-70'}`}
     >
       💬
     </button>
@@ -413,7 +427,7 @@ function CommentEditor({ y, target, commentFor, saveComment, setOpenComment }) {
   }
   return (
     <div className="flex flex-col gap-1.5 text-left">
-      <span className="text-[11px] font-semibold text-[var(--color-text-muted)]">
+      <span className="text-xs font-semibold text-[var(--color-text-muted)]">
         Kommentar {y} — {target.label}
       </span>
       <textarea
@@ -425,13 +439,13 @@ function CommentEditor({ y, target, commentFor, saveComment, setOpenComment }) {
           if (e.key === 'Escape') setOpenComment(null)
           if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) save()
         }}
-        className="w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-1.5 text-xs font-normal whitespace-normal"
+        className="w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-1.5 text-sm font-normal whitespace-normal"
       />
       <div className="flex gap-2">
-        <button type="button" onClick={save} className="rounded bg-[var(--color-computed)] px-2.5 py-1 text-xs font-semibold text-white">
+        <button type="button" onClick={save} className="rounded-md bg-[var(--color-computed)] px-3 py-1 text-sm font-medium text-white">
           Speichern
         </button>
-        <button type="button" onClick={() => setOpenComment(null)} className="rounded border border-[var(--color-border)] px-2.5 py-1 text-xs">
+        <button type="button" onClick={() => setOpenComment(null)} className="rounded-md border border-[var(--color-border)] px-3 py-1 text-sm">
           Abbrechen
         </button>
       </div>
@@ -446,7 +460,7 @@ function CommentLines({ target, commentFor, refYear, planYear }) {
     .filter(([, text]) => text)
   if (lines.length === 0) return null
   return lines.map(([y, text]) => (
-    <div key={y} className="text-[11px] font-normal whitespace-normal text-[var(--color-text-muted)] italic">
+    <div key={y} className="text-xs font-normal whitespace-normal text-[var(--color-text-muted)] italic">
       ↳ {y}: {text}
     </div>
   ))
@@ -457,46 +471,63 @@ function splitPill(split) {
   return `${split.percent}/${100 - split.percent}`
 }
 
-const TH_BASE = 'sticky top-0 whitespace-nowrap border-b border-[var(--color-border)] bg-[var(--color-line-row-tint)] px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]'
+// Same cell conventions as Verlauf's grid: 14px text, ~30px rows, figures
+// in the tabular JetBrains Mono face (`tabular-figure`, index.css), a
+// value of exactly 0 shown blank, and the category name cells tinted by
+// section (SECTION_TINT).
+const TH_BASE = 'sticky top-0 whitespace-nowrap border-b border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-3 font-medium'
 const TH = `${TH_BASE} z-10 text-right`
-const TD = 'whitespace-nowrap border-b border-[var(--color-border)] px-2 py-1 text-right font-mono'
-const NAME_TD = 'sticky left-0 whitespace-nowrap border-b border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-left font-semibold'
+const TD = 'tabular-figure whitespace-nowrap border-b border-[var(--color-border)] px-3 py-1 text-right'
+const NAME_TD = 'sticky left-0 whitespace-nowrap border-b border-[var(--color-border)] px-3 py-1 text-left'
 
-function SectionBand({ label, section }) {
+function blankZero(cents) {
+  return cents === 0 ? '' : euro(cents)
+}
+
+// A group header row that carries its own group's totals (Markus, Sept
+// 2026: "put the sub group totals into the subgroup headers") — label and
+// every figure in the group's own color, the whole row in its section tint.
+function GroupHeader({ t, section }) {
+  const style = { backgroundColor: SECTION_TINT[section], color: SECTION_COLOR[section] }
   return (
-    <tr>
-      <td colSpan={6} className="border-b border-[var(--color-border)] bg-[var(--color-line-row-tint)] px-2 py-1.5 text-left text-[11px] font-bold tracking-wide uppercase" style={{ color: SECTION_COLOR[section] }}>
-        {label}
+    <tr className="font-semibold" style={style}>
+      <td className={NAME_TD} style={style}>
+        {t.label}
       </td>
+      <td className={TD}>{blankZero(t.ref)}</td>
+      <td className={TD}>{blankZero(t.plan)}</td>
+      <td className={TD}>{blankZero(t.split.regularYear)}</td>
+      <td className={TD}>{blankZero(t.split.regularMonth)}</td>
+      <td className={TD}>{blankZero(t.split.lumpYear)}</td>
     </tr>
   )
 }
 
-function DataRow({ r, c }) {
+function DataRow({ r, section, c }) {
   const { refYear, planYear } = c
   const pill = splitPill(r.split)
   const editing = c.openComment === `${refYear}:${r.targetId}` ? refYear : c.openComment === `${planYear}:${r.targetId}` ? planYear : null
   return (
     <>
       <tr>
-        <td className={NAME_TD}>
+        <td className={`${NAME_TD} pl-6`} style={{ backgroundColor: SECTION_TINT[section] }}>
           {r.label}
           <CommentLines target={r} {...c} />
         </td>
         <td className={TD}>
-          {euro(r.ref)}
+          {blankZero(r.ref)}
           <CommentIcon y={refYear} target={r} {...c} />
         </td>
         <td className={TD}>
-          {euro(r.plan)}
+          {blankZero(r.plan)}
           <CommentIcon y={planYear} target={r} {...c} />
         </td>
-        <td className={TD}>{euro(r.split.regularYear)}</td>
-        <td className={TD}>{euro(r.split.regularMonth)}</td>
+        <td className={TD}>{blankZero(r.split.regularYear)}</td>
+        <td className={TD}>{blankZero(r.split.regularMonth)}</td>
         <td className={TD}>
-          {euro(r.split.lumpYear)}
+          {blankZero(r.split.lumpYear)}
           {pill && (
-            <span className="ml-1.5 inline-block rounded-full bg-[var(--color-savings-tint)] px-1.5 py-px font-sans text-[9.5px] font-semibold text-[var(--color-savings)]">
+            <span className="ml-1.5 inline-block rounded-full bg-[var(--color-savings-tint)] px-1.5 py-px font-sans text-xs font-medium text-[var(--color-savings)]">
               {pill}
             </span>
           )}
@@ -504,7 +535,7 @@ function DataRow({ r, c }) {
       </tr>
       {editing && (
         <tr>
-          <td colSpan={6} className="border-b border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-2">
+          <td colSpan={6} className="border-b border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2">
             <CommentEditor key={c.openComment} y={editing} target={r} {...c} />
           </td>
         </tr>
@@ -513,31 +544,45 @@ function DataRow({ r, c }) {
   )
 }
 
-function TotalRow({ t, bold = true }) {
+function Group({ t, rows, section, c }) {
   return (
-    <tr className={bold ? 'font-bold' : ''}>
-      <td className={NAME_TD}>{t.label}</td>
-      <td className={TD}>{euro(t.ref)}</td>
-      <td className={TD}>{euro(t.plan)}</td>
-      <td className={TD}>{euro(t.split.regularYear)}</td>
-      <td className={TD}>{euro(t.split.regularMonth)}</td>
-      <td className={TD}>{euro(t.split.lumpYear)}</td>
-    </tr>
+    <>
+      <GroupHeader t={t} section={section} />
+      {rows.map((r) => (
+        <DataRow key={r.targetId} r={r} section={section} c={c} />
+      ))}
+    </>
   )
 }
 
-// A summary-band row: only the two year columns carry a value. Each value
-// is either plain cents or `{ node, color }` for a custom cell.
-function BandRow({ label, refValue, planValue, color, className = '' }) {
+// A summary row (Jahresanfang, Budget band): only the two year columns
+// carry a value. Each value is either plain cents or `{ node, color }`.
+function BandRow({ label, refValue, planValue, color, bold = false }) {
   const cell = (v) => (typeof v === 'number' ? { node: euro(v), color } : { node: v.node, color: color ?? v.color })
   const r = cell(refValue)
   const p = cell(planValue)
   return (
-    <tr className={`font-bold ${className}`}>
-      <td className={NAME_TD} style={color ? { color } : undefined}>{label}</td>
-      <td className={TD} style={r.color ? { color: r.color } : undefined}>{r.node}</td>
-      <td className={TD} style={p.color ? { color: p.color } : undefined}>{p.node}</td>
+    <tr className={bold ? 'font-semibold' : ''}>
+      <td className={`${NAME_TD} bg-[var(--color-surface)]`} style={color ? { color } : undefined}>
+        {label}
+      </td>
+      <td className={TD} style={r.color ? { color: r.color } : undefined}>
+        {r.node}
+      </td>
+      <td className={TD} style={p.color ? { color: p.color } : undefined}>
+        {p.node}
+      </td>
       <td colSpan={3} className="border-b border-[var(--color-border)]" />
+    </tr>
+  )
+}
+
+// The visual split between the report's three blocks (Markus, Sept 2026):
+// Einnahmen/Fixkosten → the Budget band → Ausgaben.
+function BlockGap() {
+  return (
+    <tr aria-hidden="true">
+      <td colSpan={6} className="h-5 border-b border-[var(--color-border)] bg-[var(--color-bg)] p-0" />
     </tr>
   )
 }
@@ -545,9 +590,8 @@ function BandRow({ label, refValue, planValue, color, className = '' }) {
 function ReportTable({ report, savePuffer, ...c }) {
   const { refYear, planYear } = c
   const { ref, plan } = report
-
   return (
-    <table className="w-full border-collapse bg-[var(--color-surface)] text-xs">
+    <table className="w-full border-separate border-spacing-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-sm">
       <thead>
         <tr>
           <th className={`${TH_BASE} left-0 z-20 text-left`}>Kategorie</th>
@@ -559,42 +603,32 @@ function ReportTable({ report, savePuffer, ...c }) {
         </tr>
       </thead>
       <tbody>
-        <BandRow label="Alle Barkonten" refValue={ref.jahresanfangRaw} planValue={plan.jahresanfangRaw} />
+        <BandRow label="Alle Barkonten" refValue={ref.jahresanfangRaw} planValue={plan.jahresanfangRaw} color="var(--color-computed)" />
         <BandRow
           label="Puffer"
           refValue={{ node: <PufferCell cents={ref.puffer} onSave={(v) => savePuffer(refYear, v)} label={`Puffer ${refYear}`} /> }}
           planValue={{ node: <PufferCell cents={plan.puffer} onSave={(v) => savePuffer(planYear, v)} label={`Puffer ${planYear}`} /> }}
         />
-        <BandRow label="Jahresanfang (Barkonten − Puffer)" refValue={ref.startCash} planValue={plan.startCash} />
+        <BandRow label="Jahresanfang (Barkonten − Puffer)" refValue={ref.startCash} planValue={plan.startCash} color="var(--color-computed)" bold />
+        <Group t={report.einnahmenTotal} rows={report.einnahmen} section="einnahmen" c={c} />
+        <Group t={report.fixkostenTotal} rows={report.fixkosten} section="fixkosten" c={c} />
 
-        <SectionBand label="Einnahmen" section="einnahmen" />
-        {report.einnahmen.map((r) => <DataRow key={r.targetId} r={r} c={c} />)}
-        <TotalRow t={report.einnahmenTotal} />
-
-        <SectionBand label="Fixkosten" section="fixkosten" />
-        {report.fixkosten.map((r) => <DataRow key={r.targetId} r={r} c={c} />)}
-        <TotalRow t={report.fixkostenTotal} />
-
-        <BandRow label="Budget" refValue={ref.budget} planValue={plan.budget} color="var(--color-computed)" />
+        <BlockGap />
+        <BandRow label="Budget" refValue={ref.budget} planValue={plan.budget} color="var(--color-computed)" bold />
         <BandRow
           label="Ausgaben vs. Budget — sollte nahe Null sein"
           refValue={{ node: euro(ref.ausgabenVsBudget), color: deltaColor(ref.ausgabenVsBudget) }}
           planValue={{ node: euro(plan.ausgabenVsBudget), color: deltaColor(plan.ausgabenVsBudget) }}
+          bold
         />
         <BandRow label="… gebildete Rücklagen (Teil der Ausgaben)" refValue={-ref.ruecklagen} planValue={-plan.ruecklagen} color="var(--color-savings)" />
 
+        <BlockGap />
+        <GroupHeader t={report.ausgabenInklTotal} section="ausgaben" />
         {report.ausgabenGroups.map((g) => (
-          <Fragment key={g.name}>
-            <SectionBand label={g.name} section="ausgaben" />
-            {g.rows.map((r) => <DataRow key={r.targetId} r={r} c={c} />)}
-            <TotalRow t={g.total} bold={false} />
-          </Fragment>
+          <Group key={g.name} t={g.total} rows={g.rows} section="ausgaben" c={c} />
         ))}
-        <TotalRow t={report.ausgabenTotal} />
-
-        <SectionBand label="Rücklagen" section="ruecklagen" />
-        {report.ruecklagen.map((r) => <DataRow key={r.targetId} r={r} c={c} />)}
-        <TotalRow t={report.ruecklagenTotal} />
+        <Group t={report.ruecklagenTotal} rows={report.ruecklagen} section="ruecklagen" c={c} />
       </tbody>
     </table>
   )
@@ -607,7 +641,7 @@ function Card({ r, c }) {
   const pill = splitPill(r.split)
   const editingYear = [refYear, planYear].find((y) => c.openComment === `${y}:${r.targetId}`)
   return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-xs">
+    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-sm">
       <div className="mb-1 font-semibold">{r.label}</div>
       {[
         [refYear, r.ref],
@@ -618,7 +652,7 @@ function Card({ r, c }) {
             {y}
             <CommentIcon y={y} target={r} {...c} />
           </span>
-          <span className="font-mono">{euro(v)}</span>
+          <span className="tabular-figure">{euro(v)}</span>
         </div>
       ))}
       {pill && (
@@ -626,7 +660,7 @@ function Card({ r, c }) {
           <span>
             Regulär {r.split.percent}% · Einmal {100 - r.split.percent}%
           </span>
-          <span className="font-mono">{euro(r.split.lumpYear)}</span>
+          <span className="tabular-figure">{euro(r.split.lumpYear)}</span>
         </div>
       )}
       <CommentLines target={r} {...c} />
@@ -639,19 +673,27 @@ function Card({ r, c }) {
   )
 }
 
-function CardSection({ label, section, rows, t, c }) {
+// A card-stack section header carrying its own total, in the group's own
+// color and tint — the phone equivalent of GroupHeader.
+function CardGroupHeader({ t, section }) {
+  return (
+    <div
+      className="flex justify-between rounded-md px-3 py-1.5 text-sm font-semibold"
+      style={{ backgroundColor: SECTION_TINT[section], color: SECTION_COLOR[section] }}
+    >
+      <span>{t.label}</span>
+      <span className="tabular-figure">{euro(t.plan)}</span>
+    </div>
+  )
+}
+
+function CardSection({ t, section, rows, c }) {
   return (
     <section className="flex flex-col gap-2">
-      <h3 className="text-[11px] font-bold tracking-wide uppercase" style={{ color: SECTION_COLOR[section] }}>
-        {label}
-      </h3>
-      {rows.map((r) => <Card key={r.targetId} r={r} c={c} />)}
-      {t && (
-        <div className="flex justify-between px-1 text-xs font-bold">
-          <span>{t.label}</span>
-          <span className="font-mono">{euro(t.plan)}</span>
-        </div>
-      )}
+      <CardGroupHeader t={t} section={section} />
+      {rows.map((r) => (
+        <Card key={r.targetId} r={r} c={c} />
+      ))}
     </section>
   )
 }
@@ -660,7 +702,7 @@ function Line({ label, value, color }) {
   return (
     <div className="flex justify-between">
       <span>{label}</span>
-      <span className="font-mono" style={color ? { color } : undefined}>
+      <span className="tabular-figure" style={color ? { color } : undefined}>
         {value}
       </span>
     </div>
@@ -670,29 +712,32 @@ function Line({ label, value, color }) {
 function ReportCards({ report, savePuffer, ...c }) {
   const { planYear } = c
   const { ref, plan } = report
-
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-xs font-semibold">
-        <Line label={`Budget ${planYear}`} value={euro(plan.budget)} color="var(--color-computed)" />
-        <Line label="Ausgaben vs. Budget" value={euro(plan.ausgabenVsBudget)} color={deltaColor(plan.ausgabenVsBudget)} />
-      </div>
-      <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-xs">
+      <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-sm">
         <div className="mb-1 font-semibold">Jahresanfang</div>
         {[ref, plan].map((s) => (
           <div key={s.year} className="flex flex-col gap-0.5 border-t border-[var(--color-border)] py-1 first-of-type:border-t-0">
-            <Line label={`Alle Barkonten ${s.year}`} value={euro(s.jahresanfangRaw)} />
+            <Line label={`Alle Barkonten ${s.year}`} value={euro(s.jahresanfangRaw)} color="var(--color-computed)" />
             <Line label="Puffer" value={<PufferCell cents={s.puffer} onSave={(v) => savePuffer(s.year, v)} label={`Puffer ${s.year}`} />} />
-            <Line label="Jahresanfang" value={euro(s.startCash)} />
+            <Line label="Jahresanfang" value={euro(s.startCash)} color="var(--color-computed)" />
           </div>
         ))}
       </div>
-      <CardSection label="Einnahmen" section="einnahmen" rows={report.einnahmen} t={report.einnahmenTotal} c={c} />
-      <CardSection label="Fixkosten" section="fixkosten" rows={report.fixkosten} t={report.fixkostenTotal} c={c} />
+      <CardSection t={report.einnahmenTotal} section="einnahmen" rows={report.einnahmen} c={c} />
+      <CardSection t={report.fixkostenTotal} section="fixkosten" rows={report.fixkosten} c={c} />
+
+      <div className="my-2 flex flex-col gap-0.5 rounded-lg border-2 border-[var(--color-computed)] bg-[var(--color-surface)] p-3 text-sm font-semibold">
+        <Line label={`Budget ${planYear}`} value={euro(plan.budget)} color="var(--color-computed)" />
+        <Line label="Ausgaben vs. Budget" value={euro(plan.ausgabenVsBudget)} color={deltaColor(plan.ausgabenVsBudget)} />
+        <Line label="… gebildete Rücklagen" value={euro(-plan.ruecklagen)} color="var(--color-savings)" />
+      </div>
+
+      <CardGroupHeader t={report.ausgabenInklTotal} section="ausgaben" />
       {report.ausgabenGroups.map((g) => (
-        <CardSection key={g.name} label={g.name} section="ausgaben" rows={g.rows} t={g.total} c={c} />
+        <CardSection key={g.name} t={g.total} section="ausgaben" rows={g.rows} c={c} />
       ))}
-      <CardSection label="Rücklagen" section="ruecklagen" rows={report.ruecklagen} t={report.ruecklagenTotal} c={c} />
+      <CardSection t={report.ruecklagenTotal} section="ruecklagen" rows={report.ruecklagen} c={c} />
     </div>
   )
 }
