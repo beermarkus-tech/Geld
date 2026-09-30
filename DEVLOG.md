@@ -1450,3 +1450,19 @@ Markus's four layout requests after seeing Planung live, all done. The decisions
 Verified in a disposable harness, rendered side by side with Verlauf. The number cells measure the same font, size (14px) and row height (29 vs. 30px). Light, dark and phone layouts were checked by screenshot. Harness deleted before commit. `npm run lint`, `npx vitest run` (64) and `npm run build` are all clean.
 
 **Next session:** unchanged from the entry above. First Markus's repair run and Außenstände panel confirmation, then his Planung comparison against the Gsheet.
+
+## Session 37, continued a third time — 2026-09-30 — Konten: category filters find collapsed split bookings
+
+Markus: typing "Gehalt Markus" into the Unterkategorie filter (or "Einnahmen" into Kategorie) didn't find the split salary booking while its lines were collapsed. **Cause:** a split booking with mixed categories displays "(mehrere)" in both columns, and AG Grid's text filter matched only that. Its line rows, which do carry the real categories, only exist while the booking is expanded.
+
+**Fixed:** both columns now have a `filterValueGetter`, the same approach the Tags column already used. A booking row filters on its displayed value plus every line's own category or group name, so it matches if any line matches, and "(mehrere)" itself stays findable. A line row still filters on its own category, so expanding under an active filter shows only the matching lines. Display, sorting and editing are unchanged. The rule is recorded in spec.md §3a's per-field filter bullet.
+
+**Verified** in a disposable Konten harness driving the real header filter UI:
+- "Gehalt Markus" shows the collapsed split booking plus a plain salary booking, and hides Nebenkosten.
+- Expanded, only the Gehalt Markus line shows under the split booking.
+- "Sonstiges" finds the split booking via its Steuerausgaben line.
+- "Wohnen" excludes it.
+
+Harness deleted before commit. `npm run lint`, `npx vitest run` and `npm run build` are all clean.
+
+**Next session:** unchanged. First Markus's Außenstände repair run and panel confirmation, then his Planung comparison against the Gsheet.

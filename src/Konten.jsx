@@ -703,6 +703,16 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     if (ids.length === 0) return '—'
     return ids.length === 1 ? categoryName(ids[0]) : '(mehrere)'
   }
+  // What the Kategorie/Unterkategorie header filters match a parent row
+  // against (Markus, Sept 2026: filtering "Gehalt Markus" must find a
+  // collapsed split salary booking) — its displayed value plus every
+  // line's own name, so a split booking matches if any of its lines does,
+  // and "(mehrere)" itself stays findable. A line row still filters on its
+  // own category only.
+  const kategorieFilterText = (t) =>
+    [kategorieValue(t), ...new Set((t.lines ?? []).map((l) => l.categoryId).filter(Boolean).map(groupName))].join(', ')
+  const unterkategorieFilterText = (t) =>
+    [unterkategorieValue(t), ...new Set((t.lines ?? []).map((l) => l.categoryId).filter(Boolean).map(categoryName))].join(', ')
   // Resolved names, not raw ids (sorting by cryptic slugs would be
   // meaningless) — falls back to the raw string itself for a legacy
   // pre-tag-mechanism free-text entry that doesn't resolve to any real
@@ -1762,6 +1772,11 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         },
         comparator: glueToParent(kategorieValue),
         filter: 'agTextColumnFilter',
+        filterValueGetter: (p) => {
+          if (!p.data.__isLine) return kategorieFilterText(p.data)
+          const catId = p.data.__parent.lines[p.data.__lineIndex]?.categoryId
+          return catId ? groupName(catId) : '—'
+        },
         // Same cascading Kategorie→Unterkategorie picker as the
         // Unterkategorie column below — Kategorie has no stored value of
         // its own, so editing it here writes the same categoryId. A
@@ -1827,6 +1842,11 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         },
         comparator: glueToParent(unterkategorieValue),
         filter: 'agTextColumnFilter',
+        filterValueGetter: (p) => {
+          if (!p.data.__isLine) return unterkategorieFilterText(p.data)
+          const catId = p.data.__parent.lines[p.data.__lineIndex]?.categoryId
+          return catId ? categoryName(catId) : '—'
+        },
         // Same fallback-path reasoning as Kategorie's valueSetter above.
         valueSetter: (p) => {
           if (p.data.__isLine) {
