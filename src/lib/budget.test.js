@@ -7,6 +7,10 @@ import {
   budgetBreakdownLineMonths,
   budgetTopLineMonths,
   categoryMonthActual,
+  planungSummary,
+  progMonths,
+  regularShare,
+  splitYear,
 } from './budget'
 
 // Synthetic fixtures only — same standing privacy rule as balance.test.js/
@@ -243,5 +247,102 @@ describe('breakdownGroupAllocationMonthActual()', () => {
     expect(
       breakdownGroupAllocationMonthActual('sparen-familie', new Set(['fonds-a']), 2025, 6, [laterContribution], [SPAREN_FAMILIE]),
     ).toBe(0)
+  })
+})
+
+describe('progMonths()', () => {
+  const plan1 = [-100, -200, -300, -400, -500, -600, -700, -800, -900, -1000, -1100, -1200]
+  const tx = { date: '2025-02-14', lines: [{ amountCents: -250, categoryId: 'tanken', note: '', tags: [] }] }
+
+  it('uses the real actual for a closed month and mirrors Plan1 for an open one', () => {
+    const prog = progMonths('categoryId', 'tanken', plan1, [1, 2], 2025, [tx], [])
+    expect(prog[0]).toBe(0) // closed, nothing booked
+    expect(prog[1]).toBe(-250) // closed, real actual
+    expect(prog[2]).toBe(-300) // open, mirrors Plan1
+  })
+
+  it('uses the allocation-tag actual for an allocationTagId target', () => {
+    const tag = { id: 'sparen-sophia', reconciliationTargetAccountIds: ['livret-a-sparen'] }
+    const contribution = {
+      date: '2025-01-05',
+      fromAccountId: 'bnp-konto',
+      toAccountId: 'livret-a-sparen',
+      lines: [{ amountCents: 5000, categoryId: null, note: '', tags: ['sparen-sophia'] }],
+    }
+    expect(progMonths('allocationTagId', 'sparen-sophia', plan1, [1], 2025, [contribution], [tag])[0]).toBe(-5000)
+  })
+})
+
+describe('regularShare() / splitYear()', () => {
+  it('a near-constant monthly cost with one lump lands at the median × 12 share (spec.md §3c Nebenkosten pattern)', () => {
+    // 11 × −200 plus one −1.000 lump: median −200, regular −2.400 of −3.200 = 75 %
+    const months = [...Array(11).fill(-20000), -100000]
+    const share = regularShare(months)
+    expect(share).toBeCloseTo(0.75)
+    expect(splitYear(-400000, share)).toEqual({ regularYear: -300000, regularMonth: -25000, lumpYear: -100000, percent: 75 })
+  })
+
+  it('mostly-zero months with one lump payment land at 100 % einmalig', () => {
+    const months = [0, 0, 0, 0, 0, -500000, 0, 0, 0, 0, 0, 0]
+    expect(splitYear(-600000, regularShare(months))).toEqual({ regularYear: 0, regularMonth: 0, lumpYear: -600000, percent: 0 })
+  })
+
+  it('no reference data, or a zero reference total, falls back to 100 % einmalig', () => {
+    expect(regularShare(null)).toBe(0)
+    expect(regularShare(Array(12).fill(0))).toBe(0)
+  })
+
+  it('a refund pushing the share past 100 % is shown as computed, not clamped (spec.md §2.8)', () => {
+    // 11 × −100 plus a +500 refund: total −600, median −100 → −1.200 regular, 200 %
+    const share = regularShare([...Array(11).fill(-10000), 50000])
+    expect(share).toBeCloseTo(2)
+    const split = splitYear(-60000, share)
+    expect(split.percent).toBe(200)
+    expect(split.lumpYear).toBe(60000)
+  })
+
+  it('regular + lump always add back up to the yearly figure', () => {
+    const split = splitYear(-335000, 0.8)
+    expect(split.regularYear + split.lumpYear).toBe(-335000)
+  })
+})
+
+describe('planungSummary() — spec.md §3c Budget formula', () => {
+  // The aggregate 2025 figures already published in spec.md §3c (whole
+  // euros, in cents): Einnahmen 166.373, Fixkosten −67.716, Jahresanfang
+  // minus Puffer 5.687 (13.687 − 8.000) → Budget 104.344; Ausgaben +
+  // Rücklagen together −97.000 → Ausgaben vs. Budget 7.344.
+  it('reproduces the 2025 worked example', () => {
+    const { startCash, budget, ausgabenVsBudget } = planungSummary({
+      einnahmen: 16637300,
+      fixkosten: -6771600,
+      jahresanfang: 1368700,
+      puffer: 800000,
+      ausgaben: -9700000,
+      ruecklagen: 0,
+    })
+    expect(startCash).toBe(568700)
+    expect(budget).toBe(10434400)
+    expect(ausgabenVsBudget).toBe(734400)
+  })
+
+  it('reproduces the 2026 worked example Budget', () => {
+    const { budget } = planungSummary({
+      einnahmen: 13378800,
+      fixkosten: -8334600,
+      jahresanfang: 2224000,
+      puffer: 800000,
+      ausgaben: 0,
+      ruecklagen: 0,
+    })
+    expect(budget).toBe(6468200)
+  })
+
+  it('Rücklagen count against the budget exactly like Ausgaben', () => {
+    const base = { einnahmen: 1000000, fixkosten: -200000, jahresanfang: 100000, puffer: 100000 }
+    const a = planungSummary({ ...base, ausgaben: -500000, ruecklagen: -100000 })
+    const b = planungSummary({ ...base, ausgaben: -600000, ruecklagen: 0 })
+    expect(a.ausgabenVsBudget).toBe(b.ausgabenVsBudget)
+    expect(a.ausgabenVsBudget).toBe(200000)
   })
 })

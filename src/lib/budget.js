@@ -1,8 +1,8 @@
 // Pure, in-memory budget/actual computation (spec.md §2.7/§2.8) — no
 // Firestore access here, same "plain data in, a number out" shape as
-// balance.js/tagBalance.js. Verlauf-scoped for now (§3b) — Planung's own
-// formulas (§3c's regular/lump split, the Budget/Ausgaben/Rücklagen chart)
-// aren't written yet since nothing calls them until Planung itself is built.
+// balance.js/tagBalance.js. Shared by Verlauf (§3b) and Planung (§3c) —
+// Planung's own formulas (the regular/lump split, the Budget summary band)
+// live at the bottom of this file.
 
 // A category's actual for one month — Σ every line's own signed amount
 // where that line's categoryId matches, dated in that month (spec.md §3b:
@@ -174,4 +174,83 @@ export function breakdownGroupAllocationMonthActual(allocationTagId, tagIds, yea
     }
   }
   return delta === 0 ? 0 : -delta
+}
+
+// Prog for one category/allocation tag, per month (spec.md §3b): a closed
+// month is the real Konten actual; an open month mirrors Plan1 for that
+// same month ("if nothing changes, this is what will happen"). Shared by
+// Verlauf's Prog row and Planung's Prog lens (§3c), so both always agree.
+//
+// @param {'categoryId'|'allocationTagId'} targetKey
+// @param {string} targetId
+// @param {number[]} plan1Months  12 entries, Jan..Dec
+// @param {number[]} closedMonths  month numbers 1-12 (settings/{year}.closedMonths)
+// @param {number} year
+// @param {Array} transactions
+// @param {Array} tags
+export function progMonths(targetKey, targetId, plan1Months, closedMonths, year, transactions, tags) {
+  return plan1Months.map((plan1Value, i) => {
+    const month = i + 1
+    if (!closedMonths.includes(month)) return plan1Value
+    return targetKey === 'allocationTagId'
+      ? allocationMonthActual(targetId, year, month, transactions, tags)
+      : categoryMonthActual(targetId, year, month, transactions)
+  })
+}
+
+// The regular/lump split (spec.md §2.8/§3c) — how much of a row's yearly
+// figure recurs every month vs. arrives as one-off payments, derived from
+// the reference year's 12 closed monthly actuals: median × 12 is the
+// recurring floor, the rest is einmalig.
+//
+// Edge cases, all resolved in spec.md §2.8:
+// - `referenceMonths` null (no reference-year data at all) → 100 % einmalig.
+// - reference total 0 → share 0 (nothing to extrapolate from, not an error).
+// - a refund/unusual month can push the share past 100 % (einmal negative)
+//   — shown as computed, never clamped.
+//
+// @param {number[]|null} referenceMonths  12 monthly actuals, or null
+// @returns {number} the regular share as a fraction (0.8 = 80 %), unrounded
+export function regularShare(referenceMonths) {
+  if (!referenceMonths) return 0
+  const total = referenceMonths.reduce((a, b) => a + b, 0)
+  if (total === 0) return 0
+  const sorted = [...referenceMonths].sort((a, b) => a - b)
+  const median = (sorted[5] + sorted[6]) / 2
+  return (median * 12) / total
+}
+
+// Applies regularShare() to a displayed yearly figure (Planung's planning
+// column — whichever of Plan0/Plan1/Prog is on screen, §2.7c: the split
+// "describes funding timing, not a re-plan of the category itself").
+// Rounded to whole cents; einmal is the exact remainder so the two always
+// add back up to the yearly figure.
+//
+// @param {number} yearCents
+// @param {number} share  from regularShare()
+// @returns {{regularYear: number, regularMonth: number, lumpYear: number, percent: number}}
+export function splitYear(yearCents, share) {
+  // `|| 0` everywhere: a 0 share times a negative figure is −0, which
+  // would otherwise leak through as "−0" in the display.
+  const regularYear = Math.round(yearCents * share) || 0
+  return {
+    regularYear,
+    regularMonth: Math.round(regularYear / 12) || 0,
+    lumpYear: yearCents - regularYear,
+    percent: Math.round(share * 100) || 0,
+  }
+}
+
+// Planung's summary band (spec.md §3c), all signed cents as displayed:
+// Budget = Einnahmen + Fixkosten (negative) + (Jahresanfang − Puffer);
+// Ausgaben vs. Budget = Budget + Ausgaben + Rücklagen (both negative when
+// money goes out) — "should be near zero".
+//
+// @param {{einnahmen: number, fixkosten: number, jahresanfang: number, puffer: number, ausgaben: number, ruecklagen: number}} p
+//   `puffer` is the positive minCashBufferCents; `jahresanfang` the raw
+//   starting cash before the buffer is taken off.
+export function planungSummary({ einnahmen, fixkosten, jahresanfang, puffer, ausgaben, ruecklagen }) {
+  const startCash = jahresanfang - puffer
+  const budget = einnahmen + fixkosten + startCash
+  return { startCash, budget, ausgabenVsBudget: budget + ausgaben + ruecklagen }
 }

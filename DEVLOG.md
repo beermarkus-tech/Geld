@@ -1367,3 +1367,46 @@ The very next thing that happened after the previous entry's `startScrollGuard()
 `npm run build`, `npx vitest run` (50 passed), `npm run lint` all clean before pushing.
 
 **Next session:** the scroll flicker is back to its build-110 state (present but self-correcting, not stuck) — explicitly accepted by Markus in preference to the regression, not something to "fix" again without a clear idea of why the previous attempt failed for real usage specifically. Otherwise unchanged: Planung and Verlauf's phone layout remain the two outstanding Phase 2 pieces; the Verlauf internal-gridline bug (deferred), the Barkonten-vs-Bargeld question, the "account totals" section ambiguity, Ctrl+H device confirmation, and the Außenstände migration/panel check are all still open.
+
+## Session 37 — 2026-09-30 — Planung built (PLAN.md Phase 2)
+
+**Two decisions from Markus before building, both now written into spec.md:**
+- **Jahresanfang's starting cash = Barkonten + Bargeld + Außenstände** (each account's balance on Dec 31 of the prior year). This resolves the long-standing §3c flag and the Budget-formula half of the Barkonten-vs-Bargeld question. **Still open:** whether §2.8a's live *Barkonten check* (Dashboard, Phase 6) uses the same three groups or Barkonten alone.
+- **Planung's comment is its own yearly field** (`categoryYearSettings.comment`, doc id `{year}_{targetId}`), fully separate from Verlauf's per-month budget notes. This corrects §3c's original "reuses the `note` field".
+
+**What was built.** A new `src/Planung.jsx`, replacing the "kommt noch" placeholder. It contains:
+- a reference-year column (last year's Plan0) and a planning-year column, with a Plan 0 / Plan 1 / Prog switch;
+- automatic Regulär Jahr / Regulär Monat / Einmal Jahr columns with a "75/25" pill;
+- the Jahresanfang band, with the **Puffer entered inline per year**;
+- Einnahmen, Fixkosten, the Budget band (Budget, Ausgaben vs. Budget, gebildete Rücklagen), Ausgaben per group, and Rücklagen;
+- the Budget vs. Ausgaben+Rücklagen bar chart;
+- 💬 comments per row per year.
+
+The phone layout is a card stack. Full structure is in CODEMAP.md.
+
+**Shared code instead of copies:**
+- Verlauf's inline Prog calculation moved to `progMonths()` in `src/lib/budget.js`, so Verlauf and Planung can't disagree.
+- Its order lists moved to the new `src/lib/categoryOrder.js`.
+- Its whole-euro input parser moved to `src/lib/format.js`.
+
+New tested functions: `regularShare()`, `splitYear()`, `planungSummary()`. The latter is tested against §3c's own published 2025/2026 figures (104.344 / 7.344 / 64.682), which covers PLAN.md Phase 2's promised Budget-formula test. There are 60 tests now, up from 50.
+
+**Real bug found and fixed along the way:** Verlauf counted soft-deleted transactions ("Kürzlich gelöscht") in its actuals and Prog, because it never filtered `deletedAt` the way Konten does. It now filters them out at load, and so does Planung.
+
+**Verified** with a disposable Playwright harness using an async mock Firestore (random 50–400 ms delays) and synthetic two-year data. All harness files were deleted before commit.
+- Every figure matched a hand calculation: Jahresanfang, both years' Budget and Ausgaben vs. Budget, all three lenses (Prog correctly mixing a closed January actual with Plan1), and the 75/25 split. A soft-deleted transaction was confirmed excluded.
+- Saving the Puffer keeps Verlauf's `closedMonths`, and the comment round-trip writes the right document.
+- A half-typed comment survives a live data update.
+- The phone layout at 390 px has no horizontal scroll, and dark mode renders correctly.
+
+`npm run lint`, `npx vitest run` (60 passed) and `npm run build` are all clean.
+
+**Not yet checked against real data:** this session has no access to the live Firestore, so Planung's numbers have only been checked against synthetic data. **Markus's check is the Phase 2 deliverable.** Open Planung for 2026 (and 2025), type in the Puffer (8.000) for each year, and compare Alle Barkonten, Einnahmen gesamt, Fixkosten gesamt, Budget and Ausgaben vs. Budget against the Gsheet. The spec's worked example expects 2025 Budget = 104.344 €, but that example predates the reportingGroup splits, so a difference there needs looking at rather than assuming either side is wrong.
+
+**Next session:** go through whatever Markus's comparison against the Gsheet turns up. After that, Verlauf's phone layout is the last Phase 2 piece. Still open, unchanged:
+- the §2.8a Barkonten-check scope (above);
+- the split-line-to-virtual-account design question (session 28);
+- the "account totals" section ambiguity;
+- Ctrl+H device confirmation;
+- the Außenstände migration/panel check;
+- the deferred Verlauf gridline bug.

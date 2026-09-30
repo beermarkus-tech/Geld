@@ -5,14 +5,14 @@ import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-communi
 
 import { db } from './firebase'
 import {
-  allocationMonthActual,
   breakdownGroupAllocationMonthActual,
   breakdownGroupMonthActual,
   budgetBreakdownLineMonths,
   budgetTopLineMonths,
-  categoryMonthActual,
+  progMonths as progMonthsFor,
 } from './lib/budget'
-import { centsToWholeEuro } from './lib/format'
+import { ALLOCATION_TAG_ORDER, GROUP_ORDER, SUBCAT_ORDER, isKnownSubcat } from './lib/categoryOrder'
+import { centsToWholeEuro, parseWholeEuroInput } from './lib/format'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { slugify } from './TagEditor'
 
@@ -44,49 +44,6 @@ function MonthHeader({ displayName, month, closedMonths, onToggle }) {
     </div>
   )
 }
-
-// Fixed group order (spec.md §2.4's own transcription order — not
-// alphabetical, so there's no substitute for spelling it out) — Einnahmen
-// first, then every expense group in the Gsheet's own order.
-const GROUP_ORDER = ['Einnahmen', 'Wohnen', 'Kommunikation', 'Mobilität', 'Lebenshaltung', 'Gesundheit', 'Hobbys', 'Sonstiges']
-
-// Fixed subcategory order within each group (spec.md §3b, Sept 2026,
-// Markus's own literal list — not alphabetical, an earlier, now-corrected
-// assumption). "Erstattungen" is deliberately absent — see spec.md §2.4's
-// own note on why it's filtered out everywhere, not just here.
-const SUBCAT_ORDER = [
-  'Gehalt Markus', 'Gehalt Julia', 'Sonderzahlungen', 'Kindergeld', 'Sonstige Einnahmen',
-  'Hauskredit', 'Nebenkosten', 'Instandhaltung', 'Einrichtung', 'Garten',
-  'Internet', 'Fernsehen', 'Telefon',
-  'Firmenwagen', 'Autoversicherung', 'Wartung', 'Tanken', 'Gebühren',
-  'Lebensmittel & Haushalt', 'Kantine', 'Ausgehen', 'Klamotten Markus', 'Klamotten Julia', 'Klamotten Sophia',
-  'Ausstattung Sophia', 'Allgemein', 'Haustiere', 'Versicherungen',
-  'Medizin', 'Arztkosten', 'Krankenkasse',
-  'Hobbys Julia', 'Hobbys Markus', 'Hobbys Sophia',
-  'Urlaube', 'Geschenke', 'Sonderausgaben', 'Steuerausgaben', 'Rente', 'Sonstige Ausgaben',
-]
-
-// A category not in SUBCAT_ORDER is filtered out entirely, not shown at an
-// arbitrary position — "Erstattungen" (spec.md §2.4) is the deliberate
-// case today, but this also means a genuinely new category silently has
-// no home here until someone adds it to the list above, rather than
-// popping up in a random spot.
-function isKnownSubcat(name) {
-  return SUBCAT_ORDER.includes(name)
-}
-
-// Same reasoning for the Rücklagen section's own fixed order (spec.md
-// §2.5/§3b's own listing) — alphabetical would scramble Sparen Familie/
-// Sophia/Julia away from each other.
-const ALLOCATION_TAG_ORDER = [
-  'sparen-familie',
-  'sparen-sophia',
-  'sparen-julia',
-  'anlage-familie',
-  'anlage-sophia',
-  'ruecklagen-steuern',
-  'tagesgeld',
-]
 
 // A cell whose value is exactly 0 shows empty, not "0" (spec.md §3b) —
 // across every numeric cell, month columns and Jahr alike. Rounded to
@@ -196,25 +153,6 @@ function blockBorderStyle(rowData) {
 // placeholder.
 function budgetDocId(year, planVersion, targetId, month, breakdownTagId) {
   return `b-${year}-${planVersion}-${targetId}-${breakdownTagId ?? 'top'}-${String(month).padStart(2, '0')}`
-}
-
-// Parses a Plan0/Plan1 month cell's typed text back into cents — mirrors
-// Konten.jsx's own parseEuroInput, but for whole euros only (matching this
-// screen's own display rounding, §3b) and treating a cleared cell as 0
-// (Verlauf's "0 shows blank" convention runs the other way at display
-// time; an edit clearing the box should mean "plan 0 for this month," not
-// reject the edit). Strips German thousands-grouping dots first (the edit
-// box is pre-filled from centsToWholeEuro's own de-DE formatting, e.g.
-// "8.000") — without this, committing an untouched large value back
-// unchanged would silently reinterpret "8.000" as 8 (JS parses a bare
-// "8.000" as the number 8).
-function parseWholeEuroInput(s) {
-  const cleaned = String(s).trim().replace(/[€\s]/g, '')
-  if (cleaned === '') return 0
-  if (cleaned === '-') return null
-  const normalized = cleaned.replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.')
-  const f = Number(normalized)
-  return Number.isNaN(f) ? null : Math.round(f) * 100
 }
 
 const SHOW_PLAN0_KEY = 'geld-verlauf-show-plan0'
@@ -663,7 +601,10 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     const unsubs = [
       onSnapshot(collection(db, 'categories'), (snap) => setCategories(snap.docs.map((d) => d.data()))),
       onSnapshot(collection(db, 'tags'), (snap) => setTags(snap.docs.map((d) => d.data()))),
-      onSnapshot(collection(db, 'transactions'), (snap) => setTransactions(snap.docs.map((d) => d.data()))),
+      // Soft-deleted transactions (spec.md §2.9a) never count toward any
+      // actual — same rule as Konten's own activeTransactions (real bug
+      // found Sept 2026 while building Planung: Verlauf never filtered them).
+      onSnapshot(collection(db, 'transactions'), (snap) => setTransactions(snap.docs.map((d) => d.data()).filter((t) => !t.deletedAt))),
       onSnapshot(collection(db, 'budgets'), (snap) => setBudgets(snap.docs.map((d) => d.data()))),
     ]
     return () => unsubs.forEach((u) => u())
@@ -689,18 +630,10 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   const tagById = useMemo(() => new Map(tags.map((t) => [t.id, t])), [tags])
   const tagName = (id) => tagById.get(id)?.name ?? id
 
-  // Prog (spec.md §3b): a closed month is a pure Konten rollup; an open
-  // month mirrors Plan1 for that same month ("if nothing changes, this is
-  // what will happen"). Same rule for a category and an allocation tag,
-  // just via the matching actual-computation function for each.
+  // Prog (spec.md §3b) — shared with Planung via budget.js's own
+  // progMonths(), so both screens compute it identically.
   function progMonths(targetId, plan1Months, isAllocation) {
-    return plan1Months.map((plan1Value, i) => {
-      const month = i + 1
-      if (!closedMonths.includes(month)) return plan1Value
-      return isAllocation
-        ? allocationMonthActual(targetId, yearNum, month, transactions, tags)
-        : categoryMonthActual(targetId, yearNum, month, transactions)
-    })
+    return progMonthsFor(isAllocation ? 'allocationTagId' : 'categoryId', targetId, plan1Months, closedMonths, yearNum, transactions, tags)
   }
 
   // Whether a category/allocation tag's top-line row is still the real,
