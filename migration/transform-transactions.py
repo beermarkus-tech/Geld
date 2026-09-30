@@ -8,7 +8,6 @@ reasoning behind each rule below — this is not meant to be self-explanatory
 without that context.
 """
 import json
-import re
 import sys
 from collections import defaultdict
 from datetime import date
@@ -81,19 +80,16 @@ UNTERKONTEN_TAG_MAP = {
 def receivable_account_for(empfaenger, verliehen):
     # Route by who owes the money (Verliehen), not by where it was spent: a
     # loan to a relative for something bought on Amazon is not an Amazon return.
-    if verliehen == "Amazon":
-        m = re.match(r"Amazon (FR|DE) (Julia|Markus)", empfaenger)
-        if not m:
-            raise ValueError(f"Amazon claim without an 'Amazon FR/DE Julia/Markus' payee: {empfaenger!r}")
-        country, person = m.groups()
-        return f"amazon-{person.lower()}-{country.lower()}"
+    # Amazon returns and informal loans share one account, `aussenstaende`
+    # (spec.md §2.2, Sept 2026) — which claim is which is carried by the
+    # claim tag, not the account. CPAM and Airbus keep their own accounts.
     if verliehen in ("MSH", "CPAM"):
         # Both health insurers' refunds land on the same receivable; the
         # 2026 sheet uses both names, sometimes for the same claim.
         return "cpam"
     if verliehen == "Airbus":
         return "reisekosten-airbus"
-    return "geld-verliehen-geliehen"
+    return "aussenstaende"
 
 def claim_tag_for(verliehen, tag2):
     # Tag2 (a CFW claim ref or an Airbus 'YYYY-MM XXX' claim code) is the real
@@ -287,10 +283,6 @@ def build_opening_transactions(opening):
 
 
 def opening_receivable_for(r):
-    # Opening rows carry no Amazon payee label to route by; all three
-    # carried-over Amazon items were refunded on "Amazon FR Julia" in 2025.
-    if r["verliehen"] == "Amazon":
-        return "amazon-julia-fr"
     return receivable_account_for(r["empfaenger"], r["verliehen"])
 
 

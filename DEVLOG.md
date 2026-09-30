@@ -1410,3 +1410,31 @@ New tested functions: `regularShare()`, `splitYear()`, `planungSummary()`. The l
 - Ctrl+H device confirmation;
 - the Außenstände migration/panel check;
 - the deferred Verlauf gridline bug.
+
+## Session 37, continued — 2026-09-30 — Leftover bookings on the retired "Geld verliehen/geliehen" account
+
+**What Markus spotted:** Konten shows an account `geld-verliehen-geliehen` that isn't in the Außenstände pinned panel, next to the real "Außenstände" account.
+
+**Confirmed against the spec, no design change:** spec.md §2.2 says `aussenstaende` *replaces* Geld verliehen/geliehen and the four Amazon accounts. The claim or loan is carried by its tag, not by the account. Session 35 (7th continuation) records Markus moving the bookings by hand and the old accounts being removed. The name showing as a lowercase id means some transactions still point at the old account id after its account entry was deleted; Konten falls back to showing the raw id. This is inferred, and the repair's own scan will confirm it on the live data.
+
+**Probable cause, fixed:** `migration/transform-transactions.py` was never updated for the consolidation. It still routed loans to `geld-verliehen-geliehen` and Amazon returns to `amazon-{person}-{country}`, so any bookings produced by it after (or missed by) the hand move kept the old ids. It now routes both to `aussenstaende`. This also fixes a real inconsistency inside the script: its own `verify_claims()` reads receivable accounts from the seed file, which no longer lists the old ones. The script hasn't been re-run, because this session doesn't have the source `.xlsx` files.
+
+**Effect until repaired:**
+- Those bookings count toward no pinned-panel group, and their claim tags don't appear as open items.
+- Planung's new "Alle Barkonten" (Jahresanfang = Barkonten + Bargeld + Außenstände) is off by exactly their balance.
+
+**Built, a temporary repair tool:** Import/Export → Sicherung, a new section at the top.
+- "Suchen" shows how many bookings sit on each old id, and lists any with no tag at all. Those land on Außenstände with no open-claim row, so they need tagging by hand.
+- "Umhängen" (after a confirmation) changes only the account on those bookings, including soft-deleted ones, then searches again.
+- The pure logic is `src/lib/retiredAccounts.js`, with 4 new tests.
+- Verified in a disposable browser harness with an async mock Firestore: 3 old-id bookings found, the untagged one flagged, all 3 moved, 0 left on the re-scan, and unrelated bookings untouched. Harness deleted before commit.
+
+`npm run lint`, `npx vitest run` (64 passed) and `npm run build` are all clean.
+
+**Still awaiting Markus:**
+1. Download a Sicherung.
+2. Run Suchen, then Umhängen.
+3. Report the counts, and tag any untagged ones it lists.
+4. Confirm the Außenstände panel now shows the expected open claims (Dirk, Amazon, …) and totals.
+
+That finally closes the long-standing "Außenstände migration/panel check". **After that, remove the repair section and `retiredAccounts.js`.** Then continue with Markus's Planung comparison against the Gsheet; its "Alle Barkonten" figures are only meaningful after this repair.
