@@ -157,17 +157,27 @@ function budgetDocId(year, planVersion, targetId, month, breakdownTagId) {
 
 const SHOW_PLAN0_KEY = 'geld-verlauf-show-plan0'
 const SHOW_BREAKDOWNS_KEY = 'geld-verlauf-show-breakdowns'
+const SHOW_PLANUNG_KEY = 'geld-verlauf-show-planung'
+
+// The pinned Unterkategorie column's normal width, and the extra pinned
+// "last year" column's own width (Oct 2026, Markus: "to fit this column,
+// squeeze the subcategories column accordingly. Leave the month columns at
+// the correct width") — with the Planung checkbox on, the new column is
+// funded entirely out of Unterkategorie, so the pinned block (and with it
+// the month area) keeps exactly its old total width.
+const SUBCAT_WIDTH = 145
+const LAST_YEAR_WIDTH = 76
 
 // Per-device convenience only, same reasoning as NavShell.jsx's own
 // sidebar-collapsed persistence (Markus, Sept 2026: "save the state of
 // show or hide plan0") — a read/write failure (private browsing, blocked
 // storage) just means it starts shown every time, never a crash.
-function readBoolSetting(key) {
+function readBoolSetting(key, fallback = true) {
   try {
     const stored = localStorage.getItem(key)
-    return stored === null ? true : stored === '1'
+    return stored === null ? fallback : stored === '1'
   } catch {
-    return true
+    return fallback
   }
 }
 
@@ -373,6 +383,13 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   const [showPlan0, setShowPlan0] = useState(() => readBoolSetting(SHOW_PLAN0_KEY))
   const [showBreakdowns, setShowBreakdowns] = useState(() => readBoolSetting(SHOW_BREAKDOWNS_KEY))
   const [blockOverrides, setBlockOverrides] = useState(() => new Map())
+  // "Planung" checkbox (Oct 2026, Markus): an extra pinned column showing
+  // last year's Prog/Plan1/Plan0 yearly totals next to this year's. Off by
+  // default — it costs Unterkategorie its width (SUBCAT_WIDTH above).
+  const [showPlanung, setShowPlanung] = useState(() => readBoolSetting(SHOW_PLANUNG_KEY, false))
+  // Last year's own month-close switches (settings/{year−1}) — what makes
+  // last year's Prog read exactly as Verlauf shows that year itself.
+  const [lastYearClosedMonths, setLastYearClosedMonths] = useState([])
   // Keyboard-shortcuts help popover (Markus, same design as Konten's own
   // (i) icon) — hover shows the list, Ctrl+I toggles it without the mouse,
   // Escape closes it.
@@ -479,6 +496,14 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
       // Per-device convenience only — nothing to recover from here.
     }
   }, [showPlan0])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SHOW_PLANUNG_KEY, showPlanung ? '1' : '0')
+    } catch {
+      // Per-device convenience only — nothing to recover from here.
+    }
+  }, [showPlanung])
 
   useEffect(() => {
     try {
@@ -616,6 +641,14 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     if (!year) return
     const unsub = onSnapshot(doc(db, 'settings', String(year)), (snap) => {
       setClosedMonths(snap.exists() ? (snap.data().closedMonths ?? []) : [])
+    })
+    return unsub
+  }, [year])
+
+  useEffect(() => {
+    if (!year) return
+    const unsub = onSnapshot(doc(db, 'settings', String(Number(year) - 1)), (snap) => {
+      setLastYearClosedMonths(snap.exists() ? (snap.data().closedMonths ?? []) : [])
     })
     return unsub
   }, [year])
@@ -831,6 +864,20 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
       // divider (blockBorderStyle() above) — only meaningful when Plan0's
       // group actually follows it in this same block.
       plan1Rows.at(-1).isPlan1GroupEnd = true
+    }
+    // Last year's yearly totals for the "Planung" column — one figure each
+    // for Prog, Plan1 and Plan0 (never for breakdown/rollup rows, Markus:
+    // "don't show split line values"), computed exactly as this screen
+    // would for that year itself.
+    if (showPlanung) {
+      const lastYear = yearNum - 1
+      const lastPlan1 = budgetTopLineMonths(targetKey, targetId, 'plan1', lastYear, budgets)
+      const lastProg = progMonthsFor(targetKey, targetId, lastPlan1.months, lastYearClosedMonths, lastYear, transactions, tags)
+      for (const r of rows) {
+        if (r.rowLabel === 'Prog') r.lastYearTotal = lastProg.reduce((a, b) => a + b, 0)
+        else if (r.rowLabel === 'Plan1') r.lastYearTotal = lastPlan1.yearTotal
+        else if (r.rowLabel === 'Plan0') r.lastYearTotal = budgetTopLineMonths(targetKey, targetId, 'plan0', lastYear, budgets).yearTotal
+      }
     }
     // Marks the actual first row of this block after every filter above
     // has already applied — used below to draw a strong boundary line at
@@ -1079,8 +1126,8 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     // since no further block exists to draw a top edge for it instead.
     if (out.length > 0) out.at(-1).isVeryLastRow = true
     return out
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- planLineRows and everything it calls close over categories/tags/transactions/budgets/closedMonths/showPlan0/showBreakdowns/blockOverrides/yearNum, all already current each render
-  }, [categories, tags, transactions, budgets, closedMonths, showPlan0, showBreakdowns, blockOverrides, yearNum])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- planLineRows and everything it calls close over categories/tags/transactions/budgets/closedMonths/showPlan0/showBreakdowns/blockOverrides/showPlanung/lastYearClosedMonths/yearNum, all already current each render
+  }, [categories, tags, transactions, budgets, closedMonths, showPlan0, showBreakdowns, blockOverrides, showPlanung, lastYearClosedMonths, yearNum])
 
   // The settle half of pendingFocusRef (see its own comment above) — fires
   // on every rowData change, no-ops instantly unless a focus claim is
@@ -1298,16 +1345,28 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         // text-wrapping so a longer subcategory name still reads fully,
         // just over two lines now instead of needing the column wide
         // enough for its longest name on one line).
-        width: 145,
+        width: showPlanung ? SUBCAT_WIDTH - LAST_YEAR_WIDTH : SUBCAT_WIDTH,
         suppressNavigable: true,
-        cellStyle: (p) => ({ backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})`, borderTop: blockBorderStyle(p.data).borderTop }),
+        // While narrowed for the Planung column, AG Grid's own ~17px side
+        // padding would leave barely 30px of text width — trimmed to 4px so
+        // a name still wraps at word (or, via `hyphens` below, syllable)
+        // boundaries rather than mid-word.
+        cellStyle: (p) => ({
+          backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})`,
+          borderTop: blockBorderStyle(p.data).borderTop,
+          ...(showPlanung ? { paddingLeft: 4, paddingRight: 4 } : {}),
+        }),
         // Vertically centered within its own spanned (merged) cell (Markus)
         // — AG Grid's default cell rendering doesn't center content inside
         // a tall spanned cell on its own. `whiteSpace: normal` overrides
         // AG Grid's own default single-line cell text (nowrap + ellipsis)
         // so a name too long for one line wraps instead of clipping.
         cellRenderer: (p) => (
-          <div className="flex h-full w-full items-center" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+          <div
+            className="flex h-full w-full items-center"
+            lang="de"
+            style={{ whiteSpace: 'normal', wordBreak: 'break-word', ...(showPlanung ? { hyphens: 'auto' } : {}) }}
+          >
             {p.value}
           </div>
         ),
@@ -1315,7 +1374,16 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
       {
         headerName: '',
         colId: 'breakdownActions',
-        field: 'breakdownActionsSpanKey',
+        // The span key *plus* the block's expanded state (Oct 2026, Markus:
+        // "pressing on the chevrons, I cannot unhide the split lines
+        // anymore"). AG Grid only re-renders a cell when its value changes,
+        // and the bare span key never does — so after a collapse the chevron
+        // kept showing ▾ with a stale `row.blockExpanded`, and the next click
+        // "collapsed" the already-collapsed block again. Only a top-line row
+        // carries `blockExpanded`, so every breakdown/rollup row of one
+        // block still gets the identical value and still merges (spanRows).
+        valueGetter: (p) =>
+          p.data.breakdownActionsSpanKey + (p.data.blockExpanded === undefined ? '' : p.data.blockExpanded ? '#open' : '#closed'),
         spanRows: true,
         pinned: 'left',
         width: 26,
@@ -1432,6 +1500,39 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         valueGetter: (p) => (p.data.breakdownLabel ?? p.data.rowLabel),
       },
       {
+        // Last year's yearly totals (Oct 2026, Markus): sits between the
+        // Prog/Plan1/Plan0 label and this year's total, shown only while the
+        // "Planung" checkbox is on. One figure per Prog/Plan1/Plan0 row;
+        // breakdown and rollup rows stay blank. Its own color (the app's
+        // blue "computed" token) tells it apart from this year's figures.
+        headerName: String(yearNum - 1),
+        colId: 'lastYear',
+        pinned: 'left',
+        hide: !showPlanung,
+        suppressNavigable: true,
+        width: LAST_YEAR_WIDTH,
+        headerClass: 'ag-right-aligned-header',
+        cellClass: 'text-right tabular-figure',
+        cellStyle: (p) => {
+          const style = {
+            backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})`,
+            color: 'var(--color-computed)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            // Trimmed side padding so a six-digit figure with its sign
+            // ("-120.000") still fits the narrow column.
+            paddingLeft: 4,
+            paddingRight: 6,
+            ...blockBorderStyle(p.data),
+          }
+          if (p.data.rowLabel === 'Rollup') style.backgroundColor = 'var(--color-breakdown-rollup-tint)'
+          if (p.data.rowLabel === 'Plan1-breakdown' || p.data.rowLabel === 'Plan0-breakdown') style.backgroundColor = 'var(--color-breakdown-tint)'
+          return style
+        },
+        valueGetter: (p) => (p.data.lastYearTotal === undefined ? '' : formatMonthCell(p.data.lastYearTotal)),
+      },
+      {
         headerName: '',
         colId: 'label',
         pinned: 'left',
@@ -1516,7 +1617,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
       },
     ]
     // eslint-disable-next-line react-hooks/exhaustive-deps -- cellStyle/cellRenderer callbacks close over closedMonths; valueSetter's persistBudgetMonth closes over budgets/tags/yearNum — all already current each render
-  }, [closedMonths, budgets, tags, yearNum])
+  }, [closedMonths, budgets, tags, yearNum, showPlanung])
 
   return (
     <div className="flex h-full flex-col gap-3 px-4 py-3">
@@ -1544,6 +1645,10 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
             }}
           />
           Aufschlüsselung anzeigen
+        </label>
+        <label className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
+          <input type="checkbox" checked={showPlanung} onChange={(e) => setShowPlanung(e.target.checked)} />
+          Planung
         </label>
         {/* Month-close "ok" switches now live in each month's own column
             header (MonthHeader, above) — moved there per Markus's request,

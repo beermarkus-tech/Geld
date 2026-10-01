@@ -1505,3 +1505,14 @@ One call I made myself and flagged to him: with an account filter set, every row
 - Konto = BNP: 6.640,00, matching a hand calculation.
 
 Harness deleted before commit. `npm run lint`, `npx vitest run` (71) and `npm run build` are all clean.
+
+## Session 37, continued a sixth time — 2026-10-01 — Verlauf: chevron fix and the "Planung" column
+
+**1. Chevron bug (Markus: "pressing on the chevrons, I cannot unhide the split lines anymore").** Reproduced in a harness: collapsing a block worked, expanding it again didn't. **Cause:** the chevron lives in the `breakdownActions` column, whose value was just the row's span key, and AG Grid only redraws a cell when its value changes. After a collapse the cell kept showing ▾ with the old `row.blockExpanded = true`, so the next click "collapsed" an already-collapsed block. The column's `valueGetter` now includes the expanded state, which forces the redraw; only top-line rows carry that state, so a block's breakdown/rollup rows still merge into one ✚ cell. Verified: collapse → ▸, expand → ▾ and the rows come back. Ctrl+D was never affected, since it reads fresh row data.
+
+**2. "Planung" column in Verlauf.** A third header checkbox "Planung" (off by default, remembered per device) adds a pinned column between the Prog/Plan1/Plan0 label and the totals. It shows last year's yearly totals for Prog, Plan1 and Plan0 in blue, with the header showing last year. No breakdown or rollup values. The column takes its width out of Unterkategorie (145 → 69px), so the pinned block and the month columns keep their exact width; the month columns were measured identical on and off. Details in spec.md §3b and CODEMAP.md.
+- **Decision made without asking, flagged to Markus:** last year's Prog uses last year's own month-close check marks, exactly as Verlauf shows that year when selected. If he never ticked 2025's months closed, 2025's Prog just mirrors its Plan1.
+- **Trade-off:** 69px is tight for subcategory names. I trimmed the cell padding and enabled German hyphenation (`lang="de"` plus `hyphens: auto`), which this session's test browser can't render, so on real devices "Nebenkosten" should break as "Neben-kosten". If it still looks cramped, the cheapest fix is a smaller font for the subcategory text while the column is on.
+- A six-digit negative ("-120.000") was tested and fits.
+
+Verified in a disposable Verlauf harness (async mock Firestore, seeded breakdown lines and two years), light mode, via screenshot and measured column positions. Harness deleted before commit. `npm run lint`, `npx vitest run` (71) and `npm run build` are all clean.
