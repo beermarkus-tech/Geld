@@ -1516,3 +1516,30 @@ Harness deleted before commit. `npm run lint`, `npx vitest run` (71) and `npm ru
 - A six-digit negative ("-120.000") was tested and fits.
 
 Verified in a disposable Verlauf harness (async mock Firestore, seeded breakdown lines and two years), light mode, via screenshot and measured column positions. Harness deleted before commit. `npm run lint`, `npx vitest run` (71) and `npm run build` are all clean.
+
+## Session 37, continued a seventh time — 2026-10-01 — Verlauf: cell comments, chips, "letztes Jahr" rework; reload button
+
+Six requests from Markus, all done.
+
+1. **"letztes Jahr" now shrinks the month columns, not Unterkategorie.** The month columns were already flexed, so Unterkategorie simply went back to 145px and the months absorb the new column (measured 80 → 74px with it on). The padding/hyphenation workarounds from the previous round are gone. The checkbox is renamed "letztes Jahr". The click-redirect list in `onCellFocused` now covers the new `lastYear` column (it was missing, so a click there would have stolen the remembered cursor column).
+2. **This year's number is the header of the totals column.**
+3. **Prog/Plan1/Plan0 labels are small soft chips** (muted text on a faint translucent pill, Plan0 fainter).
+4. **Reload button (⟳, top right of the header).** The finding behind it, measured against a real preview build with a real service worker: `index.html` is precached, so after a deploy a plain reload still shows the old build and only the second reload shows the new one. That is the "close and reopen" experience. The button asks for the update, waits for the new worker to activate (max ~8 s), then reloads; one press got the new build in the same experiment. It lives in `src/lib/reloadApp.js` (no unit test; it's service-worker lifecycle).
+5. **Per-cell comments in Verlauf (Markus's design, built as proposed, no push-back needed).** Every month cell and total cell can carry one short comment (≤200 chars): a small blue corner triangle marks it, and a text field in the header row (right-aligned, left of the (i) icon) always belongs to the cell the cursor is on. It saves after a pause, on Enter, on leaving the field or on moving to another cell; a × clears it, which deletes the comment. Total cells had to become cursor-navigable for this (read-only). Stored in a new `cellComments` collection (spec.md §2.7d), also included in the Sicherung export/restore. Four judgment calls, none needing his input:
+   - A separate collection rather than `budgets.note`: Prog, rollup and total cells have no budget document, and a top-line cell in breakdown mode is computed.
+   - The "letztes Jahr" column is not commentable (it belongs to last year's own data).
+   - Removing a breakdown line leaves its comments behind as harmless orphans.
+   - Enter or Escape in the field returns the cursor to the cell, so he can continue with the keyboard.
+
+**Verified** in a disposable Verlauf harness with an async mock Firestore (random 30–280 ms delays), through the real UI:
+- an existing comment shows its dot and fills the field;
+- typing saves the comment onto the right cell, and a fast click to another cell right after typing doesn't misfile it;
+- total cells are selectable and commentable, and Enter returns the cursor to the cell;
+- × deletes the comment and its dot;
+- chips render, the totals header reads 2026, and Unterkategorie stays 145px.
+
+Harness deleted before commit. The reload logic was checked separately with two builds and a real service worker (above). `npm run lint`, `npx vitest run` (71) and `npm run build` are all clean.
+
+**Found while testing, fixed before commit:** my first version used `yearNum` before its declaration, which crashed the whole screen; caught by the harness.
+
+**Next session:** unchanged. First Markus's Außenstände repair run and panel confirmation, then his Planung comparison against the Gsheet. Worth asking him whether the comment field wants a keyboard shortcut to jump into it from a cell.

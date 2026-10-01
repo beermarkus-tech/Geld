@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { collection, doc, onSnapshot, setDoc, writeBatch } from 'firebase/firestore'
+import { collection, deleteDoc, doc, onSnapshot, setDoc, writeBatch } from 'firebase/firestore'
 import { AgGridReact } from 'ag-grid-react'
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community'
 
@@ -159,13 +159,10 @@ const SHOW_PLAN0_KEY = 'geld-verlauf-show-plan0'
 const SHOW_BREAKDOWNS_KEY = 'geld-verlauf-show-breakdowns'
 const SHOW_PLANUNG_KEY = 'geld-verlauf-show-planung'
 
-// The pinned Unterkategorie column's normal width, and the extra pinned
-// "last year" column's own width (Oct 2026, Markus: "to fit this column,
-// squeeze the subcategories column accordingly. Leave the month columns at
-// the correct width") — with the Planung checkbox on, the new column is
-// funded entirely out of Unterkategorie, so the pinned block (and with it
-// the month area) keeps exactly its old total width.
-const SUBCAT_WIDTH = 145
+// The extra pinned "letztes Jahr" column's width. The 12 month columns are
+// flexed, so they simply share out whatever width is left and shrink a
+// little while it's shown (Oct 2026, Markus: "instead of shrinking the
+// category column... shrink all month columns a little bit instead").
 const LAST_YEAR_WIDTH = 76
 
 // Per-device convenience only, same reasoning as NavShell.jsx's own
@@ -218,6 +215,91 @@ function budgetDoc(yearNum, targetKey, targetId, planVersion, month, breakdownTa
 // (api.stopEditing() etc.) and multi-select, neither of which applies
 // here — this only ever resolves to at most one parent and one name, and
 // isn't editing a grid cell at all.
+// The header-row comment field for whichever month/total cell the cursor is
+// on (Oct 2026, Markus). Typing saves after a short pause, on Enter, on
+// leaving the field and on moving to another cell. Every pending edit
+// remembers the cell it was typed under, so a quick click on the next cell
+// can never write the text onto the wrong one. The × empties the field,
+// which deletes the comment.
+function CellCommentField({ cell, description, savedText, onSave, onDone }) {
+  const [draft, setDraft] = useState(savedText)
+  const pending = useRef({ cell, dirty: false, text: savedText })
+  const timer = useRef(null)
+  const inputRef = useRef(null)
+  const onSaveRef = useRef(onSave)
+  onSaveRef.current = onSave
+
+  function flush() {
+    clearTimeout(timer.current)
+    const p = pending.current
+    if (p.dirty && p.cell) onSaveRef.current(p.cell, p.text)
+    pending.current = { ...p, dirty: false }
+  }
+
+  const cellKey = cell ? `${cell.rowId}|${cell.colId}` : ''
+  useEffect(() => {
+    const p = pending.current
+    const prevKey = p.cell ? `${p.cell.rowId}|${p.cell.colId}` : ''
+    if (prevKey !== cellKey) flush()
+    if (prevKey !== cellKey || !pending.current.dirty) {
+      pending.current = { cell, dirty: false, text: savedText }
+      setDraft(savedText)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- flush only touches refs; keyed on the selected cell and its saved text
+  }, [cellKey, savedText])
+  useEffect(() => () => flush(), [])
+
+  function change(text) {
+    setDraft(text)
+    pending.current = { cell, dirty: true, text }
+    clearTimeout(timer.current)
+    timer.current = setTimeout(flush, 800)
+  }
+
+  return (
+    <div className="relative">
+      <input
+        ref={inputRef}
+        type="text"
+        value={draft}
+        maxLength={200}
+        disabled={!cell}
+        onChange={(e) => change(e.target.value)}
+        onBlur={flush}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            flush()
+            if (cell) onDone(cell)
+          } else if (e.key === 'Escape') {
+            clearTimeout(timer.current)
+            pending.current = { cell, dirty: false, text: savedText }
+            setDraft(savedText)
+            if (cell) onDone(cell)
+          }
+        }}
+        placeholder={cell ? `Kommentar: ${description}` : 'Zelle markieren, um zu kommentieren'}
+        aria-label="Kommentar zur markierten Zelle"
+        className="w-[22rem] max-w-full rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] py-1 pl-2 pr-7 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] disabled:opacity-50"
+      />
+      {draft && (
+        <button
+          type="button"
+          aria-label="Kommentar löschen"
+          title="Kommentar löschen"
+          onClick={() => {
+            change('')
+            flush()
+            inputRef.current?.focus()
+          }}
+          className="absolute right-1.5 top-1/2 -translate-y-1/2 text-sm leading-none text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+        >
+          ×
+        </button>
+      )}
+    </div>
+  )
+}
+
 function AddBreakdownModal({ parentOptions, tagExistsGloballyByName, onSubmit, onCancel }) {
   const [nameText, setNameText] = useState('')
   const [groupText, setGroupText] = useState('')
@@ -383,13 +465,18 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   const [showPlan0, setShowPlan0] = useState(() => readBoolSetting(SHOW_PLAN0_KEY))
   const [showBreakdowns, setShowBreakdowns] = useState(() => readBoolSetting(SHOW_BREAKDOWNS_KEY))
   const [blockOverrides, setBlockOverrides] = useState(() => new Map())
-  // "Planung" checkbox (Oct 2026, Markus): an extra pinned column showing
-  // last year's Prog/Plan1/Plan0 yearly totals next to this year's. Off by
-  // default — it costs Unterkategorie its width (SUBCAT_WIDTH above).
+  // "letztes Jahr" checkbox (Oct 2026, Markus): an extra pinned column
+  // showing last year's Prog/Plan1/Plan0 yearly totals next to this year's.
+  // Off by default — the month columns shrink a little while it's shown.
   const [showPlanung, setShowPlanung] = useState(() => readBoolSetting(SHOW_PLANUNG_KEY, false))
   // Last year's own month-close switches (settings/{year−1}) — what makes
   // last year's Prog read exactly as Verlauf shows that year itself.
   const [lastYearClosedMonths, setLastYearClosedMonths] = useState([])
+  // Per-cell comments (Oct 2026, Markus): one short note per month/total
+  // cell, stored in the `cellComments` collection (spec.md §2.7d). The cell
+  // the cursor is on drives the comment field in the header row.
+  const [cellComments, setCellComments] = useState([])
+  const [commentCell, setCommentCell] = useState(null)
   // Keyboard-shortcuts help popover (Markus, same design as Konten's own
   // (i) icon) — hover shows the list, Ctrl+I toggles it without the mouse,
   // Escape closes it.
@@ -631,6 +718,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
       // found Sept 2026 while building Planung: Verlauf never filtered them).
       onSnapshot(collection(db, 'transactions'), (snap) => setTransactions(snap.docs.map((d) => d.data()).filter((t) => !t.deletedAt))),
       onSnapshot(collection(db, 'budgets'), (snap) => setBudgets(snap.docs.map((d) => d.data()))),
+      onSnapshot(collection(db, 'cellComments'), (snap) => setCellComments(snap.docs.map((d) => d.data()))),
     ]
     return () => unsubs.forEach((u) => u())
   }, [])
@@ -659,6 +747,29 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   }
 
   const yearNum = Number(year)
+
+  // This year's comments by `rowId|colId`. cellClass callbacks read it via a
+  // ref (the column defs aren't rebuilt for a comment change), and the
+  // effect below forces just the commentable cells to redraw.
+  const commentsByKey = useMemo(() => {
+    const m = new Map()
+    for (const c of cellComments) if (c.year === yearNum) m.set(`${c.rowId}|${c.colId}`, c.text)
+    return m
+  }, [cellComments, yearNum])
+  const commentsRef = useRef(commentsByKey)
+  commentsRef.current = commentsByKey
+  useEffect(() => {
+    gridApiRef.current?.refreshCells({ columns: [...MONTH_LABELS.map((_, i) => `m${i + 1}`), 'label'], force: true })
+  }, [commentsByKey])
+
+  // Empty text deletes the comment, so clearing the field never leaves a
+  // blank document behind.
+  function saveCellComment(cell, text) {
+    const id = `${yearNum}__${cell.rowId}__${cell.colId}`
+    const trimmed = text.trim()
+    if (trimmed) setDoc(doc(db, 'cellComments', id), { id, year: yearNum, rowId: cell.rowId, colId: cell.colId, text: trimmed, updatedAt: Date.now() })
+    else deleteDoc(doc(db, 'cellComments', id))
+  }
 
   const tagById = useMemo(() => new Map(tags.map((t) => [t.id, t])), [tags])
   const tagName = (id) => tagById.get(id)?.name ?? id
@@ -1189,7 +1300,10 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
       headerComponentParams: { month: i + 1, closedMonths, onToggle: toggleMonthClosed },
       valueGetter: (p) => p.data.months[i],
       valueFormatter: (p) => formatMonthCell(p.value),
-      cellClass: (p) => `text-right tabular-figure${p.data.rowLabel?.includes('breakdown') || p.data.rowLabel === 'Rollup' ? ' text-xs' : ''}`,
+      cellClass: (p) =>
+        `text-right tabular-figure${p.data.rowLabel?.includes('breakdown') || p.data.rowLabel === 'Rollup' ? ' text-xs' : ''}${
+          commentsRef.current.has(`${p.data.rowId}|m${i + 1}`) ? ' has-cell-comment' : ''
+        }`,
       cellStyle: (p) => {
         const isClosed = closedMonths.includes(i + 1)
         // Real vertical centering (Markus, Sept 2026: "center the text /
@@ -1345,28 +1459,16 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         // text-wrapping so a longer subcategory name still reads fully,
         // just over two lines now instead of needing the column wide
         // enough for its longest name on one line).
-        width: showPlanung ? SUBCAT_WIDTH - LAST_YEAR_WIDTH : SUBCAT_WIDTH,
+        width: 145,
         suppressNavigable: true,
-        // While narrowed for the Planung column, AG Grid's own ~17px side
-        // padding would leave barely 30px of text width — trimmed to 4px so
-        // a name still wraps at word (or, via `hyphens` below, syllable)
-        // boundaries rather than mid-word.
-        cellStyle: (p) => ({
-          backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})`,
-          borderTop: blockBorderStyle(p.data).borderTop,
-          ...(showPlanung ? { paddingLeft: 4, paddingRight: 4 } : {}),
-        }),
+        cellStyle: (p) => ({ backgroundColor: `var(${SECTION_TINT_VAR[p.data.section]})`, borderTop: blockBorderStyle(p.data).borderTop }),
         // Vertically centered within its own spanned (merged) cell (Markus)
         // — AG Grid's default cell rendering doesn't center content inside
         // a tall spanned cell on its own. `whiteSpace: normal` overrides
         // AG Grid's own default single-line cell text (nowrap + ellipsis)
         // so a name too long for one line wraps instead of clipping.
         cellRenderer: (p) => (
-          <div
-            className="flex h-full w-full items-center"
-            lang="de"
-            style={{ whiteSpace: 'normal', wordBreak: 'break-word', ...(showPlanung ? { hyphens: 'auto' } : {}) }}
-          >
+          <div className="flex h-full w-full items-center" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
             {p.value}
           </div>
         ),
@@ -1498,6 +1600,26 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
           return style
         },
         valueGetter: (p) => (p.data.breakdownLabel ?? p.data.rowLabel),
+        // Prog/Plan1/Plan0 as small, soft chips instead of plain text (Oct
+        // 2026, Markus: "less visible and intrusive") — muted text on a
+        // faint translucent pill; Plan0 fainter still. Breakdown/rollup
+        // rows keep their plain names.
+        cellRenderer: (p) => {
+          const l = p.data.rowLabel
+          if (l !== 'Prog' && l !== 'Plan1' && l !== 'Plan0') return p.value
+          return (
+            <span
+              className="rounded-full px-2 text-[11px] leading-5"
+              style={{
+                background: 'color-mix(in srgb, var(--color-surface) 55%, transparent)',
+                color: 'var(--color-text-muted)',
+                opacity: l === 'Plan0' ? 0.75 : 1,
+              }}
+            >
+              {l}
+            </span>
+          )
+        },
       },
       {
         // Last year's yearly totals (Oct 2026, Markus): sits between the
@@ -1533,10 +1655,15 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         valueGetter: (p) => (p.data.lastYearTotal === undefined ? '' : formatMonthCell(p.data.lastYearTotal)),
       },
       {
-        headerName: '',
+        // This year's number in the header (Oct 2026, Markus) — next to
+        // the "letztes Jahr" column's own header it reads as a pair.
+        headerName: String(yearNum),
         colId: 'label',
         pinned: 'left',
-        suppressNavigable: true,
+        headerClass: 'ag-right-aligned-header',
+        // Navigable now (Oct 2026, Markus): a total cell can carry a
+        // comment like a month cell, so the cursor has to be able to land
+        // on it. Read-only, no editor.
         // Sized to fit exactly what this column ever needs to show and no
         // more (Markus, Sept 2026: "reduce the width of the totals column.
         // it has to fit a six digit figure max incl. sign: 100.000 €
@@ -1549,7 +1676,10 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         // six-digit figure; funded by narrowing Unterkategorie instead of
         // widening the grid overall.
         width: 110,
-        cellClass: (p) => `text-right tabular-figure${p.data.rowLabel?.includes('breakdown') || p.data.rowLabel === 'Rollup' ? ' text-xs' : ''}`,
+        cellClass: (p) =>
+          `text-right tabular-figure${p.data.rowLabel?.includes('breakdown') || p.data.rowLabel === 'Rollup' ? ' text-xs' : ''}${
+            commentsRef.current.has(`${p.data.rowId}|label`) ? ' has-cell-comment' : ''
+          }`,
         // The yearly total mixes closed and open months, so it doesn't get
         // the same per-month grey/black toggle the month columns do (that
         // rule is only meaningful per-month) — Plan0 (and its own
@@ -1619,6 +1749,20 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     // eslint-disable-next-line react-hooks/exhaustive-deps -- cellStyle/cellRenderer callbacks close over closedMonths; valueSetter's persistBudgetMonth closes over budgets/tags/yearNum — all already current each render
   }, [closedMonths, budgets, tags, yearNum, showPlanung])
 
+  // The comment field only works on a cell that is currently displayed.
+  const commentRow = commentCell ? rowData.find((r) => r.rowId === commentCell.rowId) : null
+  const activeCommentCell = commentRow ? commentCell : null
+  const commentDescription = commentRow
+    ? [
+        commentRow.subcatName,
+        commentRow.breakdownLabel,
+        commentRow.rowLabel.replace('-breakdown', '').replace('Rollup', ''),
+        commentCell.colId === 'label' ? String(yearNum) : MONTH_LABELS[Number(commentCell.colId.slice(1)) - 1],
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : ''
+
   return (
     <div className="flex h-full flex-col gap-3 px-4 py-3">
       <div className="flex flex-wrap items-center gap-4">
@@ -1648,7 +1792,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         </label>
         <label className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
           <input type="checkbox" checked={showPlanung} onChange={(e) => setShowPlanung(e.target.checked)} />
-          Planung
+          letztes Jahr
         </label>
         {/* Month-close "ok" switches now live in each month's own column
             header (MonthHeader, above) — moved there per Markus's request,
@@ -1659,7 +1803,17 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         {/* Keyboard-shortcuts help (Markus: "add an (i) hover info button
             top right listing all the shortcuts in this screen, same design
             as in konten") — identical structure/classes to Konten's own. */}
-        <div className="relative ml-auto">
+        {/* The comment field and the (i) icon share one `ml-auto` wrapper,
+            same single-auto-margin rule as Konten's toolbar. */}
+        <div className="ml-auto flex items-center gap-3">
+        <CellCommentField
+          cell={activeCommentCell}
+          description={commentDescription}
+          savedText={activeCommentCell ? (commentsByKey.get(`${activeCommentCell.rowId}|${activeCommentCell.colId}`) ?? '') : ''}
+          onSave={saveCellComment}
+          onDone={(cell) => focusRowNow(cell.rowId, cell.colId)}
+        />
+        <div className="relative">
           <button
             type="button"
             onMouseEnter={() => setShortcutsOpen(true)}
@@ -1694,6 +1848,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
               </ul>
             </div>
           )}
+        </div>
         </div>
       </div>
 
@@ -1753,7 +1908,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
           onCellFocused={(e) => {
             if (e.rowIndex == null || !e.column) return
             const colId = e.column.getColId()
-            if (['groupName', 'subcatName', 'breakdownActions', 'label', 'breakdownDelete'].includes(colId)) {
+            if (['groupName', 'subcatName', 'breakdownActions', 'lastYear', 'breakdownDelete'].includes(colId)) {
               gridApiRef.current?.setFocusedCell(e.rowIndex, focusedColIdRef.current, e.rowPinned)
               return
             }
@@ -1762,6 +1917,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
             if (rowId) {
               lastFocusedRowIdRef.current = rowId
               onFocusChange?.({ rowId, colId })
+              setCommentCell({ rowId, colId })
             }
           }}
           // Del/Ctrl+D/Ctrl++ (Markus, Sept 2026) — all three act on

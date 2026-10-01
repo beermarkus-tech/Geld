@@ -30,7 +30,7 @@ import { REPLACEMENT_ACCOUNT_ID, planRetiredAccountFixes } from './lib/retiredAc
 // has one. Deliberately doesn't delete anything not present in the backup
 // file (an upsert, not a wipe-and-replace) — restoring is for getting lost
 // data back, not for pruning what's already there.
-const COLLECTIONS = ['accounts', 'categories', 'tags', 'transactions', 'budgets', 'categoryYearSettings', 'settings']
+const COLLECTIONS = ['accounts', 'categories', 'tags', 'transactions', 'budgets', 'categoryYearSettings', 'settings', 'cellComments']
 const CHUNK_SIZE = 400 // Firestore's batch limit is 500 writes; leave headroom
 
 function downloadJson(filename, data) {

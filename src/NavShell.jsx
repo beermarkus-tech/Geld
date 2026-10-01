@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 
+import { reloadApp } from './lib/reloadApp'
 import { effectiveDark, toggleTheme } from './lib/theme'
 
 // Screen-to-component map lives in App.jsx (spec.md §3's own status table) —
@@ -109,6 +110,7 @@ export default function NavShell({
   // moment, not something a second tap in the same spot quietly fixes.
   const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false)
   const [isDark, setIsDark] = useState(effectiveDark)
+  const [reloading, setReloading] = useState(false)
 
   useEffect(() => {
     try {
@@ -229,6 +231,21 @@ export default function NavShell({
               ))}
             </div>
           )}
+          {/* Reload onto the newest build (Oct 2026, Markus) — see
+              reloadApp() for why this isn't just location.reload(). */}
+          <button
+            type="button"
+            onClick={() => {
+              setReloading(true)
+              reloadApp()
+            }}
+            disabled={reloading}
+            aria-label="App neu laden"
+            title="App neu laden — holt die neueste Version"
+            className={`flex h-8 w-8 items-center justify-center rounded-md text-lg text-[var(--color-text-muted)] hover:bg-[var(--color-bg)] ${reloading ? 'animate-spin' : ''}`}
+          >
+            ⟳
+          </button>
           {/* Day/night toggle, top-right of the header (Markus's own
               placement request) — a manual override on top of the system
               preference index.css already follows (theme.js). */}

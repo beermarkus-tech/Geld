@@ -177,3 +177,17 @@ body {
 .ag-cell.text-right .ag-text-field-input {
   text-align: right;
 }
+
+/* A Verlauf cell with a comment (Oct 2026, Markus) — a small corner
+   triangle, top-right, like a spreadsheet's note marker. The cell is
+   already positioned by AG Grid, so the marker anchors to it. */
+.has-cell-comment::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  border-style: solid;
+  border-width: 0 8px 8px 0;
+  border-color: transparent var(--color-computed) transparent transparent;
+  pointer-events: none;
+}

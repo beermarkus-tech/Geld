@@ -79,6 +79,8 @@ The user is a non-programmer ("vibe coder") directing AI-assisted development, a
 
 ### 1b.2 Navigation shell
 
+**Reload button (Oct 2026, Markus):** a ⟳ button sits at the top right of the header (left of the day/night toggle) and reloads the PWA onto the newest deployed build in one press. A plain reload is not enough: the service worker precaches `index.html`, so a new deploy first installs in the background and only the *next* launch is served the new version (measured: a plain reload still shows the old build, the second one the new). The button therefore asks for the update, waits for the new worker to activate (max ~8 s), then reloads; offline it just reloads.
+
 **Phone (bottom nav bar, 5 items):** Dashboard, Konten, Verlauf, Planung, More.
 **Tablet (left sidebar, all items visible):** Dashboard, Konten, Verlauf, Planung, Quickview, Fortschritt (§3j — working name), Monatsabschluss (§3h), Außenstände (§3g — generalized: replaces the earlier separate Reisekosten/CPAM/loan-tracker items), Import/Export, Settings.
 
@@ -344,6 +346,17 @@ This header follows the **same mirror-then-lock-in rule as every other Prog valu
 
 **Excluded from budget planning entirely:** `Geld verliehen/geliehen` (loans/receivables) — tracked purely via the receivable-account + open/settled mechanism (§2.6), never as a budget line, since the money is expected back and nets to zero over time regardless of year boundaries.
 
+### 2.7d `cellComments` collection — Verlauf's per-cell comments (Oct 2026, Markus)
+```
+id                      // `${year}__${rowId}__${colId}`
+year: integer
+rowId: string           // Verlauf's own row id, e.g. "categoryId:nk:Plan1", "categoryId:urlaube:Plan1:hotels", "allocationTagId:sparen-familie:Prog"
+colId: string           // "m1".."m12" (month cell) or "label" (the row's total)
+text: string            // one short comment, max 200 characters
+updatedAt: integer      // ms since epoch
+```
+Not stored on `budgets`: Prog, rollup and total cells have no budget document, and a top-line cell in breakdown mode is computed, so a per-cell store that works the same for every cell was the only uniform option. Empty text deletes the document. Removing a breakdown line leaves its comments behind (harmless; they reappear if a line with the same tag id is created again). Included in the Sicherung export/restore (§2.9a, `BackupScreen.jsx`).
+
 ### 2.7a `settings` collection (per-year)
 ```
 id (== year)
@@ -562,7 +575,9 @@ Two independent global controls sit in the header: **"Plan0 anzeigen/ausblenden"
 - **Kategorie/Unterkategorie/row-total columns get a background tint identifying the section:** green for Einnahmen, red for Ausgaben (§1b.4's one explicit exception, see there), purple for Rücklagen.
 - **All figures round to whole euros, display-only (Sept 2026, Markus)** — every month cell and the Jahr total shows a rounded whole-euro number, never cents; the underlying stored amounts stay exact integer cents (§2.1) as always, and a genuinely nonzero sub-euro value still shows "0" rather than the "zero shows blank" convention swallowing it (that convention checks the real cent value, not the rounded display one).
 - **"Plan0 anzeigen/ausblenden" remembers its last state per device (Sept 2026)** — same per-device, not-synced-to-Firestore treatment as the sidebar's collapsed state (§1b.2).
-- **"Planung" checkbox — last year's figures next to this year's (Oct 2026, Markus).** A third header checkbox, off by default and remembered per device like the other two, adds a pinned column between the Prog/Plan1/Plan0 label and this year's total. It shows **last year's yearly totals** (header = last year, e.g. "2025"), in the blue "computed" color: the Prog row shows last year's Prog, the Plan1 row last year's Plan1, the Plan0 row last year's Plan0. Breakdown and rollup rows stay blank. Last year's Prog is computed exactly as Verlauf would show it for that year itself, i.e. using that year's own month-close switches (a month not ticked closed mirrors that year's Plan1). While the column is shown, Unterkategorie is narrowed by the new column's width so the month columns keep their exact width.
+- **"letztes Jahr" checkbox — last year's figures next to this year's (Oct 2026, Markus; named "Planung" for one build, renamed the same day).** A third header checkbox, off by default and remembered per device like the other two, adds a pinned column between the Prog/Plan1/Plan0 label and this year's total. It shows **last year's yearly totals** (header = last year, e.g. "2025"), in the blue "computed" color: the Prog row shows last year's Prog, the Plan1 row last year's Plan1, the Plan0 row last year's Plan0. Breakdown and rollup rows stay blank. Last year's Prog is computed exactly as Verlauf would show it for that year itself, i.e. using that year's own month-close switches (a month not ticked closed mirrors that year's Plan1). **The 12 month columns shrink a little to make room** (they are flexed, Unterkategorie keeps its width). This year's total column carries the current year in its header.
+- **Prog / Plan1 / Plan0 labels are small, soft chips (Oct 2026, Markus: "less visible and intrusive")** — muted text on a faint translucent pill (Plan0 fainter still) instead of plain text; breakdown/rollup rows keep their plain names.
+- **A comment on any number cell (Oct 2026, Markus).** Every month cell and every total cell, on every row type (Prog, Plan1, Plan0, breakdown lines, rollup headers), can carry one short comment (max 200 characters). A cell with a comment shows a small blue triangle in its top-right corner. A **comment field in the header row** (right-aligned, with the (i) icon) always belongs to the cell the cursor is on: it shows that cell's comment, editing it saves (after a short pause, on Enter, on leaving the field, or on moving to another cell), and a **×** empties the field, which deletes the comment. Enter or Escape returns the cursor to the cell. The cursor can now land on total cells (read-only) so they can be commented. The "letztes Jahr" column is not commentable. Comments live in `cellComments` (§2.7d). Verlauf's comments, Planung's yearly comments (§3c) and the budget rows' `note` field are three separate things and never mix.
 - **Month columns size to fill the available width rather than a fixed pixel width each (Sept 2026, Markus)** — avoids a horizontal scrollbar on ordinary screen sizes; the pinned columns (Kategorie/Unterkategorie/row-title/€-total/trashcan) keep their own fixed widths.
 - **A breakdown line's own trashcan sits in a dedicated column after the month columns, not beside its add/expand controls (Sept 2026, Markus)** — mirrors Konten's own split between its "expand/split" pinned-left column and its "delete" pinned-right column, rather than combining both actions in one place. No background tint (unlike every other pinned column) and wide enough that its icon clears the vertical scrollbar, which visually overlaps roughly the rightmost 16px of any pinned-right column in this grid — **corrected Sept 2026 (Markus: "make sure the trashcans are not covered by the vertical scroll bar")**, widened to match Konten's own equivalent column, which simply always had enough width for this not to be visible.
 - **No row-add/remove/reorder animation in Verlauf (Sept 2026, Markus)** — a breakdown block expanding/collapsing, or either global toggle, can add or remove many rows at once; animating that transition made a real rendering bug (below) more noticeable, not less.
