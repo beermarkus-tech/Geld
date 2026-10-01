@@ -299,7 +299,18 @@ export default function NavShell({
           <nav className="hidden w-48 shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)] md:flex">
             <div className="flex flex-1 flex-col gap-1 overflow-y-auto overscroll-none p-3">
               {ALL_ITEMS.map((item) => (
-                <NavButton key={item.id} item={item} active={item.id === activeView} onClick={() => navigate(item.id)} />
+                <NavButton
+                  key={item.id}
+                  item={item}
+                  active={item.id === activeView}
+                  onClick={() => {
+                    navigate(item.id)
+                    // The sidebar steps out of the way as soon as a screen
+                    // is picked (Oct 2026, Markus) — the burger button
+                    // brings it back.
+                    setSidebarCollapsed(true)
+                  }}
+                />
               ))}
             </div>
             <UserBadge

@@ -277,9 +277,10 @@ function CellCommentField({ cell, description, savedText, onSave, onDone }) {
             if (cell) onDone(cell)
           }
         }}
-        placeholder={cell ? `Kommentar: ${description}` : 'Zelle markieren, um zu kommentieren'}
+        placeholder="Kommentar"
+        title={description || undefined}
         aria-label="Kommentar zur markierten Zelle"
-        className="w-[22rem] max-w-full rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] py-1 pl-2 pr-7 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] disabled:opacity-50"
+        className="w-[22rem] max-w-full rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] py-1 pl-2 pr-8 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] placeholder:opacity-50 disabled:opacity-50"
       />
       {draft && (
         <button
@@ -291,7 +292,7 @@ function CellCommentField({ cell, description, savedText, onSave, onDone }) {
             flush()
             inputRef.current?.focus()
           }}
-          className="absolute right-1.5 top-1/2 -translate-y-1/2 text-sm leading-none text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+          className="absolute right-1 top-1/2 -translate-y-1/2 px-1 text-xl leading-none text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
         >
           ×
         </button>
@@ -1633,7 +1634,9 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         hide: !showPlanung,
         suppressNavigable: true,
         width: LAST_YEAR_WIDTH,
-        headerClass: 'ag-right-aligned-header',
+        // Header centered over its column (Oct 2026, Markus), same as the
+        // month headers; the figures below stay right-aligned.
+        headerClass: 'verlauf-month-header',
         cellClass: 'text-right tabular-figure',
         cellStyle: (p) => {
           const style = {
@@ -1660,7 +1663,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         headerName: String(yearNum),
         colId: 'label',
         pinned: 'left',
-        headerClass: 'ag-right-aligned-header',
+        headerClass: 'verlauf-month-header',
         // Navigable now (Oct 2026, Markus): a total cell can carry a
         // comment like a month cell, so the cursor has to be able to land
         // on it. Read-only, no editor.
@@ -1675,7 +1678,10 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         // cost of column unterkategorie")** — 96px still clipped a real
         // six-digit figure; funded by narrowing Unterkategorie instead of
         // widening the grid overall.
-        width: 110,
+        // Same width as the "letztes Jahr" column (Oct 2026, Markus: "make
+        // sure this year's and last year's totals column have the same
+        // width"), and no € sign any more so it fits.
+        width: LAST_YEAR_WIDTH,
         cellClass: (p) =>
           `text-right tabular-figure${p.data.rowLabel?.includes('breakdown') || p.data.rowLabel === 'Rollup' ? ' text-xs' : ''}${
             commentsRef.current.has(`${p.data.rowId}|label`) ? ' has-cell-comment' : ''
@@ -1693,6 +1699,10 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'flex-end',
+            // Trimmed side padding, same as the "letztes Jahr" column, so a
+            // six-digit figure with its sign still fits the narrow column.
+            paddingLeft: 4,
+            paddingRight: 6,
             ...blockBorderStyle(p.data),
           }
           if (p.data.rowLabel === 'Rollup') {
@@ -1705,7 +1715,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
           }
           return style
         },
-        valueGetter: (p) => (p.data.yearTotal === 0 ? '' : `${centsToWholeEuro(p.data.yearTotal)} €`),
+        valueGetter: (p) => (p.data.yearTotal === 0 ? '' : centsToWholeEuro(p.data.yearTotal)),
       },
       ...monthCols,
       {

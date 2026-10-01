@@ -1543,3 +1543,12 @@ Harness deleted before commit. The reload logic was checked separately with two 
 **Found while testing, fixed before commit:** my first version used `yearNum` before its declaration, which crashed the whole screen; caught by the harness.
 
 **Next session:** unchanged. First Markus's Außenstände repair run and panel confirmation, then his Planung comparison against the Gsheet. Worth asking him whether the comment field wants a keyboard shortcut to jump into it from a cell.
+
+## Session 37, continued an eighth time — 2026-10-01 — Verlauf/NavShell polish
+
+Four small requests from Markus, all done.
+- The tablet sidebar collapses as soon as a screen is picked from it (`NavShell.jsx`). It reuses the existing collapsed state, which is remembered per device, so the burger button is how it comes back; it also collapses when the already-active screen is clicked.
+- Both total columns (this year, last year) are now the same width (76px) with their year centered in the header (`verlauf-month-header`). This year's total lost its € sign, and got the same trimmed cell padding so a six-digit negative like "-120.000" still fits.
+- The comment field's placeholder is just "Kommentar" in a lighter gray (the cell description moved into the field's hover title), and the × is larger (20px).
+
+Verified in a disposable harness (NavShell + Verlauf): measured widths 76/76, headers centered, no € sign, "-120.000" shown whole, sidebar hidden after clicking Planung and back after the burger. Harness deleted. `npm run lint`, `npx vitest run` (71) and `npm run build` are clean.
