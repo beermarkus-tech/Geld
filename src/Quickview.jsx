@@ -302,17 +302,17 @@ export default function Quickview({ year, onOpenInKonten, active = true, preset 
                     </div>
                   )}
                   {!future && (
-                    <ul className="flex min-h-24 flex-1 flex-col overflow-y-auto">
+                    <ul className="flex min-h-24 flex-1 flex-col overflow-hidden">
                       {m.groups.slice(0, TOP_N).map((g, gi) => (
                         <li
                           key={`${g.label}\u0000${g.detail}`}
                           data-qv-cursor={`${m.month}:${gi}`}
                           onClick={() => openRow(m.month, gi)}
-                          className={`flex cursor-pointer items-baseline gap-1.5 text-sm hover:bg-[color-mix(in_srgb,var(--color-text)_6%,transparent)] ${
+                          className={`flex max-h-11 min-h-6 flex-1 cursor-pointer items-center gap-1.5 text-sm hover:bg-[color-mix(in_srgb,var(--color-text)_6%,transparent)] ${
                             cursor && cursor.month === m.month && cursor.index === gi ? 'outline outline-2 -outline-offset-2 outline-[var(--color-computed)]' : ''
                           }`}
                           title={`${g.detail ? `${g.detail} · ${g.label}` : g.label}${g.count > 1 ? ` · ${g.count} Buchungen` : ''}`}>
-                          <span className="w-[4.75rem] shrink-0 whitespace-nowrap px-1 text-right tabular-nums" style={{ background: amountTint(Math.abs(g.cents), minAbs, maxAbs) }}>
+                          <span className="flex h-full w-[4.75rem] shrink-0 items-center justify-end whitespace-nowrap px-1 tabular-nums" style={{ background: amountTint(Math.abs(g.cents), minAbs, maxAbs) }}>
                             {centsToWholeEuro(g.cents)} €
                           </span>
                           {/* A booking with a detail shows the detail *instead of* its name

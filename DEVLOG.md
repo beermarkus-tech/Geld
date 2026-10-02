@@ -1912,3 +1912,7 @@ Markus noticed unused tags weren't deleted dynamically. **Confirmed — my imple
 Markus asked that a holiday tag (e.g. Schottland: Ausgaben) is shown instead of the booking title in Quickview and grouped like identical titles. **The tag group is `groupingType: "project"` ("Reise/Projekt", spec §2.5); a child like "Ausgaben" counts when its parent is of that type.** `lib/quickview.js`: entries carry `tagLabel` (qualified tag name), the grouping key is tag-or-title plus detail (+2 tests, 95 total); `Quickview.jsx`/`Konten.jsx`: such a row opens Konten filtered by its tag (`jump.tagFilter`) instead of the title. Harness-checked: three bookings tagged Schottland: Ausgaben show as one row "Schottland: Ausgaben ×3" and the jump lists all three.
 
 **Interpretation to confirm with Markus:** when a row also has a detail, I kept the earlier rule — the detail is displayed (and separates rows), the tag only names rows without detail. Say if the tag should win over the detail instead.
+
+## Session 37, continued a fifty-seventh time — 2026-10-02 — Quickview: rows fill the panel
+
+Markus (screenshot, Build 169): the booking rows left empty space in the tall month panels. `Quickview.jsx`: the list is a flex column whose rows each take an equal share of the panel height (min 1.5 rem, max 2.75 rem, text vertically centred; the amount tint spans the row). Harness-checked with busy and sparse months. A month with very few rows still ends in some blank space once the cap is reached.
