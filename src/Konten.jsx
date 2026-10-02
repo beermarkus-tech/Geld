@@ -14,7 +14,7 @@ import { withRemainder } from './lib/split'
 import { registerScreenCursor } from './lib/screenCursor'
 import { unusedTagIds } from './lib/unusedTags'
 import { visibleSum } from './lib/visibleSum'
-import { tagFilterMatchIds, tagFilterTotal, tagJahresende } from './lib/tagBalance'
+import { tagBalance, tagFilterMatchIds, tagFilterTotal, tagJahresende } from './lib/tagBalance'
 import { qualifiedTagName, tagColorVar, tagParent } from './lib/tagStyle'
 import TagEditor, { slugify } from './TagEditor'
 
@@ -305,11 +305,39 @@ function allocationSideOrder(t, targets) {
 // The synthetic first line of an account-filtered view (Oct 2026, Markus): the
 // balance carried over from all earlier years, as one full-width pinned row —
 // not a real booking, so it never goes through the grid's columns/editing.
-function OpeningRow({ data }) {
+function OpeningRow({ data, api }) {
+  // The amount sits right-aligned in the Betrag column: the row is full width
+  // (not made of columns), so the column's current left edge and width are
+  // read from the grid and kept up to date on resize.
+  const [betrag, setBetrag] = useState(null)
+  useEffect(() => {
+    const measure = () => {
+      const col = api.getColumn('betrag')
+      // getLeft() counts from the start of the scrolling columns; the row
+      // spans the whole grid, so add the width of the left-pinned columns.
+      const pinnedLeft = api
+        .getAllDisplayedColumns()
+        .filter((c) => c.getPinned() === 'left')
+        .reduce((sum, c) => sum + c.getActualWidth(), 0)
+      setBetrag(col ? { left: col.getLeft() + (col.getPinned() === 'left' ? 0 : pinnedLeft), width: col.getActualWidth() } : null)
+    }
+    measure()
+    const events = ['columnResized', 'gridSizeChanged', 'displayedColumnsChanged']
+    events.forEach((e) => api.addEventListener(e, measure))
+    return () => events.forEach((e) => api.removeEventListener(e, measure))
+  }, [api])
+  // no € sign, like the Betrag cells, so the digits line up with theirs
+  const amount = <span className="tabular-figure">{centsToEuro(data.cents)}</span>
   return (
-    <div className="flex h-full items-center justify-between bg-[var(--color-bg)] px-4 text-sm font-medium">
-      <span>Übertrag aus Vorjahren (bis 31.12.{data.year - 1})</span>
-      <span className="tabular-figure">{centsToEuro(data.cents)} €</span>
+    <div className="relative flex h-full items-center bg-[var(--color-bg)] text-sm font-medium">
+      <span style={{ paddingLeft: 'var(--ag-cell-horizontal-padding, 16px)' }}>Übertrag aus Vorjahren (bis 31.12.{data.year - 1})</span>
+      {betrag ? (
+        <span className="absolute text-right" style={{ left: betrag.left, width: betrag.width, paddingRight: 'var(--ag-cell-horizontal-padding, 16px)' }}>
+          {amount}
+        </span>
+      ) : (
+        <span className="ml-auto pr-4">{amount}</span>
+      )}
     </div>
   )
 }
@@ -1415,9 +1443,17 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // incl. the opening-balance booking); null unless a single, non-receivable
   // account is filtered (a receivable account's view spans all years anyway).
   const openingRow = useMemo(() => {
-    if (!filteredAccountId || receivableView || !year) return null
-    return { __opening: true, id: '__opening', year: Number(year), cents: balance(filteredAccountId, `${Number(year) - 1}-12-31`, activeTransactions) }
-  }, [filteredAccountId, receivableView, year, activeTransactions])
+    if (!year) return null
+    const prevYearEnd = `${Number(year) - 1}-12-31`
+    if (filteredAccountId && !receivableView) {
+      return { __opening: true, id: '__opening', year: Number(year), cents: balance(filteredAccountId, prevYearEnd, activeTransactions) }
+    }
+    // A pre-defined (allocation) tag such as Sparen Sophia: its balance before this year.
+    if (accountFilter && !filteredAccountId && tags.find((t) => t.id === accountFilter)?.class === 'allocation') {
+      return { __opening: true, id: '__opening', year: Number(year), cents: tagBalance(accountFilter, prevYearEnd, activeTransactions, tags) }
+    }
+    return null
+  }, [filteredAccountId, accountFilter, receivableView, year, activeTransactions, tags])
 
   const rows = useMemo(() => {
     if (receivableView) return receivableView.txs.slice().sort((a, b) => (a.date === b.date ? a.id.localeCompare(b.id) : a.date.localeCompare(b.date)))
