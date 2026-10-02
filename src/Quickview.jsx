@@ -48,6 +48,7 @@ export default function Quickview({ year, onOpenInKonten, active = true, preset 
   // Lives here (the screen stays mounted), so it is remembered for the next
   // visit; cleared whenever a different category/tag is selected.
   const [cursor, setCursor] = useState(null)
+  const openMonthRef = useRef(null)
 
   const select = (id) => {
     setSelected((prev) => {
@@ -75,6 +76,11 @@ export default function Quickview({ year, onOpenInKonten, active = true, preset 
       if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'l') {
         e.preventDefault()
         listboxRef.current?.focus()
+      } else if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'g') {
+        // Same as the "Alle N Buchungen in Konten anzeigen" link, for the
+        // month the cursor is in (else the current calendar month).
+        e.preventDefault()
+        openMonthRef.current?.()
       } else if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'i') {
         e.preventDefault()
         setShortcutsOpen((v) => !v)
@@ -148,6 +154,14 @@ export default function Quickview({ year, onOpenInKonten, active = true, preset 
       label: g.label === '(ohne Name)' ? '' : g.label,
       detail: g.detail,
     })
+  }
+
+  // Strg+G: the month link's action — whole month, this selection, no name filter.
+  openMonthRef.current = () => {
+    if (!selection) return
+    const month = cursor?.month ?? (Number(todayIso().slice(5, 7)) <= occurred ? Number(todayIso().slice(5, 7)) : occurred)
+    if (!(month >= 1) || months[month - 1].count === 0) return
+    onOpenInKonten({ kind: selection.kind, name: option.filterText, year, month })
   }
 
   // Cursor keys (Markus, Oct 2026): Up/Down move within a month's list,
@@ -238,10 +252,13 @@ export default function Quickview({ year, onOpenInKonten, active = true, preset 
                   </li>
                 )}
                 <li>
-                  <b>Tab</b> — Cursor in die Liste setzen, <b>Pfeiltasten</b> — bewegen
+                  <b>Tab</b> — Cursor in die Liste setzen
                 </li>
                 <li>
                   <b>Enter</b> / Klick — Eintrag in Konten öffnen
+                </li>
+                <li>
+                  <b>Strg+G</b> — alle Buchungen des Monats in Konten anzeigen
                 </li>
                 <li>
                   <b>Strg+I</b> — diese Übersicht ein-/ausblenden

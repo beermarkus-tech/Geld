@@ -1800,3 +1800,7 @@ Markus asked for: Tab puts a cursor in the first panel with arrow-key movement; 
 ## Session 37, continued a thirty-sixth time — 2026-10-02 — Date filter finds split lines
 
 Markus: filtering Konten by date hid the sub-lines of split bookings (e.g. Amazon FR Julia). **Cause:** a line row's Datum value is blank (only the booking has a date), so a date filter could never match it. **Fix (`Konten.jsx`):** the Datum column got a `filterValueGetter` returning the booking's date for line rows — display unchanged, no data change; lines "own" the parent's date only for filtering. Harness-checked with a split booking: the Quickview jump (date + category + name) now shows the matching line. Same mechanism as the Empfänger/Details getters added the round before.
+
+## Session 37, continued a thirty-seventh time — 2026-10-02 — Sidebar swap, Strg+G, (i) cleanup
+
+Markus: removed "Pfeiltasten — bewegen" from Quickview's (i); swapped Quickview and Planung in the sidebar and their hotkeys (now Strg+4 Quickview, Strg+5 Planung); Strg+G = the month link's action. `NavShell.jsx`: `ALL_ITEMS` now follows an explicit `NAV_ORDER`; the phone bottom bar (`PRIMARY_ITEMS`) was deliberately not touched, so on phone Planung keeps its bottom-bar slot and Quickview stays under "More". `Quickview.jsx`: Strg+G opens Konten on the cursor's month (current calendar month without a cursor), listed in the (i). Harness-checked. Also answered in chat what Monatsabschluss is (spec §3h) — no code, not yet built (PLAN.md Phase 7).
