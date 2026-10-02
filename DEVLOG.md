@@ -1784,3 +1784,7 @@ Markus: Strg+Q in Verlauf = clicking the subcategory under the cursor (go to Qui
 Markus: a booking with a `detail` must not be merged into the name's sum; show it as "Name (Detail)" and keep it its own item, cut for display as "Amaz… …hminkzeug)" with the detail getting the larger share. Done: `groupByName` in `lib/quickview.js` now keys on name + detail (+1 test, 82 total; this reverses my earlier "detail is not part of the name" choice, spec §3e corrected); `Quickview.jsx` shows name (cut at its end, shrink weight 4, at least 4 characters) and detail in brackets (cut at its start via right-to-left overflow, weight 1), plus "×N" when identical name+detail bookings were merged. Visually checked in the harness with long names/details.
 
 **Note:** the 20/80 split is approximate (flexbox shrink weights), not an exact percentage.
+
+## Session 37, continued a thirty-fourth time — 2026-10-02 — Quickview: detail replaces the name
+
+Markus (after seeing the previous round): drop the "Name (Detail)" with the middle-ellipsis; instead show the detail in place of the booking's title, no text compression. Done in `Quickview.jsx`: row text is `detail || name` with ordinary end-truncation; grouping is unchanged (name + detail still the key, so bookings with a detail stay separate). The tooltip shows detail · name. spec.md §3e corrected. Markus called this a trial ("let's try this") — awaiting his verdict on real data.
