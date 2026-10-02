@@ -1598,3 +1598,13 @@ Markus's list for Planung, all done.
 **Not done / flagged:** arrow navigation exists on the tablet table only. The phone cards keep their stacked boxes without it (a keyboard is unlikely there).
 
 Verified in a harness: a scripted walk with the arrow keys across Puffer and comment cells, including the edges; typing starts editing; an arrow key while editing leaves the cursor in place; Enter then lets the arrows continue; the Puffer returns to its cell after Enter and saves once; the divider width, darker totals and the new column were checked by measurement and screenshot. Harness deleted. `npm run lint`, `npx vitest run` (71) and `npm run build` are clean.
+
+## Session 37, continued a twelfth time — 2026-10-02 — Planung stays mounted
+
+Markus: Planung was recalculated every time he switched screens. **Cause:** `App.jsx` mounted it conditionally (`view === 'planung'`), so every switch destroyed it, dropped its 8 Firestore listeners and rebuilt the whole report. Konten and Verlauf had been changed to mount once and just be hidden earlier for exactly this reason.
+
+**Fixed:** Planung is now mounted once and hidden with CSS like the other two, taking an `active` prop. Two things a hidden screen would otherwise lose are handled: the scroll position and the cursor cell are remembered and restored on return, and the comment boxes no longer measure themselves while hidden (a hidden textarea reports height 0, which would have collapsed every comment row).
+
+**Verified** in a harness that mimics App's two-screen structure: after switching away and back, the table is the same DOM node, no listener was re-created (8 subscriptions, 0 unsubscribes), the scroll position, the cursor cell and a tall comment row's height are unchanged, and the arrow keys work immediately. Harness deleted. `npm run lint`, `npx vitest run` (71) and `npm run build` are clean.
+
+**Trade-off, same as the other screens:** Planung's listeners now stay open for the whole session (CODEMAP's "known duplication" note about repeated subscriptions grows by one more screen). If a fourth screen needs the same data, that is the moment to lift the subscriptions into one shared provider.

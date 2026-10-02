@@ -100,7 +100,7 @@ function deltaColor(cents) {
   return 'var(--color-text)'
 }
 
-export default function Planung({ year }) {
+export default function Planung({ year, active = true }) {
   const [accounts, setAccounts] = useState([])
   const [categories, setCategories] = useState([])
   const [tags, setTags] = useState([])
@@ -110,6 +110,13 @@ export default function Planung({ year }) {
   const [settingsByYear, setSettingsByYear] = useState({})
   const [lens, setLens] = useState(readLens)
   const [showComments, setShowComments] = useState(readShowComments)
+  // Screen persistence (Oct 2026): App keeps this screen mounted and only
+  // hides it, so the scroll position and the cursor cell are remembered here
+  // and put back when the screen is shown again (a hidden element loses
+  // both, same job Konten/Verlauf do for their own cursor).
+  const scrollRef = useRef(null)
+  const scrollTopRef = useRef(0)
+  const lastCellRef = useRef(null)
 
   const planYear = Number(year)
   const refYear = planYear - 1
@@ -298,12 +305,35 @@ export default function Planung({ year }) {
     }
   }, [accounts, categories, tags, transactions, budgets, settingsByYear, lens, planYear, refYear])
 
+  const commentProps = { commentFor, saveComment, refYear, planYear, showComments, active }
+
+  // Coming back to the screen: scroll and cursor exactly where they were.
+  useLayoutEffect(() => {
+    if (!active) return
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollTop = scrollTopRef.current
+    const cell = lastCellRef.current
+    if (cell) {
+      el.querySelector(`[data-nav-row="${CSS.escape(cell.row)}"][data-nav-col="${cell.col}"]`)?.focus({ preventScroll: true })
+    }
+  }, [active])
+
   if (!report) return null
 
-  const commentProps = { commentFor, saveComment, refYear, planYear, showComments }
-
   return (
-    <div className="min-h-0 flex-1 overflow-auto px-4 py-4 md:px-5">
+    <div
+      ref={scrollRef}
+      onScroll={(e) => {
+        // A hidden element reports 0; only remember real scrolling.
+        if (e.currentTarget.offsetParent !== null) scrollTopRef.current = e.currentTarget.scrollTop
+      }}
+      onFocus={(e) => {
+        const t = e.target
+        if (t.dataset?.navRow !== undefined) lastCellRef.current = { row: t.dataset.navRow, col: t.dataset.navCol }
+      }}
+      className="min-h-0 flex-1 overflow-auto px-4 py-4 md:px-5"
+    >
       <div className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-[var(--color-text-muted)]">
         <span>
           Referenzjahr <b className="text-[var(--color-text)]">{refYear}</b> · immer Plan 0
@@ -489,11 +519,13 @@ function CommentBox({ y, target, c, cell = true, navCol }) {
 
   function fit() {
     const el = ref.current
-    if (!el) return
+    // Measuring a hidden box (screen switched away, or the other layout)
+    // would collapse it to 0 — keep the last height instead.
+    if (!el || el.offsetParent === null) return
     el.style.height = 'auto'
     el.style.height = `${el.scrollHeight}px`
   }
-  useLayoutEffect(fit, [draft])
+  useLayoutEffect(fit, [draft, c.active])
   useEffect(() => {
     window.addEventListener('resize', fit)
     return () => window.removeEventListener('resize', fit)

@@ -151,10 +151,13 @@ export default function App() {
       <div className={view === 'verlauf' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
         <Verlauf year={year} initialFocus={verlaufFocus} onFocusChange={setVerlaufFocus} active={view === 'verlauf'} />
       </div>
-      {/* Planung (spec.md §3c) — a read-only report with no cursor to
-          remember, so a plain conditional mount is enough (unlike Konten/
-          Verlauf above). */}
-      {view === 'planung' && <Planung year={year} />}
+      {/* Planung (spec.md §3c) mounts once and is only hidden, like Konten and
+          Verlauf above (Oct 2026, Markus: "planung is being recalculated
+          every time i switch screens") — it keeps its state, scroll position
+          and cursor cell, and never rebuilds its report on a screen switch. */}
+      <div className={view === 'planung' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
+        <Planung year={year} active={view === 'planung'} />
+      </div>
       {view === 'importexport' && <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} />}
       {/* Every other nav item (Dashboard, Quickview, Fortschritt,
           Monatsabschluss, Außenstände, Settings) isn't built yet —
