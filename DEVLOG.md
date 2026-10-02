@@ -1900,3 +1900,9 @@ Markus: "In Konten anzeigen" should show the claim from the Außenstände accoun
 ## Session 37, continued a fifty-fourth time — 2026-10-02 — New Außenstände booking now shows in the panel at once
 
 Markus: a freshly added booking on Außenstände didn't show in the pinned panel until a tag was added and removed again. **Cause:** a new row has `lines: []`; my "has an untagged booking" test looked at lines only, so a line-less booking never counted. **Fix (`Konten.jsx`):** such a booking counts as untagged, and the row now shows the *sum of the untagged bookings* (not the full balance, as Markus described it) — hidden when that sum is 0. Harness-checked: a line-less 30 € booking shows "Außenstände 30,00 €"; a tagged one appears only as its claim row. This answers the question left open in the forty-eighth entry (full balance vs. untagged remainder).
+
+## Session 37, continued a fifty-fifth time — 2026-10-02 — Unused tags now removed dynamically
+
+Markus noticed unused tags weren't deleted dynamically. **Confirmed — my implementation ran the cleanup once per app load** (as the forty-eighth entry says). **Now:** `Konten.jsx` re-checks whenever tags or bookings change, after 5 s without further change; candidates come from the bookings alone, budgets/year comments are read only when candidates exist, and candidates those keep are not asked about again this session (keeps Firestore reads low); grace for a freshly created tag shortened from 1 day to 10 minutes. Harness-checked: an unused tag is gone ~7 s after it appears, a just-created one stays, used ones stay (the mock now supports deletes).
+
+**Note:** removing a tag from its last booking now deletes the tag shortly after (until then it is still offered in the tag list).
