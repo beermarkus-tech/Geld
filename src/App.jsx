@@ -6,6 +6,7 @@ import ImportExportScreen from './ImportExportScreen'
 import Konten from './Konten'
 import { waitForInitialAuthState } from './lib/authReady'
 import { focusScreenCursor } from './lib/screenCursor'
+import { useValueWhileVisible } from './lib/useDeferWhileHidden'
 import NavShell, { ALL_ITEMS } from './NavShell'
 import PlaceholderScreen from './PlaceholderScreen'
 import Aussenstaende from './Aussenstaende'
@@ -29,6 +30,10 @@ export default function App() {
   // actually has data for.
   const [year, setYear] = useState(null)
   const [years, setYears] = useState([])
+  // Hidden screens keep their last year until shown (see useValueWhileVisible).
+  const verlaufYear = useValueWhileVisible(year, view === 'verlauf')
+  const planungYear = useValueWhileVisible(year, view === 'planung')
+  const quickviewYear = useValueWhileVisible(year, view === 'quickview')
   // The cursor's last known position on each of these two grid screens
   // (Markus: "generally, save the cursor position both in konten and
   // verlauf, and place the cursor there again upon switching") — has to
@@ -214,19 +219,19 @@ export default function App() {
         />
       </div>
       <div className={view === 'verlauf' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
-        <Verlauf year={year} initialFocus={verlaufFocus} onFocusChange={setVerlaufFocus} active={view === 'verlauf'} onOpenQuickview={openQuickview} />
+        <Verlauf year={verlaufYear} initialFocus={verlaufFocus} onFocusChange={setVerlaufFocus} active={view === 'verlauf'} onOpenQuickview={openQuickview} />
       </div>
       {/* Planung (spec.md §3c) mounts once and is only hidden, like Konten and
           Verlauf above (Oct 2026, Markus: "planung is being recalculated
           every time i switch screens") — it keeps its state, scroll position
           and cursor cell, and never rebuilds its report on a screen switch. */}
       <div className={view === 'planung' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
-        <Planung year={year} active={view === 'planung'} />
+        <Planung year={planungYear} active={view === 'planung'} />
       </div>
       {/* Quickview mounts once and is only hidden, like the screens above
           (Oct 2026, Markus), so its selection and scroll position stay. */}
       <div className={view === 'quickview' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
-        <Quickview year={year} onOpenInKonten={openInKonten} active={view === 'quickview'} preset={quickviewPreset}
+        <Quickview year={quickviewYear} onOpenInKonten={openInKonten} active={view === 'quickview'} preset={quickviewPreset}
           onBack={quickviewFrom === 'verlauf' ? goBackToVerlauf : null}
         />
       </div>

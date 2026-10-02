@@ -32,3 +32,13 @@ export function useDeferWhileHidden(active) {
     }
   }, [])
 }
+
+// The same idea for a plain value (e.g. the selected year): a hidden screen
+// keeps seeing the value it last had while visible, so changing the year in
+// Konten does not make Planung/Verlauf/Quickview rebuild their reports in the
+// background; they catch up when shown.
+export function useValueWhileVisible(value, active) {
+  const ref = useRef(value)
+  if (active) ref.current = value
+  return ref.current
+}

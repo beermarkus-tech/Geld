@@ -6,7 +6,7 @@ import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-communi
 import CategoryEditor from './CategoryEditor'
 import { db } from './firebase'
 import KontoEditor from './KontoEditor'
-import { jahresende } from './lib/balance'
+import { balance, jahresende } from './lib/balance'
 import { AUSSENSTAENDE_ACCOUNT_ID, claimOverview, claimTagIds, receivableAccountIds } from './lib/claims'
 import { centsToEuro } from './lib/format'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
@@ -302,6 +302,18 @@ function allocationSideOrder(t, targets) {
 // back up via `onYearsChange`, since it's the one screen that currently
 // loads transactions at all; the shell just renders whatever list it's
 // told about.
+// The synthetic first line of an account-filtered view (Oct 2026, Markus): the
+// balance carried over from all earlier years, as one full-width pinned row —
+// not a real booking, so it never goes through the grid's columns/editing.
+function OpeningRow({ data }) {
+  return (
+    <div className="flex h-full items-center justify-between bg-[var(--color-bg)] px-4 text-sm font-medium">
+      <span>Übertrag aus Vorjahren (bis 31.12.{data.year - 1})</span>
+      <span className="tabular-figure">{centsToEuro(data.cents)} €</span>
+    </div>
+  )
+}
+
 export default function Konten({ year, onYearChange, onYearsChange, initialFocus, onFocusChange, active = true, jump = null }) {
   const [accounts, setAccounts] = useState([])
   const [categories, setCategories] = useState([])
@@ -602,6 +614,10 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     stableOpenIdsRef.current = claimStatus.open
   }
   const openClaimIds = stableOpenIdsRef.current
+  // Read inside the column definitions instead of closing over `year`, so
+  // switching year does not rebuild every column (slow on a big grid).
+  const yearRef = useRef(year)
+  yearRef.current = year
   const openClaimIdsRef = useRef(openClaimIds)
   openClaimIdsRef.current = openClaimIds
 
@@ -1395,6 +1411,14 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     }
   }, [accountFilter, filteredAccountId, tagById])
 
+  // The balance of the filtered account before this year (every earlier year
+  // incl. the opening-balance booking); null unless a single, non-receivable
+  // account is filtered (a receivable account's view spans all years anyway).
+  const openingRow = useMemo(() => {
+    if (!filteredAccountId || receivableView || !year) return null
+    return { __opening: true, id: '__opening', year: Number(year), cents: balance(filteredAccountId, `${Number(year) - 1}-12-31`, activeTransactions) }
+  }, [filteredAccountId, receivableView, year, activeTransactions])
+
   const rows = useMemo(() => {
     if (receivableView) return receivableView.txs.slice().sort((a, b) => (a.date === b.date ? a.id.localeCompare(b.id) : a.date.localeCompare(b.date)))
     if (!year) return []
@@ -1676,7 +1700,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         // successfully (unlike the custom popup editors' getValue()/
         // stopEditing() pipeline, which confirmed wasn't reliable there).
         valueSetter: (p) => {
-          const parsed = parseFlexibleDate(p.newValue, year)
+          const parsed = parseFlexibleDate(p.newValue, yearRef.current)
           if (!parsed) return false
           p.data.date = parsed
           return true
@@ -2283,7 +2307,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps -- accountName/categoryName/groupName/ensureLine/handleDeleteClick/toggleExpanded/createTag close over these
-    [accountById, categoryById, tagById, usedTagValues, recentTagValues, accountFilter, accounts, categories, tags, confirmDeleteId, year, expandedIds],
+    [accountById, categoryById, tagById, usedTagValues, recentTagValues, accountFilter, accounts, categories, tags, confirmDeleteId, expandedIds],
   )
 
   const panel = useMemo(() => {
@@ -2435,6 +2459,9 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // Shown for any column filter or account filter (Markus, Sept 2026) — a
   // tag filter keeps its own tag balance above instead (his call).
   const showVisibleSum = (anyColumnFilter || !!filteredAccountId) && tagFilterSum === null && visibleSumCents !== null
+  // The carried-over balance counts into "Angezeigt" while the whole account
+  // is shown (no column filter), so the figure equals the account's balance.
+  const shownSumCents = visibleSumCents + (openingRow && !anyColumnFilter ? openingRow.cents : 0)
 
   return (
     <div className="flex min-h-full flex-col gap-3 px-4 py-3">
@@ -2535,7 +2562,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           {showVisibleSum && (
             <span className="text-sm text-[var(--color-text-muted)]">
               Angezeigt:{' '}
-              <span className="tabular-figure font-medium text-[var(--color-computed)]">{centsToEuro(visibleSumCents)} €</span>
+              <span className="tabular-figure font-medium text-[var(--color-computed)]">{centsToEuro(shownSumCents)} €</span>
             </span>
           )}
           {tagFilterSum !== null && (
@@ -2724,6 +2751,9 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           theme={themeQuartz}
           rowData={displayRows}
           columnDefs={columnDefs}
+          pinnedTopRowData={openingRow ? [openingRow] : undefined}
+          isFullWidthRow={(p) => Boolean(p.rowNode.data?.__opening)}
+          fullWidthCellRenderer={OpeningRow}
           // Mirrors AG Grid's own column-filter state into React (Markus's
           // "Filter zurücksetzen" button needs to know this) — also fires
           // for the Tags column's filter model being set/cleared
