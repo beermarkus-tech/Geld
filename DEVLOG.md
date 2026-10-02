@@ -1778,3 +1778,9 @@ Markus: clicking any subcategory in Verlauf should open Quickview with it pre-se
 Markus: Strg+Q in Verlauf = clicking the subcategory under the cursor (go to Quickview); Esc in Quickview returns to Verlauf when it was entered from there. Done: a Strg+Q branch in Verlauf's global key handler (only while Verlauf is active; uses the remembered cursor row), a `quickviewFrom` flag in `App.jsx` passed to Quickview as `onBack` (so Esc only goes back in that case; ignored while the search box is focused; cleared by menu navigation), and both listed in the (i) popovers. Harness-checked: Strg+Q → Quickview with Gehalt Markus selected; Esc → Verlauf; Esc in a directly opened Quickview does nothing.
 
 **Risk:** browsers/OSes can reserve Strg+Q (Cmd+Q on Mac quits the browser; some Linux setups too). Awaiting Markus's report from his devices; if it fails we pick another key.
+
+## Session 37, continued a thirty-third time — 2026-10-02 — Quickview: bookings with a detail stay separate
+
+Markus: a booking with a `detail` must not be merged into the name's sum; show it as "Name (Detail)" and keep it its own item, cut for display as "Amaz… …hminkzeug)" with the detail getting the larger share. Done: `groupByName` in `lib/quickview.js` now keys on name + detail (+1 test, 82 total; this reverses my earlier "detail is not part of the name" choice, spec §3e corrected); `Quickview.jsx` shows name (cut at its end, shrink weight 4, at least 4 characters) and detail in brackets (cut at its start via right-to-left overflow, weight 1), plus "×N" when identical name+detail bookings were merged. Visually checked in the harness with long names/details.
+
+**Note:** the 20/80 split is approximate (flexbox shrink weights), not an exact percentage.

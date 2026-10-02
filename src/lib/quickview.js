@@ -65,18 +65,22 @@ export function quickviewMonths(selection, year, transactions, tags) {
 // with the same name (displayLabel, ignoring case and surrounding spaces) is
 // summed into one row — all Lidl bookings of the month become one "Lidl"
 // total — and the rows are sorted by the size of that total, largest first.
-// `detail` is deliberately not part of the name: one name, one row.
+// A booking *with* a `detail` is a different item: name + detail together
+// are the key ("Amazon FR Julia (Schminkzeug)"), so it stays its own row and
+// only merges with bookings carrying the very same name and detail.
+// (Markus, Oct 2026.)
 function groupByName(entries) {
   const byKey = new Map()
   for (const e of entries) {
     const label = e.displayLabel.trim() || '(ohne Name)'
-    const key = label.toLowerCase()
-    const g = byKey.get(key) ?? { label, cents: 0, count: 0 }
+    const detail = e.detail.trim()
+    const key = `${label.toLowerCase()}\u0000${detail.toLowerCase()}`
+    const g = byKey.get(key) ?? { label, detail, cents: 0, count: 0 }
     g.cents += e.cents
     g.count += 1
     byKey.set(key, g)
   }
-  return [...byKey.values()].sort((a, b) => Math.abs(b.cents) - Math.abs(a.cents) || a.label.localeCompare(b.label, 'de'))
+  return [...byKey.values()].sort((a, b) => Math.abs(b.cents) - Math.abs(a.cents) || a.label.localeCompare(b.label, 'de') || a.detail.localeCompare(b.detail, 'de'))
 }
 
 // How many months of `year` have really occurred by `today` ("YYYY-MM-DD") —

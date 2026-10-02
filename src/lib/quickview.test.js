@@ -63,6 +63,18 @@ describe('quickviewMonths() grouping by name', () => {
     expect(m[2].groups.map((g) => [g.label, g.cents, g.count])).toEqual([['Lidl', -6500, 3], ['Bäcker', -4000, 1]])
     expect(m[3].groups).toHaveLength(1)
   })
+
+  it('keeps a booking with a detail as its own row, merging only identical name + detail', () => {
+    const t = (id, label, detail, cents) => tx(id, '2026-03-02', 'bnp', null, [line(cents, 'food')], { displayLabel: label, detail })
+    const txs = [
+      t('a', 'Amazon FR Julia', 'Schminkzeug', -2000), t('b', 'Amazon FR Julia', 'Schminkzeug', -500),
+      t('c', 'Amazon FR Julia', 'Buch', -3000), t('d', 'Amazon FR Julia', '', -100), t('e', 'Amazon FR Julia', '', -50),
+    ]
+    const g = quickviewMonths({ kind: 'category', id: 'food' }, 2026, txs, tags)[2].groups
+    expect(g.map((x) => [x.label, x.detail, x.cents, x.count])).toEqual([
+      ['Amazon FR Julia', 'Buch', -3000, 1], ['Amazon FR Julia', 'Schminkzeug', -2500, 2], ['Amazon FR Julia', '', -150, 2],
+    ])
+  })
 })
 
 describe('quickviewMonths() without a selection', () => {

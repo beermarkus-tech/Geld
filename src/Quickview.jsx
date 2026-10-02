@@ -185,13 +185,25 @@ export default function Quickview({ year, onOpenInKonten, active = true, preset 
                   {!future && (
                     <ul className="flex min-h-24 flex-1 flex-col overflow-y-auto">
                       {m.groups.slice(0, TOP_N).map((g) => (
-                        <li key={g.label} className="flex items-baseline gap-1.5 text-sm" title={`${g.label}${g.count > 1 ? ` · ${g.count} Buchungen` : ''}`}>
+                        <li key={`${g.label}\u0000${g.detail}`} className="flex items-baseline gap-1.5 text-sm" title={`${g.label}${g.detail ? ` (${g.detail})` : ''}${g.count > 1 ? ` · ${g.count} Buchungen` : ''}`}>
                           <span className="w-[4.75rem] shrink-0 whitespace-nowrap px-1 text-right tabular-nums" style={{ background: amountTint(Math.abs(g.cents), minAbs, maxAbs) }}>
                             {centsToWholeEuro(g.cents)} €
                           </span>
-                          <span className="min-w-0 truncate">
-                            {g.label}
-                            {g.count > 1 && <span className="ml-1 text-xs text-[var(--color-text-muted)]">×{g.count}</span>}
+                          {/* Name and (detail) share the width: when too long, the
+                              name is cut at its end ("Amaz…") and the detail at
+                              its *start* ("…hminkzeug)"), the detail getting the
+                              larger share (~80 %, shrink weights 1 : 4) — Markus,
+                              Oct 2026. The detail is right-to-left only for where
+                              the ellipsis goes; <bdi> keeps its own text and
+                              brackets reading normally. */}
+                          <span className="flex min-w-0 flex-1 items-baseline">
+                            <span className="min-w-[4ch] shrink-[4] truncate whitespace-nowrap">{g.label}</span>
+                            {g.detail && (
+                              <span className="ml-1 min-w-0 shrink overflow-hidden text-ellipsis whitespace-nowrap text-left" style={{ direction: 'rtl' }}>
+                                <bdi>({g.detail})</bdi>
+                              </span>
+                            )}
+                            {g.count > 1 && <span className="ml-1 shrink-0 text-xs text-[var(--color-text-muted)]">×{g.count}</span>}
                           </span>
                         </li>
                       ))}
