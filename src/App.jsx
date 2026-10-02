@@ -53,7 +53,10 @@ export default function App() {
     setQuickviewFrom(null)
     setView('verlauf')
   }
+  // 'quickview' while Konten was opened from there — Esc then goes back.
+  const [kontenFrom, setKontenFrom] = useState(null)
   const openInKonten = (j) => {
+    setKontenFrom('quickview')
     setKontenJump({ ...j, id: Date.now() })
     setView('konten')
   }
@@ -75,6 +78,23 @@ export default function App() {
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [view])
+
+  // Esc in Konten goes back to Quickview when Konten was opened from there
+  // (Oct 2026, Markus) — but never while Escape belongs to something else: an
+  // open filter popup, a cell being edited, a modal, or a focused field.
+  useEffect(() => {
+    if (view !== 'konten' || kontenFrom !== 'quickview') return
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      const a = document.activeElement
+      if (a && ['INPUT', 'TEXTAREA', 'SELECT'].includes(a.tagName)) return
+      if (document.querySelector('.fixed.inset-0, .ag-popup, .ag-cell-inline-editing')) return
+      setKontenFrom(null)
+      setView('quickview')
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [view, kontenFrom])
 
   useEffect(() => {
     let active = true
@@ -137,6 +157,7 @@ export default function App() {
       activeView={view}
       onNavigate={(v) => {
         setQuickviewFrom(null)
+        setKontenFrom(null)
         setView(v)
       }}
       year={year}

@@ -376,8 +376,14 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     setAccountFilter(null)
     const text = (filter) => ({ filterType: 'text', type: 'contains', filter })
     api.setFilterModel({
-      date: text(`${jump.year}-${String(jump.month).padStart(2, '0')}`),
+      date: text(jump.date ?? `${jump.year}-${String(jump.month).padStart(2, '0')}`),
       ...(jump.kind === 'category' ? { unterkategorie: text(jump.name) } : { tags: text(jump.name) }),
+      // Quickview rows: narrowed to the row's own name and detail (a row
+      // without a detail means "no detail", not "any").
+      ...(jump.label ? { empfaenger: text(jump.label) } : {}),
+      ...(jump.label !== undefined
+        ? { details: jump.detail ? { filterType: 'text', type: 'equals', filter: jump.detail } : { filterType: 'text', type: 'blank' } }
+        : {}),
     })
   }, [jump, gridReadyTick])
   const accountSelectRef = useRef(null)
@@ -1711,6 +1717,12 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         // prefixed "↳" on display only (the raw value, what's actually
         // editable, has no prefix — the prefix is cellRenderer-only so
         // editing doesn't start from "↳ " as literal text).
+        colId: 'empfaenger',
+        // Filters search a line row's own Vermerk *and* its booking's
+        // Empfänger, so a name filter (e.g. Quickview's jump) also finds the
+        // lines of a split booking while a category filter shows lines.
+        filterValueGetter: (p) =>
+          p.data.__isLine ? `${p.data.__parent.lines[p.data.__lineIndex]?.note ?? ''} ${p.data.__parent.displayLabel}`.trim() : p.data.displayLabel,
         valueGetter: (p) => (p.data.__isLine ? (p.data.__parent.lines[p.data.__lineIndex]?.note ?? '') : p.data.displayLabel),
         cellRenderer: (p) => (p.data.__isLine ? `↳ ${p.value || '(kein Vermerk)'}` : p.value),
         comparator: glueToParent((t) => t.displayLabel),
@@ -1917,6 +1929,8 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         // `detail` is parent-only free text (distinct from each line's own
         // `note`, shown in Empfänger) — blank and non-editable on a line
         // row rather than repeating/splitting the same field.
+        colId: 'details',
+        filterValueGetter: (p) => (p.data.__isLine ? p.data.__parent.detail : p.data.detail),
         valueGetter: (p) => (p.data.__isLine ? '' : p.data.detail),
         comparator: glueToParent((t) => t.detail),
         valueSetter: (p) => {

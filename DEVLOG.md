@@ -1788,3 +1788,11 @@ Markus: a booking with a `detail` must not be merged into the name's sum; show i
 ## Session 37, continued a thirty-fourth time — 2026-10-02 — Quickview: detail replaces the name
 
 Markus (after seeing the previous round): drop the "Name (Detail)" with the middle-ellipsis; instead show the detail in place of the booking's title, no text compression. Done in `Quickview.jsx`: row text is `detail || name` with ordinary end-truncation; grouping is unchanged (name + detail still the key, so bookings with a detail stay separate). The tooltip shows detail · name. spec.md §3e corrected. Markus called this a trial ("let's try this") — awaiting his verdict on real data.
+
+## Session 37, continued a thirty-fifth time — 2026-10-02 — Quickview cursor, rows open Konten, Esc back
+
+Markus asked for: Tab puts a cursor in the first panel with arrow-key movement; click/Enter on a row opens that item in Konten; Esc in Konten returns to Quickview when it came from there; remembered cursor; cursor cleared on a new selection; aggregated rows (Lidl ×5) open Konten filtered to that month and those items.
+
+**Done:** Quickview cursor state + key handling + Tab registration; `openRow` → Konten `jump` with name/detail (and the exact date for a single booking); Konten's Empfänger/Details columns got colIds and filter value getters; `App.jsx` `kontenFrom` + Esc handler (skips open popups/editing/modals/fields). Harness-checked: Tab → first row, arrows, Enter → Konten shows just that booking (or the three summed Lidl bookings, not the Lidl one with a detail), Esc → Quickview with the cursor kept, new selection clears the cursor, menu navigation forgets "came from".
+
+**Known limits:** the name filter is "contains" (a row "Lidl" also finds "Lidl Toulouse" bookings, which have their own row); a booking without a name is matched by month/selection only. A split booking's lines are found through their booking's name/detail. Esc in Konten also leaves Quickview-origin when the cursor merely sits in a grid cell — intended; if it feels too eager, say so.

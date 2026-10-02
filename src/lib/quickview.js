@@ -75,7 +75,7 @@ function groupByName(entries) {
     const label = e.displayLabel.trim() || '(ohne Name)'
     const detail = e.detail.trim()
     const key = `${label.toLowerCase()}\u0000${detail.toLowerCase()}`
-    const g = byKey.get(key) ?? { label, detail, cents: 0, count: 0 }
+    const g = byKey.get(key) ?? { label, detail, date: e.date, cents: 0, count: 0 }
     g.cents += e.cents
     g.count += 1
     byKey.set(key, g)

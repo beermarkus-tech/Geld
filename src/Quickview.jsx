@@ -4,6 +4,7 @@ import { collection, onSnapshot } from 'firebase/firestore'
 import { db } from './firebase'
 import { centsToWholeEuro } from './lib/format'
 import { occurredMonthCount, quickviewMonths } from './lib/quickview'
+import { registerScreenCursor } from './lib/screenCursor'
 import Listbox from './Listbox'
 
 // Quickview (spec.md §3e) — a pure past-transaction deep-dive: pick one
@@ -43,12 +44,26 @@ export default function Quickview({ year, onOpenInKonten, active = true, preset 
   const [selected, setSelected] = useState('')
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const listboxRef = useRef(null)
+  // The cursor: which row of which month panel ({month, index}), or null.
+  // Lives here (the screen stays mounted), so it is remembered for the next
+  // visit; cleared whenever a different category/tag is selected.
+  const [cursor, setCursor] = useState(null)
+
+  const select = (id) => {
+    setSelected((prev) => {
+      if (prev !== id) setCursor(null)
+      return id
+    })
+    // The dropdown's button would keep keyboard focus and swallow the arrow
+    // keys / Tab placement — hand focus back to the page.
+    document.activeElement?.blur?.()
+  }
 
   // Verlauf's subcategory click (spec §3b): App hands over a `preset`
   // ({id, kind, targetId}) with a fresh id per click; it becomes the selection.
   useEffect(() => {
-    if (preset) setSelected(`${preset.kind === 'category' ? 'c' : 't'}:${preset.targetId}`)
-  }, [preset])
+    if (preset) select(`${preset.kind === 'category' ? 'c' : 't'}:${preset.targetId}`)
+  }, [preset]) // eslint-disable-line react-hooks/exhaustive-deps -- select only uses setters
 
   // Ctrl+L opens the category dropdown (Markus, Oct 2026); Ctrl+I toggles the
   // shortcuts popover like on Konten/Verlauf, Escape closes it. Only while
@@ -117,6 +132,79 @@ export default function Quickview({ year, onOpenInKonten, active = true, preset 
   const minAbs = Math.min(...shownAbs)
   const maxAbs = Math.max(...shownAbs)
 
+  // Opens Konten on one row: the whole month for an aggregated row (×N) or the
+  // booking's own date for a single one, always narrowed to this selection and
+  // to the row's name / detail (Konten's `jump`, spec §3e).
+  function openRow(month, index) {
+    const g = months[month - 1]?.groups[index]
+    if (!g) return
+    setCursor({ month, index })
+    onOpenInKonten({
+      kind: selection.kind,
+      name: option.filterText,
+      year,
+      month,
+      date: g.count === 1 ? g.date : null,
+      label: g.label === '(ohne Name)' ? '' : g.label,
+      detail: g.detail,
+    })
+  }
+
+  // Cursor keys (Markus, Oct 2026): Up/Down move within a month's list,
+  // Left/Right to the neighbouring month that has rows; Enter opens the row
+  // in Konten. Only while this screen is visible and focus isn't in a field.
+  useEffect(() => {
+    if (!active || !selection) return
+    const onKeyDown = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || !cursor) return
+      const t = e.target?.tagName
+      if (t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' || t === 'BUTTON') return
+      const rows = (mo) => Math.min(TOP_N, months[mo - 1]?.groups.length ?? 0)
+      const clamp = (mo, i) => ({ month: mo, index: Math.max(0, Math.min(i, rows(mo) - 1)) })
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        const next = cursor.index + (e.key === 'ArrowDown' ? 1 : -1)
+        setCursor(clamp(cursor.month, next))
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault()
+        const step = e.key === 'ArrowRight' ? 1 : -1
+        for (let mo = cursor.month + step; mo >= 1 && mo <= occurred; mo += step) {
+          if (rows(mo) > 0) {
+            setCursor(clamp(mo, cursor.index))
+            break
+          }
+        }
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        openRow(cursor.month, cursor.index)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }) // every render: always sees the current months/cursor (cheap)
+
+  // Tab with nothing focused puts the cursor on the remembered row, else on
+  // the first row of the first month that has any (lib/screenCursor.js).
+  const placeCursorRef = useRef(null)
+  placeCursorRef.current = () => {
+    if (!selection) return false
+    if (cursor && months[cursor.month - 1]?.groups[cursor.index]) return true
+    for (let mo = 1; mo <= occurred; mo += 1) {
+      if (months[mo - 1].groups.length > 0) {
+        setCursor({ month: mo, index: 0 })
+        return true
+      }
+    }
+    return false
+  }
+  useEffect(() => registerScreenCursor('quickview', () => placeCursorRef.current()), [])
+
+  // Keep the cursor row in view.
+  useEffect(() => {
+    if (!active || !cursor) return
+    document.querySelector(`[data-qv-cursor="${cursor.month}:${cursor.index}"]`)?.scrollIntoView({ block: 'nearest' })
+  }, [active, cursor])
+
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto px-4 py-4 xl:overflow-hidden">
       <div className="flex flex-wrap items-center gap-4">
@@ -124,7 +212,7 @@ export default function Quickview({ year, onOpenInKonten, active = true, preset 
             colon, then a compact dropdown in the same style. */}
         <div className="flex items-center gap-2">
           <span className="text-sm text-[var(--color-text-muted)]">Kategorie oder Tag:</span>
-          <Listbox ref={listboxRef} value={selected} onChange={setSelected} options={options} placeholder="Auswählen…" searchable inline />
+          <Listbox ref={listboxRef} value={selected} onChange={select} options={options} placeholder="Auswählen…" searchable inline />
         </div>
         {/* Same (i) hover button as Konten/Verlauf's toolbars. */}
         <div className="relative ml-auto">
@@ -149,6 +237,12 @@ export default function Quickview({ year, onOpenInKonten, active = true, preset 
                     <b>Esc</b> — zurück zu Verlauf
                   </li>
                 )}
+                <li>
+                  <b>Tab</b> — Cursor in die Liste setzen, <b>Pfeiltasten</b> — bewegen
+                </li>
+                <li>
+                  <b>Enter</b> / Klick — Eintrag in Konten öffnen
+                </li>
                 <li>
                   <b>Strg+I</b> — diese Übersicht ein-/ausblenden
                 </li>
@@ -184,8 +278,15 @@ export default function Quickview({ year, onOpenInKonten, active = true, preset 
                   )}
                   {!future && (
                     <ul className="flex min-h-24 flex-1 flex-col overflow-y-auto">
-                      {m.groups.slice(0, TOP_N).map((g) => (
-                        <li key={`${g.label}\u0000${g.detail}`} className="flex items-baseline gap-1.5 text-sm" title={`${g.detail ? `${g.detail} · ${g.label}` : g.label}${g.count > 1 ? ` · ${g.count} Buchungen` : ''}`}>
+                      {m.groups.slice(0, TOP_N).map((g, gi) => (
+                        <li
+                          key={`${g.label}\u0000${g.detail}`}
+                          data-qv-cursor={`${m.month}:${gi}`}
+                          onClick={() => openRow(m.month, gi)}
+                          className={`flex cursor-pointer items-baseline gap-1.5 text-sm hover:bg-[color-mix(in_srgb,var(--color-text)_6%,transparent)] ${
+                            cursor && cursor.month === m.month && cursor.index === gi ? 'outline outline-2 -outline-offset-2 outline-[var(--color-computed)]' : ''
+                          }`}
+                          title={`${g.detail ? `${g.detail} · ${g.label}` : g.label}${g.count > 1 ? ` · ${g.count} Buchungen` : ''}`}>
                           <span className="w-[4.75rem] shrink-0 whitespace-nowrap px-1 text-right tabular-nums" style={{ background: amountTint(Math.abs(g.cents), minAbs, maxAbs) }}>
                             {centsToWholeEuro(g.cents)} €
                           </span>
