@@ -206,11 +206,13 @@ export default function Planung({ year, active = true }) {
 
   const report = useMemo(() => {
     if (!planYear) return null
-    const closedMonths = settingsByYear[planYear]?.closedMonths ?? []
-
+    // Prog of year `y` uses that year's own month-close switches (Verlauf's
+    // checkboxes) — a closed month is the real actual, an open one mirrors
+    // Plan1, exactly as Verlauf shows that year.
     function yearValue(targetKey, targetId, y, which) {
       if (which !== 'prog') return budgetTopLineMonths(targetKey, targetId, which, y, budgets).yearTotal
       const plan1 = budgetTopLineMonths(targetKey, targetId, 'plan1', y, budgets).months
+      const closedMonths = settingsByYear[y]?.closedMonths ?? []
       return progMonths(targetKey, targetId, plan1, closedMonths, y, transactions, tags).reduce((a, b) => a + b, 0)
     }
 
@@ -223,7 +225,10 @@ export default function Planung({ year, active = true }) {
     }
 
     function row(targetKey, targetId, label) {
-      const ref = yearValue(targetKey, targetId, refYear, 'plan0')
+      // The reference year is shown as its Prog — what actually happened
+      // (Oct 2026, Markus: actuals are the better base for Plan0 of the
+      // planning year than last year's Plan0).
+      const ref = yearValue(targetKey, targetId, refYear, 'prog')
       const plan = yearValue(targetKey, targetId, planYear, lens)
       const split = splitYear(plan, regularShare(refActualMonths(targetKey, targetId)))
       return { targetKey, targetId, label, ref, plan, split }
@@ -317,6 +322,12 @@ export default function Planung({ year, active = true }) {
     }
   }, [accounts, categories, tags, transactions, budgets, settingsByYear, lens, planYear, refYear])
 
+  // Months of the reference year not ticked closed in Verlauf — their Prog is
+  // still Plan1, not real bookings (shown as a warning; unknown while the
+  // year's settings haven't loaded).
+  const refSettings = settingsByYear[refYear]
+  const refOpenMonths = refSettings ? 12 - (refSettings.closedMonths ?? []).length : 0
+
   const commentProps = { commentFor, saveComment, refYear, planYear, showComments, active }
 
   // Tab with nothing focused (lib/screenCursor.js, App.jsx): the remembered
@@ -368,7 +379,12 @@ export default function Planung({ year, active = true }) {
     >
       <div className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-[var(--color-text-muted)]">
         <span>
-          Referenzjahr <b className="text-[var(--color-text)]">{refYear}</b> · immer Plan 0
+          Referenzjahr <b className="text-[var(--color-text)]">{refYear}</b> · Prog (tatsächlich)
+          {refOpenMonths > 0 && (
+            <span className="ml-2 text-[var(--color-needs-attention)]" title="In Verlauf ist für diese Monate das Häkchen „abgeschlossen“ nicht gesetzt; dort gilt Plan 1 statt der echten Buchungen.">
+              ⚠ {refOpenMonths} {refOpenMonths === 1 ? 'Monat' : 'Monate'} nicht abgeschlossen (dort gilt Plan 1)
+            </span>
+          )}
         </span>
         <span className="flex items-center gap-2">
           Planungsjahr <b className="text-[var(--color-text)]">{planYear}</b> · Spalte zeigt:

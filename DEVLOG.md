@@ -1686,3 +1686,13 @@ Markus reported Planung's "Alle Barkonten" total as not correct and asked which 
 - Planung classifies by each account's *current* group for **every** year (accounts' groups aren't versioned, same live/instant rule as category restructuring in §3i), so the 2025 column now includes Tagesgeld's 1 Jan 2025 balance, while the old sheet's 2025 figure did not. The expected gap is exactly that opening balance.
 - Still open, not touched: whether the Gsheet's "Alle Barkonten" also excluded Außenstände and/or Bargeld (the spec notes its header shows "Verliehen" separately). Markus kept both groups in, so they stay.
 - The live account document for Livret A Tagesgeld still needs the `accounts.json` re-import (see the entry on the Barkonto change); Planung's transitional rule covers it meanwhile.
+
+## Session 37, continued a twentieth time — 2026-10-02 — Planung: the reference year is now Prog
+
+Markus (after talking through "compare Plan0 2025 or Prog 2025 to educate Plan0 2026"): actuals are the better base, so Planung's reference column (2025) now shows **Prog** instead of Plan0. Only the reference column changed; the planning-year column still defaults to Plan0 with its Plan0/Plan1/Prog switch.
+
+**How it works:** the reference year's Prog is computed as Verlauf shows that year: a month ticked closed in Verlauf is its real actual, an open month mirrors that year's Plan1. If any month of the reference year isn't ticked closed, the header strip shows "⚠ n Monate nicht abgeschlossen (dort gilt Plan 1)" instead of silently mixing plan and actual. All reference-year figures follow: the group totals, "Ausgaben inkl. Rücklagen", Budget, "Ausgaben vs. Budget" and the chart's 2025 bars. The regular/lump split was already based on the reference year's actuals and is unchanged.
+
+**Verified** in a harness with a −250 €/month Plan1 and one real −220 € booking in 2025: all 12 months closed → −220; 11 closed → −470 (Dec = Plan1) with the warning; none closed → −3.000 with a "12 Monate" warning. Lint clean, tests (74) and build clean.
+
+**Consequences / awaiting Markus:** (1) the 2025 figures no longer match the Gsheet's Plan0 columns (the spec's 104.344 € Budget example was Plan0-based); compare against the Plan0 lens or Verlauf instead. spec.md §3c corrected, with that note. (2) For 2025 to show real year-end figures, **all twelve 2025 months must be ticked closed in Verlauf** (switch the year to 2025 and tick them); otherwise the warning appears. (3) The "letztes Jahr" column in Verlauf already worked this way.
