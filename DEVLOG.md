@@ -1650,3 +1650,18 @@ The previous entry's "open item" asked whether Livret A Tagesgeld belongs in Pla
 **Fixed:** `START_CASH_EXTRA_ACCOUNTS = ['livret-a-tagesgeld']` in `src/Planung.jsx`, counted on top of the three groups. Livret A Sparen stays out. spec.md §3c's Jahresanfang paragraph and CODEMAP updated. Verified in a harness: with 1.000 € on a Barkonten account, 474 € on Livret A Tagesgeld and 5.000 € on Livret A Sparen, the 2026 "Alle Barkonten" reads 1.474 €. Lint, tests (71) and build clean.
 
 **Effect:** Planung's "Alle Barkonten", "Jahresanfang" and "Budget" rise by the Livret A Tagesgeld balance at each year start (about 474 € in the last screenshot). That is a further reason to re-check his Gsheet comparison: the earlier DEVLOG entry's worry about the "Barkonten" definition now has this answer.
+
+## Session 37, continued a sixteenth time — 2026-10-02 — Recorded: Livret A Tagesgeld is a Barkonto
+
+Markus asked for the previous change to be recorded properly, as a real change in how he treats the account: **Livret A Tagesgeld is now a Barkonto and no longer a Sparkonto** (he notes this differs from how he handled it before). That is stronger than the previous entry's "exception in Planung", so the exception is replaced by the reclassification itself.
+
+**Recorded:**
+- `migration/seed/accounts.json`: `livret-a-tagesgeld` → `reportingGroup: "Barkonten"` (technical `group` stays `savings`).
+- spec.md §2.2: the Barkonten and Sparkonten definitions, the account table row and a new "Revised Oct 2026" paragraph with the consequences; §3c's Jahresanfang paragraph no longer calls it an exception — the account counts because it is a Barkonto.
+- CODEMAP: the seed note.
+
+**Verified** in a harness that renders Konten's real pinned panel from the new seed file: the Barkonten box lists Livret A Tagesgeld and the Tagesgeld tag row (473,76 € each), Sparkonten holds only Livret A Sparen (5.000 €) and its tags. Lint clean.
+
+**Consequences:** Planung's start cash includes the account via Barkonten; the Konten panel and the Konto dropdown's optgroups regroup it; the allocation-tag check Σ(Sparen Familie/Sophia/Julia, Rücklagen Steuern) == Livret A Sparen now sums over a Sparkonten group that really is just Livret A Sparen; the future Barkonten check (§2.8a) and Prognose's cash series read it as cash. A small visible side effect: the Barkonten box now shows the 1:1 `Tagesgeld` tag row right under the account itself, both with the same figure.
+
+**Not live yet — awaiting Markus:** the app has no screen for editing an account's group, so the live Firestore account document still says Sparkonten until `migration/seed/accounts.json` is re-imported (Import/Export → Datenimport, an upsert like the earlier Bargeld split). I sent him the file. **Transitional safety kept:** `START_CASH_EXTRA_ACCOUNTS` in `Planung.jsx` still adds the account to the starting cash so Planung is already right before the re-import; it is redundant afterwards and should be removed once he confirms the panel shows Livret A Tagesgeld under Barkonten.

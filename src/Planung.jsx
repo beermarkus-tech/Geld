@@ -27,10 +27,11 @@ import { registerScreenCursor } from './lib/screenCursor'
 // account in these three reportingGroups, balance on Dec 31 of the prior
 // year — Sparkonten/Geldanlage stay out.
 const START_CASH_GROUPS = ['Barkonten', 'Bargeld', 'Außenstände']
-// Plus one account from a different group (Oct 2026, Markus): Livret A
-// Tagesgeld sits under Sparkonten but is readily available cash and belongs
-// to the starting cash ("Tagesgeld" is only a tag on the euros on that
-// account). Livret A Sparen stays out.
+// TRANSITIONAL safety net (Oct 2026): Livret A Tagesgeld is a Barkonten
+// account now (spec.md §2.2, seed accounts.json), so START_CASH_GROUPS
+// already covers it once the live account document has been re-imported.
+// Until then it is still filed under Sparkonten in Firestore, and this keeps
+// the start cash right. Remove together with the re-import confirmation.
 const START_CASH_EXTRA_ACCOUNTS = ['livret-a-tagesgeld']
 
 const LENSES = [
