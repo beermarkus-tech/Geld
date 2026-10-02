@@ -1884,3 +1884,7 @@ Markus (screenshot of Build 161, i.e. *before* the Build 162 panel fix): (1) pan
 ## Session 37, continued a fiftieth time — 2026-10-02 — Carried-over line: Betrag alignment, tags too
 
 Markus liked the line; asked for its amount in the Betrag column and the same line for the pre-defined account tags (Sparen Sophia, Steuern, …). **Done:** the amount is positioned from the live Betrag column geometry (column left + left-pinned widths, re-measured on resize) and right-aligned without a € sign so the digits line up with the cells below; for an allocation-tag filter the line shows `tagBalance` up to 31.12. of the previous year (the existing "Angezeigt" for a tag was already the full balance). Harness-checked both variants (BNP −55,16 aligned; Sparen Familie 0,00). **Limit:** the line spans the grid and does not scroll sideways with the columns — fine at tablet width where all columns fit.
+
+## Session 37, continued a fifty-first time — 2026-10-02 — Außenstände: correcting bookings in green
+
+Markus asked for the correcting (ausgleichende) bookings on the Außenstände screen in a different colour. **Done (`Aussenstaende.jsx`):** a line whose sign is opposite to the claim's oldest line counts as correcting and gets the green tint/text (existing income-tint token) plus tooltip "Ausgleichsbuchung". Harness-checked on a loan (50 out, 45 back → the 45 line green) and a trip claim. **Limit:** purely directional — if a claim's first booking is itself the "returning" side, the colours swap for that claim.

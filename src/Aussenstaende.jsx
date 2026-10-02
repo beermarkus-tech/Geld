@@ -54,6 +54,10 @@ export default function Aussenstaende({ onOpenInKonten, active = true }) {
       return next
     })
 
+  // The direction a claim opens in: the sign of its oldest line. A line with
+  // the opposite sign is a correcting booking (repayment, refund, settlement).
+  const openingSign = (claim) => Math.sign(claim.lines.find((l) => l.cents !== 0)?.cents ?? 0)
+
   // Lines grouped by the claim-category tag they also carry (Meal/Taxi/…),
   // in order of first appearance; lines without one come first, flat. Lines
   // are never summed within a group (spec §3g).
@@ -111,14 +115,21 @@ export default function Aussenstaende({ onOpenInKonten, active = true }) {
                 {grouped(claim).map(([group, lines]) => (
                   <div key={group || '—'} className="flex flex-col">
                     {group && <div className="text-xs font-semibold uppercase tracking-wide text-[var(--color-tag-claim-category)]">{group}</div>}
-                    {lines.map((l) => (
-                      <div key={`${l.txId}:${l.lineIndex}`} className="flex items-baseline gap-3 py-0.5 text-sm">
-                        <span className="min-w-0 flex-1 truncate">
-                          {l.detail || l.label} <span className="text-[var(--color-text-muted)]">· {shortDate(l.date)}</span>
-                        </span>
-                        <span className="shrink-0 tabular-nums">{centsToEuro(l.cents)} €</span>
-                      </div>
-                    ))}
+                    {lines.map((l) => {
+                      const correcting = l.cents !== 0 && Math.sign(l.cents) === -openingSign(claim)
+                      return (
+                        <div
+                          key={`${l.txId}:${l.lineIndex}`}
+                          title={correcting ? 'Ausgleichsbuchung' : undefined}
+                          className={`flex items-baseline gap-3 rounded px-1 py-0.5 text-sm ${correcting ? 'bg-[var(--color-income-tint)] text-[var(--color-income)]' : ''}`}
+                        >
+                          <span className="min-w-0 flex-1 truncate">
+                            {l.detail || l.label} <span className={correcting ? 'opacity-70' : 'text-[var(--color-text-muted)]'}>· {shortDate(l.date)}</span>
+                          </span>
+                          <span className="shrink-0 tabular-nums">{centsToEuro(l.cents)} €</span>
+                        </div>
+                      )
+                    })}
                   </div>
                 ))}
                 <div className="flex items-center gap-3 pt-1 text-sm">
