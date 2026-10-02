@@ -1700,3 +1700,13 @@ Markus (after talking through "compare Plan0 2025 or Prog 2025 to educate Plan0 
 ## Session 37, continued a twenty-first time — 2026-10-02 — Planung: column titles
 
 Markus: title the reference column "2025 Prog", the planning column after whatever is selected at the top ("2026 Plan0" or "2026 Prog"), and the two comment columns just "Kommentare". Done in `src/Planung.jsx`: the table headers and the phone cards' year lines use `refLabel`/`planLabel`; the selector's labels are now "Plan0 / Plan1 / Prog" (were "Plan 0 / Plan 1") so the header text and the selector read the same, like Verlauf's chips. The comment boxes keep their year in their accessible labels. spec.md §3c notes the titles. Checked in a harness for all three selections and the phone layout. Lint, tests (74) and build clean.
+
+## Session 37, continued a twenty-second time — 2026-10-02 — Opening balances counted as January bookings in Verlauf
+
+Markus: Verlauf 2025 was counting the Jahresabschluß (opening balance) transactions — the savings accounts showed up in January. Verlauf is meant to show only what happens during the year, never starting values.
+
+**Cause:** the single opening-balance anchor per account is dated 2025-01-01 and its line carries the allocation tags (e.g. Sparen Familie), so the month-actual functions saw "money arriving at Livret A Sparen in January" and booked it as January's savings contribution (a closed January's Prog, the rollups, and — through the same functions — Planung's Prog and its regular/lump split too). Category rows weren't affected, since anchor lines have no category.
+
+**Fixed at the source:** `isAnchorTransaction()` (`src/lib/balance.js`, the same plug-account test `jahresanfang()` uses) is now skipped by all four month-actual functions in `src/lib/budget.js`. Balances (Konten's panel, Planung's starting cash) still include the anchors, as they must. 4 new tests; confirmed to fail on the old code and pass on the fix (78 tests total). spec.md §2.3 states the rule, CODEMAP updated. Lint and build clean.
+
+**Effect for Markus:** January 2025's Rücklagen Prog in Verlauf (closed months) no longer includes the opening balances, and the "2025 Prog" column in Planung and its Rücklagen / Ausgaben-vs-Budget figures lose the same amounts. Worth a second look at the 2025 Prog column against the Gsheet.

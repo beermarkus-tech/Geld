@@ -4,6 +4,8 @@
 // Planung's own formulas (the regular/lump split, the Budget summary band)
 // live at the bottom of this file.
 
+import { isAnchorTransaction } from './balance'
+
 // A category's actual for one month — Σ every line's own signed amount
 // where that line's categoryId matches, dated in that month (spec.md §3b:
 // "Σ transactions where categoryId == X and date in month"). Runs over
@@ -18,6 +20,8 @@ export function categoryMonthActual(categoryId, year, month, transactions) {
   const prefix = `${year}-${String(month).padStart(2, '0')}`
   let total = 0
   for (const tx of transactions) {
+    // Opening-balance anchors are balances, not a period's bookings.
+    if (isAnchorTransaction(tx)) continue
     if (!tx.date.startsWith(prefix)) continue
     for (const line of tx.lines ?? []) {
       if (line.categoryId === categoryId) total += line.amountCents
@@ -46,6 +50,8 @@ export function allocationMonthActual(allocationTagId, year, month, transactions
   const prefix = `${year}-${String(month).padStart(2, '0')}`
   let delta = 0
   for (const tx of transactions) {
+    // Opening-balance anchors are balances, not a period's bookings.
+    if (isAnchorTransaction(tx)) continue
     if (!tx.date.startsWith(prefix)) continue
     for (const line of tx.lines ?? []) {
       if (!(line.tags ?? []).includes(allocationTagId)) continue
@@ -130,6 +136,8 @@ export function breakdownGroupMonthActual(categoryId, tagIds, year, month, trans
   const prefix = `${year}-${String(month).padStart(2, '0')}`
   let total = 0
   for (const tx of transactions) {
+    // Opening-balance anchors are balances, not a period's bookings.
+    if (isAnchorTransaction(tx)) continue
     if (!tx.date.startsWith(prefix)) continue
     for (const line of tx.lines ?? []) {
       if (line.categoryId !== categoryId) continue
@@ -166,6 +174,8 @@ export function breakdownGroupAllocationMonthActual(allocationTagId, tagIds, yea
   const prefix = `${year}-${String(month).padStart(2, '0')}`
   let delta = 0
   for (const tx of transactions) {
+    // Opening-balance anchors are balances, not a period's bookings.
+    if (isAnchorTransaction(tx)) continue
     if (!tx.date.startsWith(prefix)) continue
     for (const line of tx.lines ?? []) {
       if (!(line.tags ?? []).some((t) => tagIds.has(t))) continue

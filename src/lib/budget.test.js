@@ -346,3 +346,43 @@ describe('planungSummary() — spec.md §3c Budget formula', () => {
     expect(a.ausgabenVsBudget).toBe(200000)
   })
 })
+
+describe('opening-balance anchors are never a period\'s activity (spec.md §2.3)', () => {
+  // The Jahresabschluß transaction is dated at the first year's start and
+  // carries the opening balance, tagged per allocation tag — it must count
+  // in balances but not as January's bookings in Verlauf/Planung.
+  const SPAREN = { id: 'sparen-familie', reconciliationTargetAccountIds: ['livret-a-sparen'] }
+  const anchor = {
+    id: 'jahresabschluss-livret-a-sparen',
+    date: '2025-01-01',
+    fromAccountId: 'jahresabschluss',
+    toAccountId: 'livret-a-sparen',
+    amountCents: 500000,
+    lines: [{ amountCents: 500000, categoryId: 'gehalt', note: '', tags: ['sparen-familie', 'fonds'] }],
+  }
+  const realContribution = {
+    date: '2025-01-15',
+    fromAccountId: 'bnp-konto',
+    toAccountId: 'livret-a-sparen',
+    lines: [{ amountCents: 10000, categoryId: null, note: '', tags: ['sparen-familie', 'fonds'] }],
+  }
+
+  it('allocationMonthActual() ignores the anchor but keeps a real January contribution', () => {
+    expect(allocationMonthActual('sparen-familie', 2025, 1, [anchor], [SPAREN])).toBe(0)
+    expect(allocationMonthActual('sparen-familie', 2025, 1, [anchor, realContribution], [SPAREN])).toBe(-10000)
+  })
+
+  it('breakdownGroupAllocationMonthActual() ignores the anchor', () => {
+    expect(breakdownGroupAllocationMonthActual('sparen-familie', new Set(['fonds']), 2025, 1, [anchor, realContribution], [SPAREN])).toBe(-10000)
+  })
+
+  it('categoryMonthActual() and breakdownGroupMonthActual() ignore the anchor', () => {
+    expect(categoryMonthActual('gehalt', 2025, 1, [anchor])).toBe(0)
+    expect(breakdownGroupMonthActual('gehalt', new Set(['fonds']), 2025, 1, [anchor])).toBe(0)
+  })
+
+  it('Prog of a closed January shows the real contribution only, not the opening balance', () => {
+    const plan1 = Array(12).fill(-5000)
+    expect(progMonths('allocationTagId', 'sparen-familie', plan1, [1], 2025, [anchor, realContribution], [SPAREN])[0]).toBe(-10000)
+  })
+})

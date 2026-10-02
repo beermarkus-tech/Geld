@@ -40,7 +40,13 @@ export function balance(accountId, asOfDate, transactions) {
 // The bookkeeping plug account of the one opening-balance transaction per
 // account (spec.md §2.3).
 const ANCHOR_ACCOUNT_ID = 'jahresabschluss'
-const isAnchor = (tx) => tx.fromAccountId === ANCHOR_ACCOUNT_ID || tx.toAccountId === ANCHOR_ACCOUNT_ID
+
+/** True for an opening-balance anchor transaction (spec.md §2.3). It is part
+ * of every balance, but never of a period's activity: Verlauf's and Planung's
+ * month actuals must skip it (Oct 2026, Markus: the savings accounts' opening
+ * balances showed up as January bookings in Verlauf 2025). */
+export const isAnchorTransaction = (tx) => tx.fromAccountId === ANCHOR_ACCOUNT_ID || tx.toAccountId === ANCHOR_ACCOUNT_ID
+const isAnchor = isAnchorTransaction
 
 /** The account's balance at the start of `year` — spec.md §2.1/§2.3: the
  * balance on Dec 31 of year-1, **plus the Jahresabschluß opening-balance
