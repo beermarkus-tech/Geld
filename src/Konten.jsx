@@ -299,7 +299,7 @@ function allocationSideOrder(t, targets) {
 // back up via `onYearsChange`, since it's the one screen that currently
 // loads transactions at all; the shell just renders whatever list it's
 // told about.
-export default function Konten({ year, onYearChange, onYearsChange, initialFocus, onFocusChange, active = true }) {
+export default function Konten({ year, onYearChange, onYearsChange, initialFocus, onFocusChange, active = true, jump = null }) {
   const [accounts, setAccounts] = useState([])
   const [categories, setCategories] = useState([])
   const [tags, setTags] = useState([])
@@ -363,6 +363,23 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // effect's own comment on why it needs this second trigger alongside
   // `rows`.
   const [gridReadyTick, setGridReadyTick] = useState(0)
+  // Quickview's "Alle in Konten anzeigen" link (spec.md §3e): App hands over
+  // a `jump` ({id, kind, name, month}; the year is already the global one)
+  // and the grid is filtered to that month plus the category/tag name, the
+  // same plain "contains" header filters a user would type. Applied once per
+  // jump id, as soon as the grid exists.
+  const appliedJumpRef = useRef(null)
+  useEffect(() => {
+    const api = gridRef.current?.api
+    if (!jump || !api || appliedJumpRef.current === jump.id) return
+    appliedJumpRef.current = jump.id
+    setAccountFilter(null)
+    const text = (filter) => ({ filterType: 'text', type: 'contains', filter })
+    api.setFilterModel({
+      date: text(`${jump.year}-${String(jump.month).padStart(2, '0')}`),
+      ...(jump.kind === 'category' ? { unterkategorie: text(jump.name) } : { tags: text(jump.name) }),
+    })
+  }, [jump, gridReadyTick])
   const accountSelectRef = useRef(null)
   // The id (and target column) of a row waiting to be scrolled into view,
   // selected, and cell-focused once it actually settles into `rows` —

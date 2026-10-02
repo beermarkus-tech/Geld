@@ -1730,3 +1730,13 @@ Markus reversed the "Livret A Tagesgeld is a Barkonto" decision (it was never ap
 **Open (awaiting Markus):** the label-only rule was justified by "readily available cash", which sits oddly with the account not counting as starting cash; confirm both stay as they are.
 
 **Next:** Quickview (PLAN.md Phase 5), reordering PLAN.md when started.
+
+## Session 37, continued a twenty-fifth time — 2026-10-02 — Quickview (PLAN.md Phase 5, built first)
+
+Markus asked for Quickview next and answered "no preference" on my three design questions, so the defaults were taken (all written into spec.md §3e): a split booking is listed by its matching line's amount; every month shows count + total with a year total on top; allocation tags are signed by their own direction rule. PLAN.md reordered: Quickview ahead of Phase 3/4.
+
+**Built:** `src/Quickview.jsx` (searchable list of subcategories and tags, newest month first, top 10 per month, future months hidden), `src/lib/quickview.js` + 5 tests (79 total), and a `jump` prop on `Konten.jsx` so "Alle N in Konten anzeigen" opens Konten filtered by month and name. Checked in a throwaway browser harness with fake data (13 bookings in one month → 10 shown + link; the link filtered Konten to those 13). Not yet seen with real data on Markus's side.
+
+**Still open:** Tagesgeld — Markus wants to think about what the Tagesgeld account really is (neither an expense account nor ordinary cash: money parked for a while). It stays Sparkonto and label-only/hidden from Verlauf and Planung rows until he decides; awaiting Markus. Also unchanged: Verlauf phone layout, ESOP/virtual-account split-line design, §2.8a Barkonten check scope, Ctrl+H confirmation.
+
+**Next:** Markus checks Quickview on real data; then the rest of Phase 5 (Außenstände, Fortschritt) or whatever he prefers.

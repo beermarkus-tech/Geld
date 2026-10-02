@@ -9,6 +9,7 @@ import { focusScreenCursor } from './lib/screenCursor'
 import NavShell, { ALL_ITEMS } from './NavShell'
 import PlaceholderScreen from './PlaceholderScreen'
 import Planung from './Planung'
+import Quickview from './Quickview'
 import Verlauf from './Verlauf'
 
 export default function App() {
@@ -37,6 +38,13 @@ export default function App() {
   // session, not surviving a reload.
   const [kontenFocus, setKontenFocus] = useState(null)
   const [verlaufFocus, setVerlaufFocus] = useState(null)
+  // Quickview's jump into Konten (spec.md §3e): a fresh id per click, so
+  // Konten applies each one exactly once.
+  const [kontenJump, setKontenJump] = useState(null)
+  const openInKonten = (j) => {
+    setKontenJump({ ...j, id: Date.now() })
+    setView('konten')
+  }
 
   // Tab with nothing focused (right after switching screens or reloading)
   // puts the cursor on the active screen's remembered cell, or its first
@@ -165,6 +173,7 @@ export default function App() {
           initialFocus={kontenFocus}
           onFocusChange={setKontenFocus}
           active={view === 'konten'}
+          jump={kontenJump}
         />
       </div>
       <div className={view === 'verlauf' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
@@ -177,13 +186,14 @@ export default function App() {
       <div className={view === 'planung' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
         <Planung year={year} active={view === 'planung'} />
       </div>
+      {view === 'quickview' && <Quickview year={year} onOpenInKonten={openInKonten} />}
       {view === 'importexport' && <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} />}
       {/* Every other nav item (Dashboard, Quickview, Fortschritt,
           Monatsabschluss, Außenstände, Settings) isn't built yet —
           resolved Sept 2026 (Markus): a real nav entry exists for each
           from the start anyway, landing on a plain placeholder rather than
           being left out until its own phase ships. */}
-      {!['konten', 'verlauf', 'planung', 'importexport'].includes(view) && (
+      {!['konten', 'verlauf', 'planung', 'quickview', 'importexport'].includes(view) && (
         <PlaceholderScreen title={ALL_ITEMS.find((i) => i.id === view)?.label ?? view} />
       )}
     </NavShell>

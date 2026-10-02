@@ -84,6 +84,7 @@ See `CLAUDE.md` for how this fits alongside `spec.md` and `DEVLOG.md`.
 - Tag-based claim/loan net-zero closure mechanism (§3g), including the close-out action for partial settlements.
 - Fortschritt's Kategorie/Unterkategorie selector with auto-discovered tag cards (§3j).
 - Quickview drill-down.
+  - **Reordered Oct 2026 (Markus): Quickview is built first, ahead of Phase 3 (CSV import) and Phase 4 (parallel-run month)** — it only reads existing Konten data, so nothing blocks it. The rest of Phase 5 (Außenstände, Fortschritt) keeps its place. *Built: Oct 2026, see DEVLOG.*
 
 **Testable deliverable:** Markus tags a real informal loan's outflow and its later repayment with the same tag and watches the open-status dot clear itself automatically, with no manual linking step — then deliberately under-pays a test claim and confirms the close-out action correctly books the residual and clears it too. Fortschritt on `Urlaube` correctly splits a real trip into Bereits gebucht / Noch geplant.
 
