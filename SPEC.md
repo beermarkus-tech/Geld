@@ -682,8 +682,10 @@ Colors reuse the app's own green/amber/purple semantics (confirmed fine). Orient
 
 **Built Oct 2026 — decisions made while building (Markus: no preference, defaults taken):**
 - **One list for the selection:** every subcategory (shown as "Gruppe › Name"; a group itself has no bookings of its own) and every non-archived tag (shown as "Tag: …", a child as "Tag: Parent › Child"), searchable. A parent tag also covers its children.
-- **Newest month first.** Months that really elapsed are shown even when empty ("Keine Buchungen"); future months are hidden.
-- **Each month header shows its count and total; the year's total sits at the top.**
+- **Layout like the Gsheet (Markus, Oct 2026): two rows of six months (Jan–Jun, Jul–Dec)**, each month a column with its name, total (whole euros) and booking count, then its ten largest bookings as "amount + label". On narrower screens the grid wraps to 3 or 2 columns. Months not yet elapsed stay as dimmed, empty slots so the grid keeps its shape (they show no numbers). All amounts rounded to whole euros.
+- **Colour scale by size:** each amount's background is tinted by its absolute size between the smallest and the largest amount shown across all months of the year (pale → yellow → orange); the middle colour sits at **70 %** of that span, so only the real main contributors turn strongly orange.
+- **Persistent:** the screen is mounted once and only hidden while another screen is shown (selection and scroll stay), like Konten/Verlauf/Planung.
+- **The year's total sits at the top.**
 - **A split booking is listed by its matching line, with that line's amount** (a split salary shows its 5.000 € salary line, not the booking's net); a booking with two matching lines appears twice.
 - **Allocation tags are signed by the tag's own direction rule** (+ arriving at its reconciliation accounts, − leaving them, as in §2.5); opening-balance (Jahresabschluß) bookings are never listed.
 - **"Alle N in Konten anzeigen"** appears when a month has more than ten and jumps to Konten filtered by that month plus the selection's name, using the ordinary Datum and Unterkategorie/Tags "contains" filters (so a name that is part of another name also matches that one).

@@ -186,7 +186,11 @@ export default function App() {
       <div className={view === 'planung' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
         <Planung year={year} active={view === 'planung'} />
       </div>
-      {view === 'quickview' && <Quickview year={year} onOpenInKonten={openInKonten} />}
+      {/* Quickview mounts once and is only hidden, like the screens above
+          (Oct 2026, Markus), so its selection and scroll position stay. */}
+      <div className={view === 'quickview' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
+        <Quickview year={year} onOpenInKonten={openInKonten} />
+      </div>
       {view === 'importexport' && <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} />}
       {/* Every other nav item (Dashboard, Quickview, Fortschritt,
           Monatsabschluss, Außenstände, Settings) isn't built yet —

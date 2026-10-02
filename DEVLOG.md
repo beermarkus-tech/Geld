@@ -1740,3 +1740,11 @@ Markus asked for Quickview next and answered "no preference" on my three design 
 **Still open:** Tagesgeld — Markus wants to think about what the Tagesgeld account really is (neither an expense account nor ordinary cash: money parked for a while). It stays Sparkonto and label-only/hidden from Verlauf and Planung rows until he decides; awaiting Markus. Also unchanged: Verlauf phone layout, ESOP/virtual-account split-line design, §2.8a Barkonten check scope, Ctrl+H confirmation.
 
 **Next:** Markus checks Quickview on real data; then the rest of Phase 5 (Außenstände, Fortschritt) or whatever he prefers.
+
+## Session 37, continued a twenty-sixth time — 2026-10-02 — Quickview: Gsheet-style layout, colour scale, persistence
+
+Markus (with a screenshot of his Gsheet Deepdive) kept the top-10 lists and the Konten link, and asked for: Quickview mounted once like the other screens, the months laid out as two rows of six, whole-euro rounding, and a colour gradient per amount from the smallest to the largest across all months with the middle colour at 70 %.
+
+**Done:** `App.jsx` mounts Quickview permanently (hidden via CSS); `src/Quickview.jsx` redone as a 2×6 grid (3/2 columns on narrower screens); amounts in whole euros; each amount tinted by absolute size (pale → yellow → orange, middle at 70 % of the span, scale taken over the amounts actually shown). spec.md §3e, CODEMAP.md updated. Harness-checked: grid renders, selection survives a trip through Konten.
+
+**Interpretation to confirm with Markus:** "color average at 70 %" read as the middle colour of a three-colour scale sitting at 70 % of the smallest-to-largest span; size = absolute amount (so expenses and income both rank by magnitude); future months stay as dimmed empty slots (the spec's "hidden entirely" is relaxed to keep the grid shape).
