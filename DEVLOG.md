@@ -1696,3 +1696,7 @@ Markus (after talking through "compare Plan0 2025 or Prog 2025 to educate Plan0 
 **Verified** in a harness with a −250 €/month Plan1 and one real −220 € booking in 2025: all 12 months closed → −220; 11 closed → −470 (Dec = Plan1) with the warning; none closed → −3.000 with a "12 Monate" warning. Lint clean, tests (74) and build clean.
 
 **Consequences / awaiting Markus:** (1) the 2025 figures no longer match the Gsheet's Plan0 columns (the spec's 104.344 € Budget example was Plan0-based); compare against the Plan0 lens or Verlauf instead. spec.md §3c corrected, with that note. (2) For 2025 to show real year-end figures, **all twelve 2025 months must be ticked closed in Verlauf** (switch the year to 2025 and tick them); otherwise the warning appears. (3) The "letztes Jahr" column in Verlauf already worked this way.
+
+## Session 37, continued a twenty-first time — 2026-10-02 — Planung: column titles
+
+Markus: title the reference column "2025 Prog", the planning column after whatever is selected at the top ("2026 Plan0" or "2026 Prog"), and the two comment columns just "Kommentare". Done in `src/Planung.jsx`: the table headers and the phone cards' year lines use `refLabel`/`planLabel`; the selector's labels are now "Plan0 / Plan1 / Prog" (were "Plan 0 / Plan 1") so the header text and the selector read the same, like Verlauf's chips. The comment boxes keep their year in their accessible labels. spec.md §3c notes the titles. Checked in a harness for all three selections and the phone layout. Lint, tests (74) and build clean.

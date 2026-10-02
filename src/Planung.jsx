@@ -35,8 +35,8 @@ const START_CASH_GROUPS = ['Barkonten', 'Bargeld', 'Außenstände']
 const START_CASH_EXTRA_ACCOUNTS = ['livret-a-tagesgeld']
 
 const LENSES = [
-  { id: 'plan0', label: 'Plan 0' },
-  { id: 'plan1', label: 'Plan 1' },
+  { id: 'plan0', label: 'Plan0' },
+  { id: 'plan1', label: 'Plan1' },
   { id: 'prog', label: 'Prog' },
 ]
 const LENS_KEY = 'geld-planung-lens'
@@ -328,7 +328,12 @@ export default function Planung({ year, active = true }) {
   const refSettings = settingsByYear[refYear]
   const refOpenMonths = refSettings ? 12 - (refSettings.closedMonths ?? []).length : 0
 
-  const commentProps = { commentFor, saveComment, refYear, planYear, showComments, active }
+  // Column titles say what the numbers are (Oct 2026, Markus): the reference
+  // year is always its Prog; the planning year is whichever lens is selected.
+  const refLabel = `${refYear} Prog`
+  const planLabel = `${planYear} ${LENSES.find((l) => l.id === lens)?.label ?? ''}`
+
+  const commentProps = { commentFor, saveComment, refYear, planYear, showComments, active, refLabel, planLabel }
 
   // Tab with nothing focused (lib/screenCursor.js, App.jsx): the remembered
   // cell if it is still there, else the first editable cell that is in view.
@@ -813,10 +818,10 @@ function ReportTable({ report, savePuffer, ...c }) {
       <thead>
         <tr>
           <th className={`${TH_BASE} left-0 z-20 text-left`}>Kategorie</th>
-          <th className={TH}>{refYear}</th>
-          {showComments && <th className={`${TH_BASE} z-10 min-w-[14rem] text-left`}>Kommentar {refYear}</th>}
-          <th className={`${TH} ${DIVIDER}`}>{planYear}</th>
-          {showComments && <th className={`${TH_BASE} z-10 min-w-[14rem] text-left`}>Kommentar {planYear}</th>}
+          <th className={TH}>{c.refLabel}</th>
+          {showComments && <th className={`${TH_BASE} z-10 min-w-[14rem] text-left`}>Kommentare</th>}
+          <th className={`${TH} ${DIVIDER}`}>{c.planLabel}</th>
+          {showComments && <th className={`${TH_BASE} z-10 min-w-[14rem] text-left`}>Kommentare</th>}
           <th className={TH}>Regulär Jahr</th>
           <th className={TH}>Regulär Monat</th>
           <th className={TH}>Einmal Jahr</th>
@@ -867,12 +872,12 @@ function Card({ r, c }) {
     <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-sm">
       <div className="mb-1 font-semibold">{r.label}</div>
       {[
-        [refYear, r.ref],
-        [planYear, r.plan],
-      ].map(([y, v]) => (
+        [refYear, c.refLabel, r.ref],
+        [planYear, c.planLabel, r.plan],
+      ].map(([y, title, v]) => (
         <div key={y} className="mb-1">
           <div className="flex justify-between">
-            <span className="text-[var(--color-text-muted)]">{y}</span>
+            <span className="text-[var(--color-text-muted)]">{title}</span>
             <span className="tabular-figure">{euro(v)}</span>
           </div>
           {showComments && (
