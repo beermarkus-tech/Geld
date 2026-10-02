@@ -11,7 +11,7 @@ import {
   budgetTopLineMonths,
   progMonths as progMonthsFor,
 } from './lib/budget'
-import { ALLOCATION_TAG_ORDER, GROUP_ORDER, SUBCAT_ORDER, isKnownSubcat } from './lib/categoryOrder'
+import { ALLOCATION_TAG_ORDER, GROUP_ORDER, SUBCAT_ORDER, isBudgetPlannedTag, isKnownSubcat } from './lib/categoryOrder'
 import { centsToWholeEuro, parseWholeEuroInput } from './lib/format'
 import { registerScreenCursor } from './lib/screenCursor'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
@@ -1246,7 +1246,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         out.push(...planLineRows(group.name, section, subcat.name, 'categoryId', subcat.id, false))
       }
     }
-    const allocationTags = tags.filter((t) => t.class === 'allocation')
+    const allocationTags = tags.filter((t) => t.class === 'allocation' && isBudgetPlannedTag(t))
     const sortedAllocationTags = [...allocationTags].sort(
       (a, b) => ALLOCATION_TAG_ORDER.indexOf(a.id) - ALLOCATION_TAG_ORDER.indexOf(b.id),
     )

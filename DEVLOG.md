@@ -1627,3 +1627,18 @@ Markus: on any screen, pressing Tab after switching screens or reloading should 
 Harness deleted. `npm run lint`, `npx vitest run` (71) and `npm run build` are clean.
 
 **One behavior to be aware of:** when a screen has already restored its cursor on switching, a following Tab moves the cursor on by one cell (ordinary grid Tab), it does not "stay". Tab only places the cursor when nothing is focused yet.
+
+## Session 37, continued a fourteenth time — 2026-10-02 — Tagesgeld leaves Verlauf and Planung
+
+Markus: Tagesgeld is a pure label on transactions (especially those onto Livret A Tagesgeld), not an expense-like set-aside — money in Tagesgeld is effectively cash readily available — so it must disappear from Planung and from Verlauf's bottom row, and I should name any implications.
+
+**Done:** `UNPLANNED_ALLOCATION_TAGS = ['tagesgeld']` (`src/lib/categoryOrder.js`), applied in both screens. Tagesgeld no longer appears as a block in Verlauf or as a row in Planung's Rücklagen, and no longer counts in its Rücklagen total, "Ausgaben inkl. Rücklagen", "gebildete Rücklagen", "Ausgaben vs. Budget" or the chart. spec.md §2.4/§2.5/§2.8a/§3b/§3c corrected to say so. Verified in a harness with a Tagesgeld budget of −50 €/month: Planung's Rücklagen total is −1.200 € (Sparen Familie only), and Verlauf shows only Sparen Familie. Lint, tests (71) and build clean.
+
+**Implications found:**
+1. **Planung's numbers shift by exactly Tagesgeld's planned amounts**, in Rücklagen, "Ausgaben inkl. Rücklagen" and "Ausgaben vs. Budget". That should bring them *closer* to the Gsheet: spec §3c's own formulas speak of six allocation-tag targets, and `migration/transform-budgets.py` already treats the Gsheet's Tagesgeld row as a summary group of its own, apart from Rücklagen. Not verifiable without the real data.
+2. **Hidden, not deleted:** the Tagesgeld Plan0/Plan1 `budgets` documents remain in Firestore (they can no longer be seen or edited), and a re-run of the budget migration would recreate them. Harmless; a cleanup could belong to a later Settings pass.
+3. **The tag stays a real allocation tag:** its balance, the "Tagesgeld" row in Konten's pinned panel, tag filtering and the `balance(Tagesgeld) == balance(Livret A Tagesgeld)` check are untouched. If Markus wants it to be a *plain* label (no panel row, no reconciliation), that is a separate, larger change.
+4. **§2.8a's Rücklagen check** (Dashboard, not built) would have shown a permanent false mismatch if Tagesgeld's actual stayed in while its plan was gone. The spec now excludes it on both sides.
+5. **Latent trap fixed:** a tag missing from `ALLOCATION_TAG_ORDER` sorted to the *top* of Verlauf's and Planung's Rücklagen (indexOf −1), so removing it from the list would not have hidden it, hence the explicit exclusion list.
+
+**Open item — awaiting Markus:** *Livret A Tagesgeld* is in the Sparkonten reporting group, so its balance is **not** part of Planung's Jahresanfang start cash (Barkonten + Bargeld + Außenstände). With Tagesgeld now treated as readily available cash, in-year transfers into it no longer count as set aside, but its balance at year start is still not counted as available. The two treatments disagree. The amount looked small in the last screenshot (about 474 €), so it may not matter in practice, but if "Tagesgeld = cash" is the rule, that account arguably belongs in the start-cash groups. Not changed.

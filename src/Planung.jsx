@@ -12,7 +12,7 @@ import {
   regularShare,
   splitYear,
 } from './lib/budget'
-import { ALLOCATION_TAG_ORDER, GROUP_ORDER, SUBCAT_ORDER, isKnownSubcat } from './lib/categoryOrder'
+import { ALLOCATION_TAG_ORDER, GROUP_ORDER, SUBCAT_ORDER, isBudgetPlannedTag, isKnownSubcat } from './lib/categoryOrder'
 import { centsToWholeEuro, parseWholeEuroInput } from './lib/format'
 import { registerScreenCursor } from './lib/screenCursor'
 
@@ -256,7 +256,7 @@ export default function Planung({ year, active = true }) {
       .filter((g) => g.rows.some(visible))
 
     const ruecklagen = tags
-      .filter((t) => t.class === 'allocation')
+      .filter((t) => t.class === 'allocation' && isBudgetPlannedTag(t))
       .sort((a, b) => ALLOCATION_TAG_ORDER.indexOf(a.id) - ALLOCATION_TAG_ORDER.indexOf(b.id))
       .map((t) => row('allocationTagId', t.id, `Für ${t.name}`))
 

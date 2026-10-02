@@ -42,5 +42,16 @@ export const ALLOCATION_TAG_ORDER = [
   'anlage-familie',
   'anlage-sophia',
   'ruecklagen-steuern',
-  'tagesgeld',
 ]
+
+// Allocation tags that are only a *label* on transactions and are never
+// budget-planned (Oct 2026, Markus: "tagesgeld is purely a label we attach
+// to some transactions... it has no expense character like savings or
+// investments, because tagesgeld is effectively cash readily available").
+// Verlauf and Planung leave them out of their Rücklagen section entirely —
+// the tag itself, its balance in Konten's pinned panel and its 1:1
+// reconciliation against Livret A Tagesgeld are unaffected. (They must be
+// excluded explicitly: a tag missing from ALLOCATION_TAG_ORDER would
+// otherwise sort to the *top* of the section, indexOf being -1.)
+export const UNPLANNED_ALLOCATION_TAGS = ['tagesgeld']
+export const isBudgetPlannedTag = (tag) => !UNPLANNED_ALLOCATION_TAGS.includes(tag.id)
