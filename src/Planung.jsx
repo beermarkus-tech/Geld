@@ -25,14 +25,9 @@ import { registerScreenCursor } from './lib/screenCursor'
 
 // Jahresanfang's starting cash (§3c, resolved Sept 2026, Markus): every
 // account in these three reportingGroups, balance on Dec 31 of the prior
-// year — Sparkonten/Geldanlage stay out.
+// year — Sparkonten/Geldanlage stay out. (Livret A Tagesgeld is a Barkonten
+// account now, §2.2, so it counts through the group.)
 const START_CASH_GROUPS = ['Barkonten', 'Bargeld', 'Außenstände']
-// TRANSITIONAL safety net (Oct 2026): Livret A Tagesgeld is a Barkonten
-// account now (spec.md §2.2, seed accounts.json), so START_CASH_GROUPS
-// already covers it once the live account document has been re-imported.
-// Until then it is still filed under Sparkonten in Firestore, and this keeps
-// the start cash right. Remove together with the re-import confirmation.
-const START_CASH_EXTRA_ACCOUNTS = ['livret-a-tagesgeld']
 
 const LENSES = [
   { id: 'plan0', label: 'Plan0' },
@@ -285,7 +280,7 @@ export default function Planung({ year, active = true }) {
     // breakdown").
     const ausgabenInklTotal = total('Ausgaben inkl. Rücklagen', [...ausgabenGroups.flatMap((g) => g.rows), ...ruecklagen])
 
-    const startCashAccounts = accounts.filter((a) => START_CASH_GROUPS.includes(a.reportingGroup) || START_CASH_EXTRA_ACCOUNTS.includes(a.id))
+    const startCashAccounts = accounts.filter((a) => START_CASH_GROUPS.includes(a.reportingGroup))
     const startCash = (y) => startCashAccounts.reduce((a, acc) => a + jahresanfang(acc.id, y, transactions), 0)
     const puffer = (y) => settingsByYear[y]?.minCashBufferCents ?? 0
 

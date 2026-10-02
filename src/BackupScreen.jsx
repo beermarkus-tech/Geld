@@ -2,8 +2,6 @@ import { useState } from 'react'
 import { collection, doc, getDocs, writeBatch } from 'firebase/firestore'
 
 import { db } from './firebase'
-import { centsToEuro } from './lib/format'
-import { REPLACEMENT_ACCOUNT_ID, planRetiredAccountFixes } from './lib/retiredAccounts'
 
 // The basic safety net PLAN.md's Phase 1b calls for: "a rough, unpolished
 // raw JSON dump of every collection, plus a rough script that reads it
@@ -41,132 +39,6 @@ function downloadJson(filename, data) {
   a.download = filename
   a.click()
   URL.revokeObjectURL(url)
-}
-
-// Temporary one-off repair (Sept 2026) — moves transactions still pointing
-// at the five retired receivable accounts onto `aussenstaende` (spec.md
-// §2.2). Scan first, show what would change, confirm, then write. Remove
-// this section once Markus has confirmed the live data is clean.
-function RetiredAccountRepair() {
-  const [scan, setScan] = useState(null)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(null)
-  const [confirming, setConfirming] = useState(false)
-  const [written, setWritten] = useState(null)
-
-  async function handleScan() {
-    setBusy(true)
-    setError(null)
-    setWritten(null)
-    try {
-      const snap = await getDocs(collection(db, 'transactions'))
-      setScan(planRetiredAccountFixes(snap.docs.map((d) => d.data())))
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function handleApply() {
-    setConfirming(false)
-    setBusy(true)
-    setError(null)
-    try {
-      const fixes = scan.fixes
-      for (let i = 0; i < fixes.length; i += CHUNK_SIZE) {
-        const batch = writeBatch(db)
-        for (const { after } of fixes.slice(i, i + CHUNK_SIZE)) batch.set(doc(collection(db, 'transactions'), after.id), after)
-        await batch.commit()
-      }
-      setWritten(fixes.length)
-      // Re-scan straight away so the screen shows the real result (0).
-      const snap = await getDocs(collection(db, 'transactions'))
-      setScan(planRetiredAccountFixes(snap.docs.map((d) => d.data())))
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const button = 'self-start rounded-lg bg-[var(--color-computed)] px-5 py-2.5 font-medium text-white disabled:opacity-50'
-
-  return (
-    <section className="flex flex-col gap-3 rounded-lg border border-[var(--color-needs-attention)] p-4">
-      <h2 className="text-lg font-semibold">Einmalige Reparatur: alte Außenstände-Konten</h2>
-      <p className="text-sm text-[var(--color-text-muted)]">
-        Sucht Buchungen, die noch auf die alten Konten „Geld verliehen/geliehen“ oder „Amazon Julia/Markus (DE/FR)“
-        zeigen, und hängt sie auf das gemeinsame Konto „Außenstände“ um. Betrag, Datum, Kategorie und Tags bleiben
-        unverändert. Bitte vorher unten eine Sicherung herunterladen.
-      </p>
-      <button type="button" onClick={handleScan} disabled={busy} className={button}>
-        {busy && !scan ? 'Sucht…' : 'Suchen'}
-      </button>
-      {scan && (
-        <div className="flex flex-col gap-2 text-sm">
-          {scan.fixes.length === 0 ? (
-            <p className="font-medium text-[var(--color-income)]">Keine Buchungen mehr auf alten Konten — alles sauber.</p>
-          ) : (
-            <>
-              <p>
-                <b>{scan.fixes.length}</b> Buchungen gefunden:
-              </p>
-              <ul className="list-inside list-disc text-[var(--color-text-muted)]">
-                {Object.entries(scan.countsByOldId).map(([id, n]) => (
-                  <li key={id}>
-                    {id}: {n}
-                  </li>
-                ))}
-              </ul>
-              {scan.untagged.length > 0 && (
-                <div>
-                  <p className="font-medium">
-                    {scan.untagged.length} davon haben keinen Tag — sie erscheinen nach dem Umhängen nicht als offener Posten
-                    im Außenstände-Panel. Bitte danach in Konten von Hand taggen:
-                  </p>
-                  <ul className="list-inside list-disc text-[var(--color-text-muted)]">
-                    {scan.untagged.map((t) => (
-                      <li key={t.id}>
-                        {t.date} · {centsToEuro(t.amountCents)} € {t.deletedAt ? '(gelöscht)' : ''}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              <button type="button" onClick={() => setConfirming(true)} disabled={busy} className={button}>
-                {busy ? 'Hängt um…' : `Alle ${scan.fixes.length} auf „Außenstände“ umhängen`}
-              </button>
-            </>
-          )}
-        </div>
-      )}
-      {written !== null && <p className="text-sm font-medium text-[var(--color-income)]">{written} Buchungen umgehängt.</p>}
-      {error && <p className="text-sm text-[var(--color-alert)]">Fehler: {error}</p>}
-      {confirming && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onClick={() => setConfirming(false)}
-          onKeyDown={(e) => e.key === 'Escape' && setConfirming(false)}
-        >
-          <div className="flex max-w-sm flex-col gap-4 rounded-lg bg-[var(--color-surface)] p-5" onClick={(e) => e.stopPropagation()}>
-            <p className="text-sm">
-              {scan.fixes.length} Buchungen auf das Konto <b>{REPLACEMENT_ACCOUNT_ID}</b> umhängen? Das ändert nur das
-              Konto, sonst nichts.
-            </p>
-            <div className="flex gap-2">
-              <button type="button" autoFocus onClick={handleApply} className="rounded-lg bg-[var(--color-computed)] px-4 py-2 text-sm font-medium text-white">
-                Umhängen
-              </button>
-              <button type="button" onClick={() => setConfirming(false)} className="rounded-lg border border-[var(--color-border)] px-4 py-2 text-sm">
-                Abbrechen
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </section>
-  )
 }
 
 export default function BackupScreen() {
@@ -251,7 +123,6 @@ export default function BackupScreen() {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-8 px-4 py-6">
-      <RetiredAccountRepair />
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">Sicherung herunterladen</h2>
         <p className="text-sm text-[var(--color-text-muted)]">

@@ -1710,3 +1710,11 @@ Markus: Verlauf 2025 was counting the Jahresabschluß (opening balance) transact
 **Fixed at the source:** `isAnchorTransaction()` (`src/lib/balance.js`, the same plug-account test `jahresanfang()` uses) is now skipped by all four month-actual functions in `src/lib/budget.js`. Balances (Konten's panel, Planung's starting cash) still include the anchors, as they must. 4 new tests; confirmed to fail on the old code and pass on the fix (78 tests total). spec.md §2.3 states the rule, CODEMAP updated. Lint and build clean.
 
 **Effect for Markus:** January 2025's Rücklagen Prog in Verlauf (closed months) no longer includes the opening balances, and the "2025 Prog" column in Planung and its Rücklagen / Ausgaben-vs-Budget figures lose the same amounts. Worth a second look at the 2025 Prog column against the Gsheet.
+
+## Session 37, continued a twenty-third time — 2026-10-02 — Cleanup after Markus's confirmations; next: Quickview
+
+Markus confirmed the four pending items: the `accounts.json` re-import (Livret A Tagesgeld now sits under Barkonten in the live data), the Außenstände repair run and panel check, 2025's months ticked closed in Verlauf, and the Planung vs. Gsheet comparison. That closes the long-open "Außenstände migration/panel check" and Phase 2's acceptance test for Planung.
+
+**Removed, as promised:** the temporary repair section in Import/Export → Sicherung (`RetiredAccountRepair`), `src/lib/retiredAccounts.js` and its 4 tests, and Planung's transitional `START_CASH_EXTRA_ACCOUNTS` rule (Livret A Tagesgeld counts through its Barkonten group now). The permanent part stays: `migration/transform-transactions.py` routes Amazon returns and loans to `aussenstaende`. Lint clean, tests 74, build clean; CODEMAP updated.
+
+**Next (Markus's choice): Quickview, PLAN.md Phase 5** (with Außenstände and Fortschritt), pulled ahead of Phase 3 (CSV import) and Phase 4 (parallel-run month). It needs a PLAN.md reordering when started. Still open elsewhere: Verlauf's phone layout (last unbuilt Phase 2 piece), the split-line-to-virtual-account design question, the §2.8a Barkonten check scope (Barkonten now includes Livret A Tagesgeld; Bargeld still undecided), Ctrl+H device confirmation, the "account totals" ambiguity, the deferred Verlauf gridline bug.
