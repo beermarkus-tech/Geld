@@ -88,6 +88,11 @@ const SECTION_TINT = {
   ruecklagen: 'var(--color-savings-tint)',
 }
 
+// The three Budget lines (Budget, Ausgaben vs. Budget, gebildete Rücklagen)
+// are tinted yellow to set them apart from the report around them (Oct 2026,
+// Markus) — the same pale yellow token Verlauf uses for its breakdown rows.
+const BUDGET_BAND_TINT = 'var(--color-breakdown-tint)'
+
 // A slightly darker/stronger version of each tint, for the total rows
 // (group headers) so they stand out from the category rows under them (Oct
 // 2026, Markus) — the tint with a little of its section's own color mixed in.
@@ -718,13 +723,13 @@ function Group({ t, rows, section, c }) {
 
 // A summary row (Jahresanfang, Budget band): only the two year columns
 // carry a value. Each value is either plain cents or `{ node, color }`.
-function BandRow({ label, refValue, planValue, color, bold = false, showComments }) {
+function BandRow({ label, refValue, planValue, color, bold = false, tint, showComments }) {
   const cell = (v) => (typeof v === 'number' ? { node: euro(v), color } : { node: v.node, color: color ?? v.color })
   const r = cell(refValue)
   const p = cell(planValue)
   return (
-    <tr className={bold ? 'font-semibold' : ''}>
-      <td className={`${NAME_TD} bg-[var(--color-surface)]`} style={color ? { color } : undefined}>
+    <tr className={bold ? 'font-semibold' : ''} style={tint ? { backgroundColor: tint } : undefined}>
+      <td className={`${NAME_TD} ${tint ? '' : 'bg-[var(--color-surface)]'}`} style={{ ...(color ? { color } : {}), ...(tint ? { backgroundColor: tint } : {}) }}>
         {label}
       </td>
       <td className={TD} style={r.color ? { color: r.color } : undefined}>
@@ -815,15 +820,16 @@ function ReportTable({ report, savePuffer, ...c }) {
         <Group t={report.fixkostenTotal} rows={report.fixkosten} section="fixkosten" c={c} />
 
         <BlockGap showComments={showComments} />
-        <BandRow label="Budget" refValue={ref.budget} planValue={plan.budget} color="var(--color-computed)" bold showComments={showComments} />
+        <BandRow label="Budget" refValue={ref.budget} planValue={plan.budget} color="var(--color-computed)" bold tint={BUDGET_BAND_TINT} showComments={showComments} />
         <BandRow
           label="Ausgaben vs. Budget — sollte nahe Null sein"
           refValue={{ node: euro(ref.ausgabenVsBudget), color: deltaColor(ref.ausgabenVsBudget) }}
           planValue={{ node: euro(plan.ausgabenVsBudget), color: deltaColor(plan.ausgabenVsBudget) }}
           bold
+          tint={BUDGET_BAND_TINT}
           showComments={showComments}
         />
-        <BandRow label="… gebildete Rücklagen (Teil der Ausgaben)" refValue={-ref.ruecklagen} planValue={-plan.ruecklagen} color="var(--color-savings)" showComments={showComments} />
+        <BandRow label="… gebildete Rücklagen (Teil der Ausgaben)" refValue={-ref.ruecklagen} planValue={-plan.ruecklagen} color="var(--color-savings)" tint={BUDGET_BAND_TINT} showComments={showComments} />
 
         <BlockGap showComments={showComments} />
         <GroupHeader t={report.ausgabenInklTotal} section="ausgaben" showComments={showComments} />
@@ -926,7 +932,7 @@ function ReportCards({ report, savePuffer, ...c }) {
       <CardSection t={report.einnahmenTotal} section="einnahmen" rows={report.einnahmen} c={c} />
       <CardSection t={report.fixkostenTotal} section="fixkosten" rows={report.fixkosten} c={c} />
 
-      <div className="my-2 flex flex-col gap-0.5 rounded-lg border-2 border-[var(--color-computed)] bg-[var(--color-surface)] p-3 text-sm font-semibold">
+      <div className="my-2 flex flex-col gap-0.5 rounded-lg border-2 border-[var(--color-computed)] p-3 text-sm font-semibold" style={{ backgroundColor: BUDGET_BAND_TINT }}>
         <Line label={`Budget ${planYear}`} value={euro(plan.budget)} color="var(--color-computed)" />
         <Line label="Ausgaben vs. Budget" value={euro(plan.ausgabenVsBudget)} color={deltaColor(plan.ausgabenVsBudget)} />
         <Line label="… gebildete Rücklagen" value={euro(-plan.ruecklagen)} color="var(--color-savings)" />
