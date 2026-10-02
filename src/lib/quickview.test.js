@@ -77,6 +77,27 @@ describe('quickviewMonths() grouping by name', () => {
   })
 })
 
+describe('quickviewMonths() trip/project tags', () => {
+  const ptags = [
+    { id: 'sco', name: 'Schottland', class: 'grouping', groupingType: 'project', parentTag: null },
+    { id: 'sco-aus', name: 'Ausgaben', class: 'grouping', groupingType: null, parentTag: 'sco' },
+    { id: 'plain', name: 'Hotel', class: 'grouping', groupingType: null, parentTag: null },
+  ]
+  const t = (id, label, detail, cents, tagIds) => tx(id, '2026-07-02', 'bnp', null, [line(cents, 'food', tagIds)], { displayLabel: label, detail })
+
+  it('shows the project tag instead of the title and groups bookings of one tag together', () => {
+    const txs = [t('a', 'Cafe Oban', '', -1000, ['sco-aus']), t('b', 'Fähre', '', -2000, ['sco-aus']), t('c', 'Lidl', '', -500, [])]
+    const g = quickviewMonths({ kind: 'category', id: 'food' }, 2026, txs, ptags)[6].groups
+    expect(g.map((x) => [x.label, x.cents, x.count])).toEqual([['Schottland: Ausgaben', -3000, 2], ['Lidl', -500, 1]])
+  })
+
+  it('groups by tag and detail together, and ignores non-project tags', () => {
+    const txs = [t('a', 'X', 'Fähre', -1000, ['sco']), t('b', 'Y', 'Fähre', -2000, ['sco-aus']), t('c', 'Z', '', -300, ['plain'])]
+    const g = quickviewMonths({ kind: 'category', id: 'food' }, 2026, txs, ptags)[6].groups
+    expect(g.map((x) => [x.label, x.detail, x.cents])).toEqual([['Schottland: Ausgaben', 'Fähre', -2000], ['Schottland', 'Fähre', -1000], ['Z', '', -300]])
+  })
+})
+
 describe('quickviewMonths() without a selection', () => {
   it('returns 12 empty months that still carry an (empty) groups list — Quickview renders them before anything is picked', () => {
     const m = quickviewMonths(null, 2026, [], [])

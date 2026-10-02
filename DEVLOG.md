@@ -1906,3 +1906,9 @@ Markus: a freshly added booking on Außenstände didn't show in the pinned panel
 Markus noticed unused tags weren't deleted dynamically. **Confirmed — my implementation ran the cleanup once per app load** (as the forty-eighth entry says). **Now:** `Konten.jsx` re-checks whenever tags or bookings change, after 5 s without further change; candidates come from the bookings alone, budgets/year comments are read only when candidates exist, and candidates those keep are not asked about again this session (keeps Firestore reads low); grace for a freshly created tag shortened from 1 day to 10 minutes. Harness-checked: an unused tag is gone ~7 s after it appears, a just-created one stays, used ones stay (the mock now supports deletes).
 
 **Note:** removing a tag from its last booking now deletes the tag shortly after (until then it is still offered in the tag list).
+
+## Session 37, continued a fifty-sixth time — 2026-10-02 — Quickview: trip tags name the rows
+
+Markus asked that a holiday tag (e.g. Schottland: Ausgaben) is shown instead of the booking title in Quickview and grouped like identical titles. **The tag group is `groupingType: "project"` ("Reise/Projekt", spec §2.5); a child like "Ausgaben" counts when its parent is of that type.** `lib/quickview.js`: entries carry `tagLabel` (qualified tag name), the grouping key is tag-or-title plus detail (+2 tests, 95 total); `Quickview.jsx`/`Konten.jsx`: such a row opens Konten filtered by its tag (`jump.tagFilter`) instead of the title. Harness-checked: three bookings tagged Schottland: Ausgaben show as one row "Schottland: Ausgaben ×3" and the jump lists all three.
+
+**Interpretation to confirm with Markus:** when a row also has a detail, I kept the earlier rule — the detail is displayed (and separates rows), the tag only names rows without detail. Say if the tag should win over the detail instead.

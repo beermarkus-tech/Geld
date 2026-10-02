@@ -28,6 +28,14 @@ export function quickviewMonths(selection, year, transactions, tags) {
   const matchIds = tag ? tagFilterMatchIds(tag.id, tags) : null
   const targets = tag?.class === 'allocation' ? new Set(tag.reconciliationTargetAccountIds ?? []) : null
   const prefix = `${year}-`
+  const tagById = Object.fromEntries(tags.map((t) => [t.id, t]))
+  const isProject = (t) => t && (t.groupingType === 'project' || tagById[t.parentTag]?.groupingType === 'project')
+  // The line's trip/project tag (spec §2.5, groupingType "project" — "Reise/
+  // Projekt", e.g. "Schottland: Ausgaben"), shown as the row's name in place of the booking title.
+  const projectTagLabel = (line) => {
+    const t = (line.tags ?? []).map((id) => tagById[id]).find(isProject)
+    return t ? (tagById[t.parentTag] ? `${tagById[t.parentTag].name}: ${t.name}` : t.name) : ''
+  }
   for (const tx of transactions) {
     if (isAnchorTransaction(tx)) continue
     if (!tx.date.startsWith(prefix)) continue
@@ -51,7 +59,7 @@ export function quickviewMonths(selection, year, transactions, tags) {
       const bucket = months[m - 1]
       bucket.total += cents
       bucket.count += 1
-      bucket.entries.push({ txId: tx.id, lineIndex, date: tx.date, displayLabel: tx.displayLabel ?? '', detail: tx.detail ?? '', cents })
+      bucket.entries.push({ txId: tx.id, lineIndex, date: tx.date, displayLabel: tx.displayLabel ?? '', tagLabel: projectTagLabel(line), detail: tx.detail ?? '', cents })
     })
   }
   for (const b of months) {
@@ -72,10 +80,12 @@ export function quickviewMonths(selection, year, transactions, tags) {
 function groupByName(entries) {
   const byKey = new Map()
   for (const e of entries) {
-    const label = e.displayLabel.trim() || '(ohne Name)'
+    // A trip/project tag stands in for the booking title (Oct 2026, Markus), so
+    // all bookings of one tag group together exactly like identical titles do.
+    const label = e.tagLabel || e.displayLabel.trim() || '(ohne Name)'
     const detail = e.detail.trim()
     const key = `${label.toLowerCase()}\u0000${detail.toLowerCase()}`
-    const g = byKey.get(key) ?? { label, detail, date: e.date, cents: 0, count: 0 }
+    const g = byKey.get(key) ?? { label, fromTag: Boolean(e.tagLabel), detail, date: e.date, cents: 0, count: 0 }
     g.cents += e.cents
     g.count += 1
     byKey.set(key, g)

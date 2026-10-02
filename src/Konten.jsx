@@ -431,6 +431,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       // Quickview rows: narrowed to the row's own name and detail (a row
       // without a detail means "no detail", not "any").
       ...(jump.label ? { empfaenger: text(jump.label) } : {}),
+      ...(jump.tagFilter ? { tags: text(jump.tagFilter) } : {}),
       ...(jump.label !== undefined
         ? { details: jump.detail ? { filterType: 'text', type: 'equals', filter: jump.detail } : { filterType: 'text', type: 'blank' } }
         : {}),

@@ -157,7 +157,9 @@ export default function Quickview({ year, onOpenInKonten, active = true, preset 
       year,
       month,
       date: g.count === 1 ? g.date : null,
-      label: g.label === '(ohne Name)' ? '' : g.label,
+      label: g.fromTag || g.label === '(ohne Name)' ? '' : g.label,
+      // a row named by its trip tag is found by that tag, not by a booking title
+      tagFilter: g.fromTag ? g.label : null,
       detail: g.detail,
     })
   }
