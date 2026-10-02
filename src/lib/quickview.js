@@ -19,7 +19,8 @@ import { tagFilterMatchIds } from './tagBalance'
 // @param {Array} transactions
 // @param {Array} tags
 // @returns {Array<{month: number, total: number, count: number, entries: Array}>}
-//   12 entries Jan..Dec; each entry list is sorted by |amount|, largest first
+//   12 entries Jan..Dec; `entries` are the single lines, `groups` the per-name
+//   sums sorted by |sum|, largest first (what the screen lists)
 export function quickviewMonths(selection, year, transactions, tags) {
   const months = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, total: 0, count: 0, entries: [] }))
   if (!selection) return months
@@ -53,8 +54,29 @@ export function quickviewMonths(selection, year, transactions, tags) {
       bucket.entries.push({ txId: tx.id, lineIndex, date: tx.date, displayLabel: tx.displayLabel ?? '', detail: tx.detail ?? '', cents })
     })
   }
-  for (const b of months) b.entries.sort((a, c) => Math.abs(c.cents) - Math.abs(a.cents) || a.date.localeCompare(c.date))
+  for (const b of months) {
+    b.entries.sort((a, c) => Math.abs(c.cents) - Math.abs(a.cents) || a.date.localeCompare(c.date))
+    b.groups = groupByName(b.entries)
+  }
   return months
+}
+
+// What Quickview actually shows per month (Markus, Oct 2026): every entry
+// with the same name (displayLabel, ignoring case and surrounding spaces) is
+// summed into one row — all Lidl bookings of the month become one "Lidl"
+// total — and the rows are sorted by the size of that total, largest first.
+// `detail` is deliberately not part of the name: one name, one row.
+function groupByName(entries) {
+  const byKey = new Map()
+  for (const e of entries) {
+    const label = e.displayLabel.trim() || '(ohne Name)'
+    const key = label.toLowerCase()
+    const g = byKey.get(key) ?? { label, cents: 0, count: 0 }
+    g.cents += e.cents
+    g.count += 1
+    byKey.set(key, g)
+  }
+  return [...byKey.values()].sort((a, b) => Math.abs(b.cents) - Math.abs(a.cents) || a.label.localeCompare(b.label, 'de'))
 }
 
 // How many months of `year` have really occurred by `today` ("YYYY-MM-DD") —

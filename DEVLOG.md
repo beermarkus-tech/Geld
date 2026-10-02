@@ -1748,3 +1748,9 @@ Markus (with a screenshot of his Gsheet Deepdive) kept the top-10 lists and the 
 **Done:** `App.jsx` mounts Quickview permanently (hidden via CSS); `src/Quickview.jsx` redone as a 2×6 grid (3/2 columns on narrower screens); amounts in whole euros; each amount tinted by absolute size (pale → yellow → orange, middle at 70 % of the span, scale taken over the amounts actually shown). spec.md §3e, CODEMAP.md updated. Harness-checked: grid renders, selection survives a trip through Konten.
 
 **Interpretation to confirm with Markus:** "color average at 70 %" read as the middle colour of a three-colour scale sitting at 70 % of the smallest-to-largest span; size = absolute amount (so expenses and income both rank by magnitude); future months stay as dimmed empty slots (the spec's "hidden entirely" is relaxed to keep the grid shape).
+
+## Session 37, continued a twenty-seventh time — 2026-10-02 — Quickview: one row per name
+
+Markus: Quickview was meant to sum all bookings with the same name in a month (all Lidl → one "Lidl" total), sorted by that total. Done in `lib/quickview.js` (`groups` per month: name = `displayLabel` ignoring case/spaces, one sum and count per name, sorted by |sum|; +1 test, 80 total) and `Quickview.jsx` (rows show sum + name + "×N"; top 10 names per month; the colour scale now runs over those sums; the Konten link appears when a month has more than ten names and still filters by month + selection). spec.md §3e corrected (it said top 10 largest *transactions*).
+
+**Note:** two differently spelled names ("Lidl" vs "LIDL Toulouse") stay separate rows — only case/space differences are merged. Awaiting Markus if he wants fuzzier matching.

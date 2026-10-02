@@ -672,23 +672,23 @@ Colors reuse the app's own green/amber/purple semantics (confirmed fine). Orient
 
 **Selection:** any single category, breakdown tag, or allocation tag — one unified lookup, exactly as before (§2.5's allocation tags and grouping tags behave identically here to a plain category selection).
 
-**Per month, top 10 largest transactions, not the full list** — capped specifically to avoid one high-volume month (many small groceries runs, say) burying the view; sorted by amount, largest first. Not a hard ceiling on the underlying data, just what's shown by default — a link/action to see everything for that month (e.g. jump to Konten pre-filtered by category + month) covers the rest, same "don't hide data, just don't force-render all of it" spirit as everywhere else in this spec.
+**Per month, one row per name, top 10 largest rows, not the full list** (Markus, Oct 2026: all bookings with the same name in a month are summed into one row — all "Lidl" bookings give one "Lidl" total — and the rows are sorted by that total, largest first; the name is the booking's `displayLabel`, ignoring case and surrounding spaces, and `detail` is not part of it) — capped specifically to avoid one high-volume month (many small groceries runs, say) burying the view; sorted by amount, largest first. Not a hard ceiling on the underlying data, just what's shown by default — a link/action to see everything for that month (e.g. jump to Konten pre-filtered by category + month) covers the rest, same "don't hide data, just don't force-render all of it" spirit as everywhere else in this spec.
 
 **Only months that have actually occurred are shown; future months are hidden entirely, not rendered empty.** "Occurred" here means real elapsed calendar time, not Verlauf's ok-switch pivot (§3b) — Quickview has no dependency on Verlauf's closing workflow at all now, unlike Fortschritt (§3j) below, which does.
 
-**Line-item format, unchanged:** `displayLabel` plus `detail` in parentheses when present (§2.6).
+**Row format:** the name (`displayLabel`, §2.6) with "×N" behind it when several bookings were summed; no `detail` (it differs between the summed bookings).
 
 **Time granularity:** always the current year (via the global year selector, §1b.2a); no quarter/custom-range mode needed.
 
 **Built Oct 2026 — decisions made while building (Markus: no preference, defaults taken):**
 - **One list for the selection:** every subcategory (shown as "Gruppe › Name"; a group itself has no bookings of its own) and every non-archived tag (shown as "Tag: …", a child as "Tag: Parent › Child"), searchable. A parent tag also covers its children.
-- **Layout like the Gsheet (Markus, Oct 2026): two rows of six months (Jan–Jun, Jul–Dec)**, each month a column with its name, total (whole euros) and booking count, then its ten largest bookings as "amount + label". On narrower screens the grid wraps to 3 or 2 columns. Months not yet elapsed stay as dimmed, empty slots so the grid keeps its shape (they show no numbers). All amounts rounded to whole euros.
+- **Layout like the Gsheet (Markus, Oct 2026): two rows of six months (Jan–Jun, Jul–Dec)**, each month a column with its name, total (whole euros) and booking count, then its ten largest names as "sum + name". On narrower screens the grid wraps to 3 or 2 columns. Months not yet elapsed stay as dimmed, empty slots so the grid keeps its shape (they show no numbers). All amounts rounded to whole euros.
 - **Colour scale by size:** each amount's background is tinted by its absolute size between the smallest and the largest amount shown across all months of the year (pale → yellow → orange); the middle colour sits at **70 %** of that span, so only the real main contributors turn strongly orange.
 - **Persistent:** the screen is mounted once and only hidden while another screen is shown (selection and scroll stay), like Konten/Verlauf/Planung.
 - **The year's total sits at the top.**
-- **A split booking is listed by its matching line, with that line's amount** (a split salary shows its 5.000 € salary line, not the booking's net); a booking with two matching lines appears twice.
+- **A split booking contributes its matching line's amount** (a split salary adds its 5.000 € salary line, not the booking's net) to its name's sum; a booking with two matching lines contributes both.
 - **Allocation tags are signed by the tag's own direction rule** (+ arriving at its reconciliation accounts, − leaving them, as in §2.5); opening-balance (Jahresabschluß) bookings are never listed.
-- **"Alle N in Konten anzeigen"** appears when a month has more than ten and jumps to Konten filtered by that month plus the selection's name, using the ordinary Datum and Unterkategorie/Tags "contains" filters (so a name that is part of another name also matches that one).
+- **"Alle N Buchungen in Konten anzeigen"** appears when a month has more than ten names and jumps to Konten filtered by that month plus the selection's name, using the ordinary Datum and Unterkategorie/Tags "contains" filters (so a name that is part of another name also matches that one).
 
 ---
 

@@ -52,6 +52,19 @@ describe('quickviewMonths()', () => {
   })
 })
 
+describe('quickviewMonths() grouping by name', () => {
+  it('sums same-named bookings of a month into one row, sorted by the sum', () => {
+    const t = (id, date, label, cents) => tx(id, date, 'bnp', null, [line(cents, 'food')], { displayLabel: label })
+    const txs = [
+      t('a', '2026-03-02', 'Lidl', -3000), t('b', '2026-03-09', 'LIDL ', -2500), t('c', '2026-03-10', 'Lidl', -1000),
+      t('d', '2026-03-05', 'Bäcker', -4000), t('e', '2026-04-05', 'Lidl', -100),
+    ]
+    const m = quickviewMonths({ kind: 'category', id: 'food' }, 2026, txs, tags)
+    expect(m[2].groups.map((g) => [g.label, g.cents, g.count])).toEqual([['Lidl', -6500, 3], ['Bäcker', -4000, 1]])
+    expect(m[3].groups).toHaveLength(1)
+  })
+})
+
 describe('occurredMonthCount()', () => {
   it('is real elapsed calendar time', () => {
     expect(occurredMonthCount(2025, '2026-10-02')).toBe(12)

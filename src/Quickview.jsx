@@ -8,7 +8,8 @@ import Listbox from './Listbox'
 
 // Quickview (spec.md §3e) — a pure past-transaction deep-dive: pick one
 // category or tag, see the real bookings against it laid out like the Gsheet
-// (two rows of six months, Jan–Jun and Jul–Dec), the ten largest per month,
+// (two rows of six months, Jan–Jun and Jul–Dec), one row per name (all Lidl
+// bookings of a month summed into one "Lidl"), the ten largest per month,
 // each amount tinted by its size across the whole year, with a link into
 // Konten (pre-filtered by selection + month) for the rest. Nothing planned,
 // compared or stored; the only state is the selection.
@@ -76,7 +77,7 @@ export default function Quickview({ year, onOpenInKonten }) {
   const months = useMemo(() => quickviewMonths(selection, year, transactions, tags), [selection?.kind, selection?.id, year, transactions, tags]) // eslint-disable-line react-hooks/exhaustive-deps -- selection is rebuilt each render; kind/id are its identity
   const occurred = year == null ? 0 : occurredMonthCount(year, todayIso())
   const yearTotal = months.slice(0, occurred).reduce((s, m) => s + m.total, 0)
-  const shownAbs = months.slice(0, occurred).flatMap((m) => m.entries.slice(0, TOP_N).map((e) => Math.abs(e.cents)))
+  const shownAbs = months.slice(0, occurred).flatMap((m) => m.groups.slice(0, TOP_N).map((g) => Math.abs(g.cents)))
   const minAbs = Math.min(...shownAbs)
   const maxAbs = Math.max(...shownAbs)
 
@@ -113,26 +114,26 @@ export default function Quickview({ year, onOpenInKonten }) {
                   )}
                   {!future && (
                     <ul className="flex min-h-24 flex-col">
-                      {m.entries.slice(0, TOP_N).map((e) => (
-                        <li key={`${e.txId}:${e.lineIndex}`} className="flex items-baseline gap-1.5 text-sm" title={`${e.date} · ${e.displayLabel}${e.detail ? ` (${e.detail})` : ''}`}>
-                          <span className="w-[4.75rem] shrink-0 whitespace-nowrap px-1 text-right tabular-nums" style={{ background: amountTint(Math.abs(e.cents), minAbs, maxAbs) }}>
-                            {centsToWholeEuro(e.cents)} €
+                      {m.groups.slice(0, TOP_N).map((g) => (
+                        <li key={g.label} className="flex items-baseline gap-1.5 text-sm" title={`${g.label}${g.count > 1 ? ` · ${g.count} Buchungen` : ''}`}>
+                          <span className="w-[4.75rem] shrink-0 whitespace-nowrap px-1 text-right tabular-nums" style={{ background: amountTint(Math.abs(g.cents), minAbs, maxAbs) }}>
+                            {centsToWholeEuro(g.cents)} €
                           </span>
                           <span className="min-w-0 truncate">
-                            {e.displayLabel}
-                            {e.detail ? ` (${e.detail})` : ''}
+                            {g.label}
+                            {g.count > 1 && <span className="ml-1 text-xs text-[var(--color-text-muted)]">×{g.count}</span>}
                           </span>
                         </li>
                       ))}
                     </ul>
                   )}
-                  {!future && m.count > TOP_N && (
+                  {!future && m.groups.length > TOP_N && (
                     <button
                       type="button"
                       onClick={() => onOpenInKonten({ kind: selection.kind, name: option.filterText, year, month: m.month })}
                       className="px-2 py-1 text-left text-xs text-[var(--color-computed)] underline"
                     >
-                      Alle {m.count} in Konten anzeigen
+                      Alle {m.count} Buchungen in Konten anzeigen
                     </button>
                   )}
                 </section>
