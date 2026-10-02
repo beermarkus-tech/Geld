@@ -84,20 +84,3 @@ export function claimOverview(tags, transactions, receivableIds) {
     .filter((c) => c.lines.length > 0)
     .sort((a, b) => (a.net === 0) - (b.net === 0) || b.lastDate.localeCompare(a.lastDate) || a.name.localeCompare(b.name, 'de'))
 }
-
-// Per receivable account: what the account holds (its balance) against what
-// the claims' tagged lines on that account add up to. They agree when every
-// booking on the account is tied to a claim tag and the tags net correctly; a
-// difference points straight at untagged bookings or a mis-tagged claim.
-//
-// @returns {Array<{id: string, name: string, balance: number, claims: number}>}
-export function accountReconciliation(accounts, transactions, claims, balanceFn) {
-  return accounts
-    .filter((a) => a.group === 'receivable')
-    .map((a) => ({
-      id: a.id,
-      name: a.name,
-      balance: balanceFn(a.id, '9999-12-31', transactions),
-      claims: claims.reduce((sum, c) => sum + c.lines.filter((l) => l.accountId === a.id).reduce((s, l) => s + l.cents, 0), 0),
-    }))
-}

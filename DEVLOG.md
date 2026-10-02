@@ -1854,3 +1854,7 @@ Markus (screenshot): picking Reisekosten Airbus in the pinned panel listed the w
 ## Session 37, continued a forty-fifth time — 2026-10-02 — Claims across two years in Konten
 
 Markus (screenshots): the Reisekosten-Airbus claim ("Airbus", 68,85 €) has bookings on 2025-09-08 and 2026-04-27, but "In Konten anzeigen" (and the Tags column filter) showed only the 2026 one, because Konten's grid is year-scoped. **Fix (`Konten.jsx`, `Aussenstaende.jsx`):** the card's link now sets the real tag filter (`jump.tagId` → `accountFilter`, same as clicking the claim in the pinned panel), and for a claim tag the row set ignores the year and the total is all-time. Harness-checked: a 2025 + 2026 claim shows both bookings and 68,85 €. **Limit:** typing a tag into the Tags column's header filter stays year-based (it only filters rows already in the year) — use the card link or the panel row. Not checked on real data.
+
+## Session 37, continued a forty-sixth time — 2026-10-02 — Außenstände: check block removed
+
+Markus (Außenstände now matches his expectations): remove the per-account "durch Claims erklärt / Differenz" rows under the total. Removed from `Aussenstaende.jsx` together with `accountReconciliation()` and its test (89 tests). The header total ("Außenstände gesamt") stays.

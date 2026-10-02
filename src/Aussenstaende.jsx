@@ -3,7 +3,7 @@ import { collection, onSnapshot } from 'firebase/firestore'
 
 import { db } from './firebase'
 import { balance } from './lib/balance'
-import { accountReconciliation, claimOverview, receivableAccountIds } from './lib/claims'
+import { claimOverview, receivableAccountIds } from './lib/claims'
 import { centsToEuro } from './lib/format'
 
 // Außenstände (spec.md §3g) — every claim/loan tag as one card, open ones
@@ -36,7 +36,6 @@ export default function Aussenstaende({ onOpenInKonten }) {
     () => [...receivableIds].reduce((sum, id) => sum + balance(id, '9999-12-31', transactions), 0),
     [receivableIds, transactions],
   )
-  const reconciliation = useMemo(() => accountReconciliation(accounts, transactions, claims, balance), [accounts, transactions, claims])
   const open = claims.filter((c) => c.net !== 0)
   const settled = claims.filter((c) => c.net === 0)
   const shown = tab === 'open' ? open : settled
@@ -68,18 +67,6 @@ export default function Aussenstaende({ onOpenInKonten }) {
       <div className="flex items-baseline justify-between gap-3 border-b border-[var(--color-border)] pb-2">
         <span className="text-sm text-[var(--color-text-muted)]">Außenstände gesamt (alle Forderungskonten)</span>
         <span className="text-lg font-semibold tabular-nums">{centsToEuro(receivableTotal)} €</span>
-      </div>
-      <div className="flex flex-col gap-0.5 text-sm">
-        {reconciliation.map((r) => (
-          <div key={r.id} className="flex items-baseline gap-3">
-            <span className="flex-1">{r.name}</span>
-            <span className="tabular-nums">{centsToEuro(r.balance)} €</span>
-            <span className="w-44 text-right text-xs text-[var(--color-text-muted)]">
-              {r.claims === r.balance ? 'durch Claims erklärt' : `Claims: ${centsToEuro(r.claims)} €`}
-            </span>
-            {r.claims !== r.balance && <span className="w-28 text-right text-xs text-[var(--color-alert)]">Differenz {centsToEuro(r.balance - r.claims)} €</span>}
-          </div>
-        ))}
       </div>
       <div className="flex gap-2">
         {[

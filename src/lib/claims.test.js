@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { balance } from './balance'
-import { AUSSENSTAENDE_ACCOUNT_ID as AUS, accountReconciliation, claimLines, claimOverview, claimTagIds, receivableAccountIds } from './claims'
+import { AUSSENSTAENDE_ACCOUNT_ID as AUS, claimLines, claimOverview, claimTagIds, receivableAccountIds } from './claims'
 import { tagFilterTotal } from './tagBalance'
 
 // Synthetic fixtures only.
@@ -74,14 +73,5 @@ describe('single-sided bookings on a receivable account (write-offs)', () => {
       tx('writeoff', '2026-02-02', AUS, null, -10000, ['loan']),
     ]
     expect(claimOverview(tags, txs, REC)[0].net).toBe(0)
-  })
-})
-
-describe('accountReconciliation()', () => {
-  it('shows an account\'s balance next to what its claims explain, exposing untagged bookings', () => {
-    const accounts = [{ id: AUS, name: 'Außenstände', group: 'receivable' }, { id: 'bar', name: 'Bar', group: 'cash' }]
-    const txs = [tx('a', '2026-01-02', 'bar', AUS, 1000, ['loan']), tx('b', '2026-01-03', 'bar', AUS, 300, [])]
-    const claims = claimOverview(tags, txs, new Set([AUS]))
-    expect(accountReconciliation(accounts, txs, claims, balance)).toEqual([{ id: AUS, name: 'Außenstände', balance: 1300, claims: 1000 }])
   })
 })
