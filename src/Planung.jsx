@@ -27,6 +27,11 @@ import { registerScreenCursor } from './lib/screenCursor'
 // account in these three reportingGroups, balance on Dec 31 of the prior
 // year — Sparkonten/Geldanlage stay out.
 const START_CASH_GROUPS = ['Barkonten', 'Bargeld', 'Außenstände']
+// Plus one account from a different group (Oct 2026, Markus): Livret A
+// Tagesgeld sits under Sparkonten but is readily available cash and belongs
+// to the starting cash ("Tagesgeld" is only a tag on the euros on that
+// account). Livret A Sparen stays out.
+const START_CASH_EXTRA_ACCOUNTS = ['livret-a-tagesgeld']
 
 const LENSES = [
   { id: 'plan0', label: 'Plan 0' },
@@ -269,7 +274,7 @@ export default function Planung({ year, active = true }) {
     // breakdown").
     const ausgabenInklTotal = total('Ausgaben inkl. Rücklagen', [...ausgabenGroups.flatMap((g) => g.rows), ...ruecklagen])
 
-    const startCashAccounts = accounts.filter((a) => START_CASH_GROUPS.includes(a.reportingGroup))
+    const startCashAccounts = accounts.filter((a) => START_CASH_GROUPS.includes(a.reportingGroup) || START_CASH_EXTRA_ACCOUNTS.includes(a.id))
     const startCash = (y) => startCashAccounts.reduce((a, acc) => a + jahresanfang(acc.id, y, transactions), 0)
     const puffer = (y) => settingsByYear[y]?.minCashBufferCents ?? 0
 

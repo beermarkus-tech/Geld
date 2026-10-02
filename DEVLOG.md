@@ -1642,3 +1642,11 @@ Markus: Tagesgeld is a pure label on transactions (especially those onto Livret 
 5. **Latent trap fixed:** a tag missing from `ALLOCATION_TAG_ORDER` sorted to the *top* of Verlauf's and Planung's Rücklagen (indexOf −1), so removing it from the list would not have hidden it, hence the explicit exclusion list.
 
 **Open item — awaiting Markus:** *Livret A Tagesgeld* is in the Sparkonten reporting group, so its balance is **not** part of Planung's Jahresanfang start cash (Barkonten + Bargeld + Außenstände). With Tagesgeld now treated as readily available cash, in-year transfers into it no longer count as set aside, but its balance at year start is still not counted as available. The two treatments disagree. The amount looked small in the last screenshot (about 474 €), so it may not matter in practice, but if "Tagesgeld = cash" is the rule, that account arguably belongs in the start-cash groups. Not changed.
+
+## Session 37, continued a fifteenth time — 2026-10-02 — Correction: Livret A Tagesgeld is part of the starting cash
+
+The previous entry's "open item" asked whether Livret A Tagesgeld belongs in Planung's Jahresanfang start cash. Markus declined the offer to add it because he believed it was already included. **It was not:** the account's reportingGroup is Sparkonten (seed data, the spec's account table and his own Konten panel all show it there), and `START_CASH_GROUPS` only covers Barkonten, Bargeld and Außenstände. Markus's rule is clear (it belongs to starting cash), so the premise of his "no" was wrong, not the rule.
+
+**Fixed:** `START_CASH_EXTRA_ACCOUNTS = ['livret-a-tagesgeld']` in `src/Planung.jsx`, counted on top of the three groups. Livret A Sparen stays out. spec.md §3c's Jahresanfang paragraph and CODEMAP updated. Verified in a harness: with 1.000 € on a Barkonten account, 474 € on Livret A Tagesgeld and 5.000 € on Livret A Sparen, the 2026 "Alle Barkonten" reads 1.474 €. Lint, tests (71) and build clean.
+
+**Effect:** Planung's "Alle Barkonten", "Jahresanfang" and "Budget" rise by the Livret A Tagesgeld balance at each year start (about 474 € in the last screenshot). That is a further reason to re-check his Gsheet comparison: the earlier DEVLOG entry's worry about the "Barkonten" definition now has this answer.
