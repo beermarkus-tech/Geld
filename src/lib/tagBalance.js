@@ -140,11 +140,16 @@ export function tagFilterMatchIds(tagId, tags) {
 //
 // @param {{fromAccountId: string|null, toAccountId: string|null}} tx
 // @param {{amountCents: number}} line
-// @param {string} aussenstaendeAccountId
+// @param {string|Iterable<string>} receivableAccountIds  the Außenstände
+//   account, or every `receivable` account (Außenstände, CPAM, Reisekosten
+//   Airbus — a claim's money sits on whichever of them it belongs to; a
+//   single hardcoded account made every CPAM/Airbus claim invisible,
+//   Oct 2026, Markus: "Außenstände shows zero but should show 1.245,45")
 // @returns {number|null}
-export function claimLineContribution(tx, line, aussenstaendeAccountId) {
-  if (tx.fromAccountId === aussenstaendeAccountId) return -line.amountCents
-  if (tx.toAccountId === aussenstaendeAccountId) return line.amountCents
+export function claimLineContribution(tx, line, receivableAccountIds) {
+  const isReceivable = typeof receivableAccountIds === 'string' ? (id) => id === receivableAccountIds : (id) => new Set(receivableAccountIds).has(id)
+  if (isReceivable(tx.fromAccountId)) return -line.amountCents
+  if (isReceivable(tx.toAccountId)) return line.amountCents
   if (!tx.fromAccountId || !tx.toAccountId) return line.amountCents
   return null
 }
@@ -152,16 +157,17 @@ export function claimLineContribution(tx, line, aussenstaendeAccountId) {
 // @param {string} tagId
 // @param {string} asOfDate  "YYYY-MM-DD"
 // @param {Array} transactions
-// @param {string} aussenstaendeAccountId
+// @param {string|Iterable<string>} aussenstaendeAccountId  one receivable account id, or all of them
 // @param {Array} tags
 export function tagFilterTotal(tagId, asOfDate, transactions, aussenstaendeAccountId, tags) {
+  const receivable = typeof aussenstaendeAccountId === 'string' ? aussenstaendeAccountId : new Set(aussenstaendeAccountId)
   const matchIds = tagFilterMatchIds(tagId, tags)
   let total = 0
   for (const tx of transactions) {
     if (tx.date > asOfDate) continue
     for (const line of tx.lines ?? []) {
       if (!(line.tags ?? []).some((id) => matchIds.has(id))) continue
-      total += claimLineContribution(tx, line, aussenstaendeAccountId) ?? 0
+      total += claimLineContribution(tx, line, receivable) ?? 0
     }
   }
   return total

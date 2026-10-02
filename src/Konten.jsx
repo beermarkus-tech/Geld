@@ -7,7 +7,7 @@ import CategoryEditor from './CategoryEditor'
 import { db } from './firebase'
 import KontoEditor from './KontoEditor'
 import { jahresende } from './lib/balance'
-import { claimOverview } from './lib/claims'
+import { claimOverview, receivableAccountIds } from './lib/claims'
 import { centsToEuro } from './lib/format'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { withRemainder } from './lib/split'
@@ -242,7 +242,8 @@ const REPORTING_GROUPS = ['Barkonten', 'Bargeld', 'Sparkonten', 'Geldanlage', 'A
 // anything — until Markus creates it (and migrates the historical Amazon/
 // loan transactions onto it), the panel/filter code below simply finds no
 // transactions touching it and stays quietly inert.
-const AUSSENSTAENDE_ACCOUNT_ID = 'aussenstaende'
+// (Since Oct 2026 the code reads *every* receivable account, lib/claims.js's
+// receivableAccountIds(), so CPAM/Airbus claims count too — no hardcoded id here.)
 
 // Keeps a split transaction's line rows glued to their parent under
 // *any* column's sort, not just Datum (Markus: sorting by a different
@@ -579,9 +580,12 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // Ids of claim/loan tags that are still open (net ≠ 0) — drives the small
   // red dot on a line's Unterkategorie (spec §3a/§3g). Read through a ref by
   // the column's renderer; the effect below refreshes the cells when it changes.
+  // Every receivable account (Außenstände, CPAM, Reisekosten Airbus, …) — a
+  // claim's money sits on whichever of them it belongs to.
+  const receivableIds = useMemo(() => receivableAccountIds(accounts), [accounts])
   const openClaimIds = useMemo(
-    () => new Set(claimOverview(tags, activeTransactions).filter((c) => c.net !== 0).map((c) => c.id)),
-    [tags, activeTransactions],
+    () => new Set(claimOverview(tags, activeTransactions, receivableIds).filter((c) => c.net !== 0).map((c) => c.id)),
+    [tags, activeTransactions, receivableIds],
   )
   const openClaimIdsRef = useRef(openClaimIds)
   openClaimIdsRef.current = openClaimIds
@@ -2265,10 +2269,10 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       // Außenstände. "Open" (shown) vs. "settled" (silently drops off the
       // list, same as the loan mechanism already described in spec.md
       // §3a) is exactly "does its total come out to zero."
-      if (group === 'Außenstände' && groupAccountIds.has(AUSSENSTAENDE_ACCOUNT_ID)) {
+      if (group === 'Außenstände' && [...groupAccountIds].some((id) => receivableIds.has(id))) {
         const candidateTagIds = new Set()
         activeTransactions.forEach((t) => {
-          if (t.fromAccountId === AUSSENSTAENDE_ACCOUNT_ID || t.toAccountId === AUSSENSTAENDE_ACCOUNT_ID) {
+          if (receivableIds.has(t.fromAccountId) || receivableIds.has(t.toAccountId)) {
             ;(t.lines ?? []).forEach((l) => (l.tags ?? []).forEach((tagId) => candidateTagIds.add(tagId)))
           }
         })
@@ -2276,7 +2280,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           .map((tagId) => ({
             id: tagId,
             name: tagById[tagId]?.name ?? tagId,
-            cents: tagFilterTotal(tagId, `${year}-12-31`, activeTransactions, AUSSENSTAENDE_ACCOUNT_ID, tags),
+            cents: tagFilterTotal(tagId, `${year}-12-31`, activeTransactions, receivableIds, tags),
             tag: tagById[tagId],
           }))
           .filter((i) => i.cents !== 0)
@@ -2284,7 +2288,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       }
       return { group, items, total, tagItems }
     })
-  }, [accounts, activeTransactions, tags, tagById, year])
+  }, [accounts, activeTransactions, tags, tagById, year, receivableIds])
 
   const stillLoading = !(loaded.accounts && loaded.categories && loaded.tags && loaded.transactions)
 
@@ -2333,7 +2337,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     accountFilter && !filteredAccountId
       ? filteredTagForSum?.class === 'allocation'
         ? tagJahresende(accountFilter, Number(year), activeTransactions, tags)
-        : tagFilterTotal(accountFilter, `${year}-12-31`, activeTransactions, AUSSENSTAENDE_ACCOUNT_ID, tags)
+        : tagFilterTotal(accountFilter, `${year}-12-31`, activeTransactions, receivableIds, tags)
       : null
   // Shown for any column filter or account filter (Markus, Sept 2026) — a
   // tag filter keeps its own tag balance above instead (his call).

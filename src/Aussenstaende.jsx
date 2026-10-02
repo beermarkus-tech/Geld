@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { collection, doc, onSnapshot, setDoc } from 'firebase/firestore'
 
 import { db } from './firebase'
-import { claimOverview, closeOutTransaction } from './lib/claims'
+import { balance } from './lib/balance'
+import { claimOverview, closeOutTransaction, receivableAccountIds } from './lib/claims'
 import { centsToEuro } from './lib/format'
 import Listbox from './Listbox'
 
@@ -67,6 +68,7 @@ function CloseOutDialog({ claim, categories, onCancel, onConfirm }) {
 }
 
 export default function Aussenstaende({ onOpenInKonten }) {
+  const [accounts, setAccounts] = useState([])
   const [tags, setTags] = useState([])
   const [categories, setCategories] = useState([])
   const [transactions, setTransactions] = useState([])
@@ -76,6 +78,7 @@ export default function Aussenstaende({ onOpenInKonten }) {
 
   useEffect(() => {
     const unsubs = [
+      onSnapshot(collection(db, 'accounts'), (snap) => setAccounts(snap.docs.map((d) => d.data()))),
       onSnapshot(collection(db, 'tags'), (snap) => setTags(snap.docs.map((d) => d.data()))),
       onSnapshot(collection(db, 'categories'), (snap) => setCategories(snap.docs.map((d) => d.data()))),
       onSnapshot(collection(db, 'transactions'), (snap) => setTransactions(snap.docs.map((d) => d.data()).filter((t) => !t.deletedAt))),
@@ -84,7 +87,14 @@ export default function Aussenstaende({ onOpenInKonten }) {
   }, [])
 
   const tagById = useMemo(() => Object.fromEntries(tags.map((t) => [t.id, t])), [tags])
-  const claims = useMemo(() => claimOverview(tags, transactions), [tags, transactions])
+  const receivableIds = useMemo(() => receivableAccountIds(accounts), [accounts])
+  const claims = useMemo(() => claimOverview(tags, transactions, receivableIds), [tags, transactions, receivableIds])
+  // What the receivable accounts hold in total — the figure Konten's pinned
+  // Außenstände box shows; the claims below are what it is made of.
+  const receivableTotal = useMemo(
+    () => [...receivableIds].reduce((sum, id) => sum + balance(id, '9999-12-31', transactions), 0),
+    [receivableIds, transactions],
+  )
   const open = claims.filter((c) => c.net !== 0)
   const settled = claims.filter((c) => c.net === 0)
   const shown = tab === 'open' ? open : settled
@@ -114,12 +124,16 @@ export default function Aussenstaende({ onOpenInKonten }) {
   async function confirmCloseOut({ categoryId, date }) {
     const claim = closing
     const id = `tx-closeout-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`
-    await setDoc(doc(db, 'transactions', id), closeOutTransaction({ id, tagId: claim.id, tagName: claim.name, residualCents: claim.net, categoryId, date }))
+    await setDoc(doc(db, 'transactions', id), closeOutTransaction({ id, tagId: claim.id, tagName: claim.name, residualCents: claim.net, categoryId, date, accountId: claim.accountId }))
     setClosing(null)
   }
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
+      <div className="flex items-baseline justify-between gap-3 border-b border-[var(--color-border)] pb-2">
+        <span className="text-sm text-[var(--color-text-muted)]">Außenstände gesamt (alle Forderungskonten)</span>
+        <span className="text-lg font-semibold tabular-nums">{centsToEuro(receivableTotal)} €</span>
+      </div>
       <div className="flex gap-2">
         {[
           ['open', `Offen (${open.length})`],

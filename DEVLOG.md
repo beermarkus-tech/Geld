@@ -1814,3 +1814,9 @@ Markus chose Außenstände first (before Dashboard). **Built:** `src/Aussenstaen
 **Observed, not changed:** Konten's pinned Außenstände box also lists claim-category tags (e.g. "Meal") as their own rows, because it discovers any tag on an Außenstände-touching booking; the new screen excludes them. Awaiting Markus whether the panel should do the same.
 
 **Next:** Markus tests Außenstände on real data; then Fortschritt (§3j) or Dashboard (PLAN Phase 6).
+
+## Session 37, continued a thirty-ninth time — 2026-10-02 — Außenstände fix: all receivable accounts
+
+Markus: the new Außenstände screen showed nothing although 1.245,45 € is outstanding. **Cause (my bug):** claims were only looked for on the account `aussenstaende`; the Airbus and CPAM claims sit on their own receivable accounts (`reisekosten-airbus`, `cpam`, per the migration), so none were found — and Konten's pinned panel/tag total had the same hardcoded account. **Fix:** `lib/claims.js` + `tagBalance.js` (`claimLineContribution`/`tagFilterTotal`) now take every `receivable`-group account; Konten (panel claim rows, tag-filter total, open-claim dot) and the screen use `receivableAccountIds(accounts)`; close-out books from the claim's own account; the screen header now shows the total of all receivable accounts. +2 tests (88). Harness-checked with a claim on the Airbus account (1.245,45 shows as an open card).
+
+**Consequence to know about:** Konten's pinned Außenstände box will now also list Airbus/CPAM claims as tag rows (previously invisible there too). **Still unverified on real data:** if the claims' sum differs from the header total, some bookings on those accounts carry no claim tag — Markus to report what he sees.

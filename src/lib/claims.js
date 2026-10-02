@@ -6,6 +6,11 @@ import { claimLineContribution, tagFilterMatchIds, tagFilterTotal } from './tagB
 
 export const AUSSENSTAENDE_ACCOUNT_ID = 'aussenstaende'
 
+// Every `receivable` account (Außenstände, CPAM, Reisekosten Airbus, …) —
+// claims live on whichever of them they belong to (Oct 2026, Markus: Airbus
+// and CPAM claims were missing because only Außenstände itself was looked at).
+export const receivableAccountIds = (accounts) => new Set(accounts.filter((a) => a.group === 'receivable').map((a) => a.id))
+
 // Every claim/loan tag: tags declared `groupingType: 'claim'`, plus any other
 // tag used on a line of a booking that touches the Außenstände account
 // (Konten's panel discovers them the same way — a loan tag like "Dirk Sept"
@@ -13,11 +18,11 @@ export const AUSSENSTAENDE_ACCOUNT_ID = 'aussenstaende'
 // labels *within* a claim, never a claim themselves.
 //
 // @returns {string[]} tag ids
-export function claimTagIds(tags, transactions) {
+export function claimTagIds(tags, transactions, receivableIds) {
   const byId = Object.fromEntries(tags.map((t) => [t.id, t]))
   const ids = new Set(tags.filter((t) => t.groupingType === 'claim').map((t) => t.id))
   for (const tx of transactions) {
-    if (tx.fromAccountId !== AUSSENSTAENDE_ACCOUNT_ID && tx.toAccountId !== AUSSENSTAENDE_ACCOUNT_ID) continue
+    if (!receivableIds.has(tx.fromAccountId) && !receivableIds.has(tx.toAccountId)) continue
     for (const line of tx.lines ?? []) for (const id of line.tags ?? []) ids.add(id)
   }
   return [...ids].filter((id) => byId[id] && byId[id].groupingType !== 'claim-category' && byId[id].class !== 'allocation')
@@ -26,18 +31,19 @@ export function claimTagIds(tags, transactions) {
 // One claim's lines, oldest first, each with its signed contribution to the
 // claim's net (exactly what tagFilterTotal adds up) and the claim-category
 // tag ids it carries (for grouping; lines are never summed within a group).
-export function claimLines(tagId, transactions, tags) {
+export function claimLines(tagId, transactions, tags, receivableIds) {
   const matchIds = tagFilterMatchIds(tagId, tags)
   const out = []
   for (const tx of transactions) {
     ;(tx.lines ?? []).forEach((line, lineIndex) => {
       if (!(line.tags ?? []).some((id) => matchIds.has(id))) return
-      const cents = claimLineContribution(tx, line, AUSSENSTAENDE_ACCOUNT_ID)
+      const cents = claimLineContribution(tx, line, receivableIds)
       if (cents === null) return
       out.push({
         txId: tx.id,
         lineIndex,
         date: tx.date,
+        accountId: receivableIds.has(tx.fromAccountId) ? tx.fromAccountId : receivableIds.has(tx.toAccountId) ? tx.toAccountId : null,
         label: tx.displayLabel || line.note || '',
         detail: tx.detail ?? '',
         cents,
@@ -51,14 +57,17 @@ export function claimLines(tagId, transactions, tags) {
 // All claims with their net total, open (net ≠ 0) first, then by newest
 // activity. A claim is "settled" exactly when its net is zero — the only
 // status there is.
-export function claimOverview(tags, transactions) {
+export function claimOverview(tags, transactions, receivableIds) {
   const byId = Object.fromEntries(tags.map((t) => [t.id, t]))
-  const claims = claimTagIds(tags, transactions).map((id) => {
-    const lines = claimLines(id, transactions, tags)
+  const claims = claimTagIds(tags, transactions, receivableIds).map((id) => {
+    const lines = claimLines(id, transactions, tags, receivableIds)
     return {
       id,
       name: byId[id].name,
-      net: tagFilterTotal(id, '9999-12-31', transactions, AUSSENSTAENDE_ACCOUNT_ID, tags),
+      net: tagFilterTotal(id, '9999-12-31', transactions, receivableIds, tags),
+      // The receivable account the claim sits on: that of its latest booking
+      // touching one (the one a close-out must book from).
+      accountId: [...lines].reverse().find((l) => l.accountId)?.accountId ?? AUSSENSTAENDE_ACCOUNT_ID,
       lines,
       lastDate: lines.reduce((m, l) => (l.date > m ? l.date : m), ''),
     }
@@ -68,19 +77,19 @@ export function claimOverview(tags, transactions) {
     .sort((a, b) => (a.net === 0) - (b.net === 0) || b.lastDate.localeCompare(a.lastDate) || a.name.localeCompare(b.name, 'de'))
 }
 
-// The close-out booking (spec §3g): moves the residual from the Außenstände
-// account to a real category, carrying the claim tag, so the claim's net
+// The close-out booking (spec §3g): moves the residual from the claim's
+// receivable account (`accountId`, default Außenstände) to a real category, carrying the claim tag, so the claim's net
 // becomes exactly zero and the shortfall is booked as a real, categorized
 // expense. `residualCents` is the claim's net (negative = still outstanding);
 // the booking is single-sided *from* Außenstände with that same signed amount
 // (an expense for a negative residual, income for a positive one), whose
 // contribution (−amount) cancels the net.
-export function closeOutTransaction({ id, tagId, tagName, residualCents, categoryId, date, now = Date.now() }) {
+export function closeOutTransaction({ id, tagId, tagName, residualCents, categoryId, date, accountId = AUSSENSTAENDE_ACCOUNT_ID, now = Date.now() }) {
   const label = `Ausbuchung ${tagName}`
   return {
     id,
     date,
-    fromAccountId: AUSSENSTAENDE_ACCOUNT_ID,
+    fromAccountId: accountId,
     toAccountId: null,
     amountCents: residualCents,
     rawDescription: label,
