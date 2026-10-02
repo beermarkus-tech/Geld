@@ -36,13 +36,19 @@ function amountTint(abs, minAbs, maxAbs) {
 
 const todayIso = () => new Date().toISOString().slice(0, 10)
 
-export default function Quickview({ year, onOpenInKonten, active = true }) {
+export default function Quickview({ year, onOpenInKonten, active = true, preset = null }) {
   const [categories, setCategories] = useState([])
   const [tags, setTags] = useState([])
   const [transactions, setTransactions] = useState([])
   const [selected, setSelected] = useState('')
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const listboxRef = useRef(null)
+
+  // Verlauf's subcategory click (spec §3b): App hands over a `preset`
+  // ({id, kind, targetId}) with a fresh id per click; it becomes the selection.
+  useEffect(() => {
+    if (preset) setSelected(`${preset.kind === 'category' ? 'c' : 't'}:${preset.targetId}`)
+  }, [preset])
 
   // Ctrl+L opens the category dropdown (Markus, Oct 2026); Ctrl+I toggles the
   // shortcuts popover like on Konten/Verlauf, Escape closes it. Only while

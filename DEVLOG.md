@@ -1768,3 +1768,7 @@ Markus asked for Strg+L to open the category dropdown, an (i) hover button expla
 ## Session 37, continued a thirtieth time — 2026-10-02 — Quickview: selector styled like Konten's "Konto:"
 
 Markus: the Quickview selector should look and sit like Konten's "Konto: [dropdown]". Now "Kategorie oder Tag:" (muted label with colon) followed by a compact box in the same border/surface colour/size as Konten's select. Done via a new `inline` option on `Listbox.jsx` (default look for the editor popups unchanged). **Note:** Konten uses the browser's native select, Quickview needs the searchable custom list, so the *opened* list differs slightly (custom list with a search box, not the OS popup); the closed box matches.
+
+## Session 37, continued a thirty-first time — 2026-10-02 — Verlauf subcategory → Quickview
+
+Markus: clicking any subcategory in Verlauf should open Quickview with it pre-selected. Done: the Unterkategorie cell in `Verlauf.jsx` is now a clickable name (hover underline, tooltip "In Quickview öffnen") calling `onOpenQuickview`; `App.jsx` switches to Quickview and hands it a `preset`. Works the same for the allocation-tag names in the Rücklagen section (my addition, same idea). Harness-checked: click on "Lebensmittel & Haushalt" lands in Quickview with that category selected. Not changed: an ordinary click used to do nothing on that column, so no existing behavior is lost.

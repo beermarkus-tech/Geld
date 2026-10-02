@@ -445,7 +445,7 @@ function AddBreakdownModal({ parentOptions, tagExistsGloballyByName, onSubmit, o
   )
 }
 
-export default function Verlauf({ year, initialFocus, onFocusChange, active = true }) {
+export default function Verlauf({ year, initialFocus, onFocusChange, active = true, onOpenQuickview }) {
   const [categories, setCategories] = useState([])
   const [tags, setTags] = useState([])
   const [transactions, setTransactions] = useState([])
@@ -1488,8 +1488,15 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         // a tall spanned cell on its own. `whiteSpace: normal` overrides
         // AG Grid's own default single-line cell text (nowrap + ellipsis)
         // so a name too long for one line wraps instead of clipping.
+        // Clicking the name opens Quickview with that subcategory (or, in the
+        // Rücklagen section, that allocation tag) pre-selected (Markus, Oct 2026).
         cellRenderer: (p) => (
-          <div className="flex h-full w-full items-center" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+          <div
+            className="flex h-full w-full cursor-pointer items-center hover:underline"
+            style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}
+            title="In Quickview öffnen"
+            onClick={() => onOpenQuickview?.({ kind: p.data.targetKey === 'categoryId' ? 'category' : 'tag', id: p.data.targetId })}
+          >
             {p.value}
           </div>
         ),

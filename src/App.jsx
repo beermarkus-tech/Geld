@@ -41,6 +41,11 @@ export default function App() {
   // Quickview's jump into Konten (spec.md §3e): a fresh id per click, so
   // Konten applies each one exactly once.
   const [kontenJump, setKontenJump] = useState(null)
+  const [quickviewPreset, setQuickviewPreset] = useState(null)
+  const openQuickview = ({ kind, id }) => {
+    setQuickviewPreset({ kind, targetId: id, id: Date.now() })
+    setView('quickview')
+  }
   const openInKonten = (j) => {
     setKontenJump({ ...j, id: Date.now() })
     setView('konten')
@@ -177,7 +182,7 @@ export default function App() {
         />
       </div>
       <div className={view === 'verlauf' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
-        <Verlauf year={year} initialFocus={verlaufFocus} onFocusChange={setVerlaufFocus} active={view === 'verlauf'} />
+        <Verlauf year={year} initialFocus={verlaufFocus} onFocusChange={setVerlaufFocus} active={view === 'verlauf'} onOpenQuickview={openQuickview} />
       </div>
       {/* Planung (spec.md §3c) mounts once and is only hidden, like Konten and
           Verlauf above (Oct 2026, Markus: "planung is being recalculated
@@ -189,7 +194,7 @@ export default function App() {
       {/* Quickview mounts once and is only hidden, like the screens above
           (Oct 2026, Markus), so its selection and scroll position stay. */}
       <div className={view === 'quickview' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
-        <Quickview year={year} onOpenInKonten={openInKonten} active={view === 'quickview'} />
+        <Quickview year={year} onOpenInKonten={openInKonten} active={view === 'quickview'} preset={quickviewPreset} />
       </div>
       {view === 'importexport' && <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} />}
       {/* Every other nav item (Dashboard, Quickview, Fortschritt,

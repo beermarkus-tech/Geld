@@ -686,6 +686,7 @@ Colors reuse the app's own green/amber/purple semantics (confirmed fine). Orient
 - **Colour scale by size:** each amount's background is tinted by its absolute size between the smallest and the largest amount shown across all months of the year (pale → yellow → orange); the middle colour sits at **70 %** of that span, so only the real main contributors turn strongly orange.
 - **Keyboard + help (Oct 2026):** Strg+L opens the Kategorie/Tag dropdown (type to search, Enter picks); Strg+I / the (i) hover button at the top right (same design as Konten and Verlauf) lists these shortcuts. Only active while Quickview is the visible screen.
 - **Panels:** the twelve month panels have a clearly visible border, shadow and tinted header; on wide screens the two rows share the full remaining screen height and are always equally tall (lists scroll inside a panel if ever needed); on narrower screens the grid wraps and the page scrolls.
+- **Entry from Verlauf (Oct 2026, Markus):** clicking a subcategory name in Verlauf (or an allocation tag's name in its Rücklagen section) switches to Quickview with that category/tag already selected, for the global year.
 - **Persistent:** the screen is mounted once and only hidden while another screen is shown (selection and scroll stay), like Konten/Verlauf/Planung.
 - **The year's total sits at the top.**
 - **A split booking contributes its matching line's amount** (a split salary adds its 5.000 € salary line, not the booking's net) to its name's sum; a booking with two matching lines contributes both.
