@@ -39,6 +39,18 @@ describe('claim discovery and totals', () => {
   })
 })
 
+describe('legacy claims whose tags are raw strings without a tag document', () => {
+  it('are found by their first tag and named by it; a second raw string is a label, not a claim', () => {
+    const txs = [
+      tx('a', '2026-03-09', 'visa', 'airbus', 5000, ['2026-03 GET', 'Hotel']),
+      tx('b', '2026-04-22', 'airbus', 'bnp', 2000, ['2026-03 GET']),
+    ]
+    expect(claimTagIds([], txs, REC)).toEqual(['2026-03 GET'])
+    const o = claimOverview([], txs, REC)
+    expect(o.map((c) => [c.name, c.net])).toEqual([['2026-03 GET', 3000]])
+  })
+})
+
 describe('claims on the other receivable accounts (CPAM, Airbus)', () => {
   it('are found, totalled, and closed out from their own account', () => {
     const txs = [tx('exp', '2026-05-01', 'visa', 'airbus', 20000, ['trip']), tx('back', '2026-06-01', 'airbus', 'bnp', 15000, ['trip'])]

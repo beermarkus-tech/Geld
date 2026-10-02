@@ -20,12 +20,23 @@ export const receivableAccountIds = (accounts) => new Set(accounts.filter((a) =>
 // @returns {string[]} tag ids
 export function claimTagIds(tags, transactions, receivableIds) {
   const byId = Object.fromEntries(tags.map((t) => [t.id, t]))
+  const excluded = (id) => byId[id]?.groupingType === 'claim-category' || byId[id]?.class === 'allocation'
   const ids = new Set(tags.filter((t) => t.groupingType === 'claim').map((t) => t.id))
   for (const tx of transactions) {
     if (!receivableIds.has(tx.fromAccountId) && !receivableIds.has(tx.toAccountId)) continue
-    for (const line of tx.lines ?? []) for (const id of line.tags ?? []) ids.add(id)
+    for (const line of tx.lines ?? []) {
+      ;(line.tags ?? []).forEach((id, i) => {
+        // Pre-mechanism lines (incl. the whole Gsheet migration) carry the tag as
+        // a raw string with no tag document behind it (spec §2.5) — the claim
+        // is its first tag, any later raw string is a label, not a claim
+        // (Oct 2026, Markus: "still no bookings shown" — requiring a tag
+        // document hid every migrated claim).
+        if (!byId[id] && i > 0) return
+        if (!excluded(id)) ids.add(id)
+      })
+    }
   }
-  return [...ids].filter((id) => byId[id] && byId[id].groupingType !== 'claim-category' && byId[id].class !== 'allocation')
+  return [...ids]
 }
 
 // One claim's lines, oldest first, each with its signed contribution to the
@@ -63,7 +74,7 @@ export function claimOverview(tags, transactions, receivableIds) {
     const lines = claimLines(id, transactions, tags, receivableIds)
     return {
       id,
-      name: byId[id].name,
+      name: byId[id]?.name ?? id,
       net: tagFilterTotal(id, '9999-12-31', transactions, receivableIds, tags),
       // The receivable account the claim sits on: that of its latest booking
       // touching one (the one a close-out must book from).
