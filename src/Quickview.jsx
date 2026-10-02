@@ -107,10 +107,12 @@ export default function Quickview({ year, onOpenInKonten, active = true }) {
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto px-4 py-4 xl:overflow-hidden">
-      <div className="flex items-end gap-3">
-        <div className="flex max-w-xl flex-1 flex-col gap-1">
-          <label className="text-sm text-[var(--color-text-muted)]">Kategorie oder Tag</label>
-          <Listbox ref={listboxRef} value={selected} onChange={setSelected} options={options} placeholder="Auswählen…" searchable />
+      <div className="flex flex-wrap items-center gap-4">
+        {/* Same arrangement as Konten's "Konto:" selector: muted label with a
+            colon, then a compact dropdown in the same style. */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-[var(--color-text-muted)]">Kategorie oder Tag:</span>
+          <Listbox ref={listboxRef} value={selected} onChange={setSelected} options={options} placeholder="Auswählen…" searchable inline />
         </div>
         {/* Same (i) hover button as Konten/Verlauf's toolbars. */}
         <div className="relative ml-auto">

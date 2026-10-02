@@ -19,6 +19,11 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 // `options` is [{id, name}, ...] — an empty/placeholder choice, if wanted,
 // is just an ordinary entry with id: '' (no special-cased handling here).
 //
+// `inline` (Oct 2026, Quickview) renders it like Konten's plain "Konto:"
+// select — a compact bordered box in the surface colour that sizes to its
+// content, with a dropdown at least as wide as its longest sensible entry —
+// instead of the full-width form field used inside the editor popups.
+//
 // `searchable` (Markus: "i need a quick search bar inside the category
 // selection modal, same as in the tag selection modal") opts a given
 // Listbox into a text filter at the top of its own dropdown — off by
@@ -30,7 +35,7 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 // operate on the filtered list, not the full one. `selected`'s own display
 // name always reads the full, unfiltered `options`, regardless of whatever
 // search text happens to be typed at the time.
-const Listbox = forwardRef(function Listbox({ value, onChange, onEnter, options, disabled, placeholder, searchable = false }, ref) {
+const Listbox = forwardRef(function Listbox({ value, onChange, onEnter, options, disabled, placeholder, searchable = false, inline = false }, ref) {
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(0)
   const [searchText, setSearchText] = useState('')
@@ -152,21 +157,25 @@ const Listbox = forwardRef(function Listbox({ value, onChange, onEnter, options,
   }, [disabled, open, highlight, visibleOptions, value, onChange, onEnter, searchable, searchText])
 
   return (
-    <div className="relative">
+    <div className={inline ? 'relative inline-block' : 'relative'}>
       <button
         ref={buttonRef}
         type="button"
         disabled={disabled}
         onClick={() => (open ? setOpen(false) : openList())}
-        className="mt-0.5 flex w-full items-center justify-between gap-1 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-left text-sm disabled:opacity-50"
+        className={
+          inline
+            ? 'flex min-w-[16rem] items-center justify-between gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-left text-sm disabled:opacity-50'
+            : 'mt-0.5 flex w-full items-center justify-between gap-1 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-left text-sm disabled:opacity-50'
+        }
       >
-        <span className={selected ? undefined : 'text-[var(--color-text-muted)]'}>
+        <span className={selected || inline ? undefined : 'text-[var(--color-text-muted)]'}>
           {selected ? selected.name : placeholder}
         </span>
         <span className="text-[var(--color-text-muted)]">▾</span>
       </button>
       {open && (
-        <div className="absolute z-10 mt-1 w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg">
+        <div className={`absolute z-10 mt-1 rounded border ${inline ? 'min-w-[22rem]' : 'w-full'} border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg`}>
           {searchable && (
             <input
               ref={inputRef}
