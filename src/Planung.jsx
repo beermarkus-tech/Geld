@@ -81,6 +81,16 @@ const SECTION_TINT = {
   ruecklagen: 'var(--color-savings-tint)',
 }
 
+// A slightly darker/stronger version of each tint, for the total rows
+// (group headers) so they stand out from the category rows under them (Oct
+// 2026, Markus) — the tint with a little of its section's own color mixed in.
+const SECTION_TINT_STRONG = {
+  einnahmen: 'color-mix(in srgb, var(--color-income-tint) 86%, var(--color-income))',
+  fixkosten: 'color-mix(in srgb, var(--color-alert-tint) 86%, var(--color-alert))',
+  ausgaben: 'color-mix(in srgb, var(--color-alert-tint) 86%, var(--color-alert))',
+  ruecklagen: 'color-mix(in srgb, var(--color-savings-tint) 86%, var(--color-savings))',
+}
+
 // Ausgaben vs. Budget — "should be near zero"; negative means the plan
 // spends more than the budget allows, which is the one alert-red case
 // here (§1b.4).
@@ -389,32 +399,50 @@ function Legend({ color, label }) {
 
 // The Puffer — the only number typed on this screen (§2.7a). Shown as the
 // negative amount it subtracts; editing takes the plain positive figure.
-function PufferCell({ cents, onSave, label }) {
+function PufferCell({ cents, onSave, label, navCol }) {
   const [draft, setDraft] = useState(null)
+  const btnRef = useRef(null)
+  const returnFocus = useRef(false)
+  // After Enter/Escape the cursor stays on the cell (so the arrow keys keep
+  // working); leaving by clicking elsewhere must not steal focus back.
+  useEffect(() => {
+    if (draft === null && returnFocus.current) {
+      returnFocus.current = false
+      btnRef.current?.focus()
+    }
+  }, [draft])
+  const start = (text) => setDraft(text ?? (cents ? centsToWholeEuro(cents) : ''))
   if (draft === null) {
     return (
       <button
+        ref={btnRef}
         type="button"
+        {...(navCol === undefined ? {} : { 'data-nav-row': 'puffer', 'data-nav-col': navCol })}
         // Double click (or Enter/F2) to edit, like the grids (Oct 2026,
-        // Markus) — a single click only selects.
-        onDoubleClick={() => setDraft(cents ? centsToWholeEuro(cents) : '')}
+        // Markus) — a single click only selects; typing a digit starts
+        // editing with it.
+        onDoubleClick={() => start()}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === 'F2') {
             e.preventDefault()
-            setDraft(cents ? centsToWholeEuro(cents) : '')
+            start()
+          } else if (!e.ctrlKey && !e.metaKey && !e.altKey && (/^[0-9-]$/.test(e.key) || e.key === 'Backspace' || e.key === 'Delete')) {
+            e.preventDefault()
+            start(/^[0-9-]$/.test(e.key) ? e.key : '')
           }
         }}
         title="Puffer — Doppelklick zum Bearbeiten"
         aria-label={`${label} bearbeiten`}
-        className="tabular-figure underline decoration-dotted underline-offset-2"
+        className="tabular-figure scroll-mt-14 underline decoration-dotted underline-offset-2"
       >
         {euro(-cents)}
       </button>
     )
   }
-  function commit() {
+  function commit(keepCursor) {
     const parsed = parseWholeEuroInput(draft)
     if (parsed !== null) onSave(Math.abs(parsed))
+    returnFocus.current = keepCursor
     setDraft(null)
   }
   return (
@@ -424,10 +452,13 @@ function PufferCell({ cents, onSave, label }) {
       aria-label={label}
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
+      onBlur={() => commit(false)}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') commit()
-        if (e.key === 'Escape') setDraft(null)
+        if (e.key === 'Enter') commit(true)
+        if (e.key === 'Escape') {
+          returnFocus.current = true
+          setDraft(null)
+        }
       }}
       className="tabular-figure w-24 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-1 text-right"
     />
@@ -441,7 +472,7 @@ function PufferCell({ cents, onSave, label }) {
 // (Oct 2026, Markus). Enter saves, Shift+Enter adds a line, Escape drops the
 // unsaved change; clicking away saves too (and so does the screen going
 // away mid-edit).
-function CommentBox({ y, target, c, cell = true }) {
+function CommentBox({ y, target, c, cell = true, navCol }) {
   const saved = c.commentFor.get(`${y}:${target.targetId}`) ?? ''
   const [draft, setDraft] = useState(saved)
   const [editing, setEditing] = useState(false)
@@ -490,6 +521,7 @@ function CommentBox({ y, target, c, cell = true }) {
       rows={1}
       value={draft}
       readOnly={!editing}
+      {...(navCol === undefined ? {} : { 'data-nav-row': target.targetId, 'data-nav-col': navCol })}
       aria-label={`Kommentar ${y} ${target.label}`}
       title={editing ? undefined : 'Doppelklick zum Bearbeiten'}
       onDoubleClick={() => setEditing(true)}
@@ -502,6 +534,13 @@ function CommentBox({ y, target, c, cell = true }) {
         if (!editing) {
           if (e.key === 'Enter' || e.key === 'F2') {
             e.preventDefault()
+            setEditing(true)
+          } else if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete')) {
+            // Typing on a selected cell starts editing with what was typed
+            // replacing the old text, like the grids; Backspace/Delete
+            // start from an empty cell.
+            e.preventDefault()
+            setDraft(e.key.length === 1 ? e.key : '')
             setEditing(true)
           }
           return
@@ -517,7 +556,7 @@ function CommentBox({ y, target, c, cell = true }) {
         }
       }}
       className={
-        'block w-full resize-none overflow-hidden bg-transparent text-sm leading-5 whitespace-pre-wrap focus:outline-2 focus:-outline-offset-2 focus:outline-[var(--color-computed)] ' +
+        'block w-full scroll-mt-14 resize-none overflow-hidden bg-transparent text-sm leading-5 whitespace-pre-wrap focus:outline-2 focus:-outline-offset-2 focus:outline-[var(--color-computed)] ' +
         (editing ? 'cursor-text bg-[var(--color-surface)] ' : 'cursor-default select-none hover:bg-[var(--color-line-row-tint)] ') +
         (cell ? 'px-3 py-1' : 'rounded border border-[var(--color-border)] px-2 py-1')
       }
@@ -541,6 +580,9 @@ const NAME_TD = 'sticky left-0 whitespace-nowrap border-b border-[var(--color-bo
 // A comment column cell has no padding of its own — the textarea inside
 // fills it, so the whole cell is the click target.
 const COMMENT_TD = 'min-w-[14rem] border-b border-[var(--color-border)] p-0 align-top'
+// The vertical grid line between the 2025 block (figures + comment) and the
+// 2026 block (Oct 2026, Markus) — a left border on every 2026 figure cell.
+const DIVIDER = 'border-l'
 
 function blankZero(cents) {
   return cents === 0 ? '' : euro(cents)
@@ -550,7 +592,7 @@ function blankZero(cents) {
 // 2026: "put the sub group totals into the subgroup headers") — label and
 // every figure in the group's own color, the whole row in its section tint.
 function GroupHeader({ t, section, showComments }) {
-  const style = { backgroundColor: SECTION_TINT[section], color: SECTION_COLOR[section] }
+  const style = { backgroundColor: SECTION_TINT_STRONG[section], color: SECTION_COLOR[section] }
   return (
     <tr className="font-semibold" style={style}>
       <td className={NAME_TD} style={style}>
@@ -558,11 +600,12 @@ function GroupHeader({ t, section, showComments }) {
       </td>
       <td className={TD}>{blankZero(t.ref)}</td>
       {showComments && <td className={COMMENT_TD} />}
-      <td className={TD}>{blankZero(t.plan)}</td>
+      <td className={`${TD} ${DIVIDER}`}>{blankZero(t.plan)}</td>
       {showComments && <td className={COMMENT_TD} />}
       <td className={TD}>{blankZero(t.split.regularYear)}</td>
       <td className={TD}>{blankZero(t.split.regularMonth)}</td>
       <td className={TD}>{blankZero(t.split.lumpYear)}</td>
+      <td className="border-b border-[var(--color-border)]" />
     </tr>
   )
 }
@@ -578,21 +621,23 @@ function DataRow({ r, section, c }) {
       <td className={TD}>{blankZero(r.ref)}</td>
       {showComments && (
         <td className={COMMENT_TD}>
-          <CommentBox y={refYear} target={r} c={c} />
+          <CommentBox y={refYear} target={r} c={c} navCol={0} />
         </td>
       )}
-      <td className={TD}>{blankZero(r.plan)}</td>
+      <td className={`${TD} ${DIVIDER}`}>{blankZero(r.plan)}</td>
       {showComments && (
         <td className={COMMENT_TD}>
-          <CommentBox y={planYear} target={r} c={c} />
+          <CommentBox y={planYear} target={r} c={c} navCol={1} />
         </td>
       )}
       <td className={TD}>{blankZero(r.split.regularYear)}</td>
       <td className={TD}>{blankZero(r.split.regularMonth)}</td>
       <td className={TD}>
         {blankZero(r.split.lumpYear)}
+      </td>
+      <td className="whitespace-nowrap border-b border-[var(--color-border)] px-3 py-1 text-center align-top">
         {pill && (
-          <span className="ml-1.5 inline-block rounded-full bg-[var(--color-savings-tint)] px-1.5 py-px font-sans text-xs font-medium text-[var(--color-savings)]">
+          <span className="inline-block rounded-full bg-[var(--color-savings-tint)] px-1.5 py-px text-xs font-medium text-[var(--color-savings)]">
             {pill}
           </span>
         )}
@@ -627,11 +672,11 @@ function BandRow({ label, refValue, planValue, color, bold = false, showComments
         {r.node}
       </td>
       {showComments && <td className="border-b border-[var(--color-border)]" />}
-      <td className={TD} style={p.color ? { color: p.color } : undefined}>
+      <td className={`${TD} ${DIVIDER}`} style={p.color ? { color: p.color } : undefined}>
         {p.node}
       </td>
       {showComments && <td className="border-b border-[var(--color-border)]" />}
-      <td colSpan={3} className="border-b border-[var(--color-border)]" />
+      <td colSpan={4} className="border-b border-[var(--color-border)]" />
     </tr>
   )
 }
@@ -641,34 +686,69 @@ function BandRow({ label, refValue, planValue, color, bold = false, showComments
 function BlockGap({ showComments }) {
   return (
     <tr aria-hidden="true">
-      <td colSpan={showComments ? 8 : 6} className="h-5 border-b border-[var(--color-border)] bg-[var(--color-bg)] p-0" />
+      <td colSpan={showComments ? 9 : 7} className="h-5 border-b border-[var(--color-border)] bg-[var(--color-bg)] p-0" />
     </tr>
   )
+}
+
+// Arrow keys move the cursor between the editable cells (the two Puffer
+// figures, then every comment cell) like in the grids (Oct 2026, Markus). A
+// cell carries `data-nav-row` (its row) and `data-nav-col` (0 = the 2025
+// block, 1 = the 2026 block), so a Puffer cell and the comment cell under it
+// line up. Not while a cell is being edited — there the arrows move the text
+// caret as usual.
+function moveCursor(e) {
+  const t = e.target
+  if (!(t instanceof HTMLElement) || t.dataset.navRow === undefined) return
+  if (t.tagName === 'TEXTAREA' && !t.readOnly) return
+  const step = { ArrowUp: [1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[e.key]
+  if (!step) return
+  const cells = new Map()
+  const rows = []
+  for (const el of e.currentTarget.querySelectorAll('[data-nav-row]')) {
+    if (!rows.includes(el.dataset.navRow)) rows.push(el.dataset.navRow)
+    cells.set(`${el.dataset.navRow}|${el.dataset.navCol}`, el)
+  }
+  let r = rows.indexOf(t.dataset.navRow)
+  let col = Number(t.dataset.navCol)
+  let next = null
+  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    const dy = e.key === 'ArrowUp' ? -1 : 1
+    for (r += dy; r >= 0 && r < rows.length && !next; r += dy) next = cells.get(`${rows[r]}|${col}`) ?? null
+  } else {
+    next = cells.get(`${rows[r]}|${col + step[1]}`) ?? null
+  }
+  e.preventDefault()
+  if (next) {
+    next.focus()
+    next.scrollIntoView({ block: 'nearest' })
+  }
 }
 
 function ReportTable({ report, savePuffer, ...c }) {
   const { refYear, planYear, showComments } = c
   const { ref, plan } = report
   return (
-    <table className="w-full border-separate border-spacing-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-sm">
+    <table onKeyDown={moveCursor} className="w-full border-separate border-spacing-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-sm">
       <thead>
         <tr>
           <th className={`${TH_BASE} left-0 z-20 text-left`}>Kategorie</th>
           <th className={TH}>{refYear}</th>
           {showComments && <th className={`${TH_BASE} z-10 min-w-[14rem] text-left`}>Kommentar {refYear}</th>}
-          <th className={TH}>{planYear}</th>
+          <th className={`${TH} ${DIVIDER}`}>{planYear}</th>
           {showComments && <th className={`${TH_BASE} z-10 min-w-[14rem] text-left`}>Kommentar {planYear}</th>}
           <th className={TH}>Regulär Jahr</th>
           <th className={TH}>Regulär Monat</th>
           <th className={TH}>Einmal Jahr</th>
+          <th className={`${TH_BASE} z-10 text-center`}>Anteil</th>
         </tr>
       </thead>
       <tbody>
         <BandRow label="Alle Barkonten" refValue={ref.jahresanfangRaw} planValue={plan.jahresanfangRaw} color="var(--color-computed)" showComments={showComments} />
         <BandRow
           label="Puffer"
-          refValue={{ node: <PufferCell cents={ref.puffer} onSave={(v) => savePuffer(refYear, v)} label={`Puffer ${refYear}`} /> }}
-          planValue={{ node: <PufferCell cents={plan.puffer} onSave={(v) => savePuffer(planYear, v)} label={`Puffer ${planYear}`} /> }}
+          refValue={{ node: <PufferCell cents={ref.puffer} onSave={(v) => savePuffer(refYear, v)} label={`Puffer ${refYear}`} navCol={0} /> }}
+          planValue={{ node: <PufferCell cents={plan.puffer} onSave={(v) => savePuffer(planYear, v)} label={`Puffer ${planYear}`} navCol={1} /> }}
           showComments={showComments}
         />
         <BandRow label="Jahresanfang (Barkonten − Puffer)" refValue={ref.startCash} planValue={plan.startCash} color="var(--color-computed)" bold showComments={showComments} />

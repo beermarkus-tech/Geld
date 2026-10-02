@@ -1585,3 +1585,16 @@ Markus: like in Konten and Verlauf, a cell needs a double click to enter. Done f
 - The Puffer is a button that needs a double click (or Enter/F2) to turn into its input. On the phone this means a double tap, same as the grids.
 
 Verified in a harness: typing after a single click changes nothing; double click, F2 and Enter all enter edit mode; Enter, Escape and click-away behave as described; the Puffer saves 800000 only after a double click. Harness deleted. `npm run lint`, `npx vitest run` (71) and `npm run build` are clean.
+
+## Session 37, continued an eleventh time — 2026-10-02 — Planung: keyboard cursor and layout
+
+Markus's list for Planung, all done.
+- **Arrow keys move the cursor** between the editable cells: the two Puffer figures and every comment cell. Left/right switches between the 2025 and 2026 block, up/down moves between rows, and a Puffer cell lines up with the comment cell under it. Implemented as one key handler on the table that moves DOM focus between cells tagged with `data-nav-row`/`data-nav-col`.
+- **Aligned with Konten/Verlauf:** Enter while editing a comment saves and ends the edit with the cursor still on the cell, so the arrows work straight away; the Puffer does the same (it now gives focus back to its button after Enter/Escape; it used to lose it). Typing on a selected cell starts editing with what was typed, and Backspace/Delete start from empty, like the grids. While editing, the arrows move the text caret as usual.
+- **Vertical grid line** between the 2025 block (figures + comment) and the 2026 block, on every 2026 figure cell and its header. It is interrupted by the thin spacer rows between the three report blocks.
+- **Total rows** (the group headers) have a slightly stronger tint of green/red/purple (the tint mixed with 14 % of its section color).
+- **Share badges** ("75/25") moved out of "Einmal Jahr" into their own right-most column, "Anteil".
+
+**Not done / flagged:** arrow navigation exists on the tablet table only. The phone cards keep their stacked boxes without it (a keyboard is unlikely there).
+
+Verified in a harness: a scripted walk with the arrow keys across Puffer and comment cells, including the edges; typing starts editing; an arrow key while editing leaves the cursor in place; Enter then lets the arrows continue; the Puffer returns to its cell after Enter and saves once; the divider width, darker totals and the new column were checked by measurement and screenshot. Harness deleted. `npm run lint`, `npx vitest run` (71) and `npm run build` are clean.
