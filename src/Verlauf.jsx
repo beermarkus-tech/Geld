@@ -651,11 +651,21 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'p') {
         e.preventDefault()
         setShowPlan0((v) => !v)
+        return
+      }
+      // Ctrl+Q (Markus, Oct 2026): same as clicking the Unterkategorie name
+      // of the row the cursor is in — opens Quickview for it. Only while
+      // Verlauf is the visible screen (it stays mounted when hidden).
+      if (active && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'q') {
+        const row = gridApiRef.current?.getRowNode(lastFocusedRowIdRef.current)?.data
+        if (!row?.targetId) return
+        e.preventDefault()
+        onOpenQuickview?.({ kind: row.targetKey === 'categoryId' ? 'category' : 'tag', id: row.targetId })
       }
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [shortcutsOpen])
+  }, [shortcutsOpen, active, onOpenQuickview])
 
   useEffect(() => {
     if (!confirmRemoveRow) return
@@ -1878,6 +1888,9 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
                 </li>
                 <li>
                   <b>Strg+P</b> — Plan0 anzeigen
+                </li>
+                <li>
+                  <b>Strg+Q</b> — Quickview für die Unterkategorie der aktuellen Zeile öffnen
                 </li>
                 <li>
                   <b>Strg+I</b> — diese Übersicht ein-/ausblenden

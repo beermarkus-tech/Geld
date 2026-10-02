@@ -42,9 +42,16 @@ export default function App() {
   // Konten applies each one exactly once.
   const [kontenJump, setKontenJump] = useState(null)
   const [quickviewPreset, setQuickviewPreset] = useState(null)
+  // 'verlauf' while Quickview was opened from there — Esc then goes back.
+  const [quickviewFrom, setQuickviewFrom] = useState(null)
   const openQuickview = ({ kind, id }) => {
+    setQuickviewFrom('verlauf')
     setQuickviewPreset({ kind, targetId: id, id: Date.now() })
     setView('quickview')
+  }
+  const goBackToVerlauf = () => {
+    setQuickviewFrom(null)
+    setView('verlauf')
   }
   const openInKonten = (j) => {
     setKontenJump({ ...j, id: Date.now() })
@@ -128,7 +135,10 @@ export default function App() {
   return (
     <NavShell
       activeView={view}
-      onNavigate={setView}
+      onNavigate={(v) => {
+        setQuickviewFrom(null)
+        setView(v)
+      }}
       year={year}
       years={years}
       onYearChange={setYear}
@@ -194,7 +204,9 @@ export default function App() {
       {/* Quickview mounts once and is only hidden, like the screens above
           (Oct 2026, Markus), so its selection and scroll position stay. */}
       <div className={view === 'quickview' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
-        <Quickview year={year} onOpenInKonten={openInKonten} active={view === 'quickview'} preset={quickviewPreset} />
+        <Quickview year={year} onOpenInKonten={openInKonten} active={view === 'quickview'} preset={quickviewPreset}
+          onBack={quickviewFrom === 'verlauf' ? goBackToVerlauf : null}
+        />
       </div>
       {view === 'importexport' && <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} />}
       {/* Every other nav item (Dashboard, Quickview, Fortschritt,

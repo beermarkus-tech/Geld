@@ -1772,3 +1772,9 @@ Markus: the Quickview selector should look and sit like Konten's "Konto: [dropdo
 ## Session 37, continued a thirty-first time — 2026-10-02 — Verlauf subcategory → Quickview
 
 Markus: clicking any subcategory in Verlauf should open Quickview with it pre-selected. Done: the Unterkategorie cell in `Verlauf.jsx` is now a clickable name (hover underline, tooltip "In Quickview öffnen") calling `onOpenQuickview`; `App.jsx` switches to Quickview and hands it a `preset`. Works the same for the allocation-tag names in the Rücklagen section (my addition, same idea). Harness-checked: click on "Lebensmittel & Haushalt" lands in Quickview with that category selected. Not changed: an ordinary click used to do nothing on that column, so no existing behavior is lost.
+
+## Session 37, continued a thirty-second time — 2026-10-02 — Strg+Q in Verlauf, Esc back from Quickview
+
+Markus: Strg+Q in Verlauf = clicking the subcategory under the cursor (go to Quickview); Esc in Quickview returns to Verlauf when it was entered from there. Done: a Strg+Q branch in Verlauf's global key handler (only while Verlauf is active; uses the remembered cursor row), a `quickviewFrom` flag in `App.jsx` passed to Quickview as `onBack` (so Esc only goes back in that case; ignored while the search box is focused; cleared by menu navigation), and both listed in the (i) popovers. Harness-checked: Strg+Q → Quickview with Gehalt Markus selected; Esc → Verlauf; Esc in a directly opened Quickview does nothing.
+
+**Risk:** browsers/OSes can reserve Strg+Q (Cmd+Q on Mac quits the browser; some Linux setups too). Awaiting Markus's report from his devices; if it fails we pick another key.

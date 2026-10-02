@@ -36,7 +36,7 @@ function amountTint(abs, minAbs, maxAbs) {
 
 const todayIso = () => new Date().toISOString().slice(0, 10)
 
-export default function Quickview({ year, onOpenInKonten, active = true, preset = null }) {
+export default function Quickview({ year, onOpenInKonten, active = true, preset = null, onBack = null }) {
   const [categories, setCategories] = useState([])
   const [tags, setTags] = useState([])
   const [transactions, setTransactions] = useState([])
@@ -66,11 +66,17 @@ export default function Quickview({ year, onOpenInKonten, active = true, preset 
       } else if (e.key === 'Escape' && shortcutsOpen) {
         e.stopPropagation()
         setShortcutsOpen(false)
+      } else if (e.key === 'Escape' && onBack && e.target?.tagName !== 'INPUT') {
+        // Back to Verlauf, when we came from there (App passes onBack only
+        // then). Not while the dropdown's search box has focus — Escape
+        // closes the open dropdown first, as usual.
+        e.preventDefault()
+        onBack()
       }
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [active, shortcutsOpen])
+  }, [active, shortcutsOpen, onBack])
 
   useEffect(() => {
     const unsubs = [
@@ -138,6 +144,11 @@ export default function Quickview({ year, onOpenInKonten, active = true, preset 
                 <li>
                   <b>Strg+L</b> — Kategorie-/Tag-Auswahl öffnen
                 </li>
+                {onBack && (
+                  <li>
+                    <b>Esc</b> — zurück zu Verlauf
+                  </li>
+                )}
                 <li>
                   <b>Strg+I</b> — diese Übersicht ein-/ausblenden
                 </li>
