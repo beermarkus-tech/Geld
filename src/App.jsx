@@ -189,7 +189,7 @@ export default function App() {
       {/* Quickview mounts once and is only hidden, like the screens above
           (Oct 2026, Markus), so its selection and scroll position stay. */}
       <div className={view === 'quickview' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
-        <Quickview year={year} onOpenInKonten={openInKonten} />
+        <Quickview year={year} onOpenInKonten={openInKonten} active={view === 'quickview'} />
       </div>
       {view === 'importexport' && <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} />}
       {/* Every other nav item (Dashboard, Quickview, Fortschritt,

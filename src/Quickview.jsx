@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { collection, onSnapshot } from 'firebase/firestore'
 
 import { db } from './firebase'
@@ -36,11 +36,35 @@ function amountTint(abs, minAbs, maxAbs) {
 
 const todayIso = () => new Date().toISOString().slice(0, 10)
 
-export default function Quickview({ year, onOpenInKonten }) {
+export default function Quickview({ year, onOpenInKonten, active = true }) {
   const [categories, setCategories] = useState([])
   const [tags, setTags] = useState([])
   const [transactions, setTransactions] = useState([])
   const [selected, setSelected] = useState('')
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const listboxRef = useRef(null)
+
+  // Ctrl+L opens the category dropdown (Markus, Oct 2026); Ctrl+I toggles the
+  // shortcuts popover like on Konten/Verlauf, Escape closes it. Only while
+  // this screen is the visible one (it stays mounted when hidden).
+  useEffect(() => {
+    if (!active) return
+    const onKeyDown = (e) => {
+      const mod = e.ctrlKey || e.metaKey
+      if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'l') {
+        e.preventDefault()
+        listboxRef.current?.focus()
+      } else if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'i') {
+        e.preventDefault()
+        setShortcutsOpen((v) => !v)
+      } else if (e.key === 'Escape' && shortcutsOpen) {
+        e.stopPropagation()
+        setShortcutsOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [active, shortcutsOpen])
 
   useEffect(() => {
     const unsubs = [
@@ -82,10 +106,37 @@ export default function Quickview({ year, onOpenInKonten }) {
   const maxAbs = Math.max(...shownAbs)
 
   return (
-    <div className="flex w-full flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
-      <div className="flex max-w-xl flex-col gap-1">
-        <label className="text-sm text-[var(--color-text-muted)]">Kategorie oder Tag</label>
-        <Listbox value={selected} onChange={setSelected} options={options} placeholder="Auswählen…" searchable />
+    <div className="flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto px-4 py-4 xl:overflow-hidden">
+      <div className="flex items-end gap-3">
+        <div className="flex max-w-xl flex-1 flex-col gap-1">
+          <label className="text-sm text-[var(--color-text-muted)]">Kategorie oder Tag</label>
+          <Listbox ref={listboxRef} value={selected} onChange={setSelected} options={options} placeholder="Auswählen…" searchable />
+        </div>
+        {/* Same (i) hover button as Konten/Verlauf's toolbars. */}
+        <div className="relative ml-auto">
+          <button
+            type="button"
+            onMouseEnter={() => setShortcutsOpen(true)}
+            onMouseLeave={() => setShortcutsOpen(false)}
+            title="Tastenkürzel (Strg+I)"
+            className="flex h-6 w-6 items-center justify-center rounded-full border border-[var(--color-border)] text-xs font-medium text-[var(--color-text-muted)] hover:text-[var(--color-computed)]"
+          >
+            i
+          </button>
+          {shortcutsOpen && (
+            <div className="absolute right-0 top-full z-10 mt-1 w-72 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-xs text-[var(--color-text)] shadow-lg">
+              <div className="mb-1.5 font-medium">Tastenkürzel</div>
+              <ul className="space-y-1">
+                <li>
+                  <b>Strg+L</b> — Kategorie-/Tag-Auswahl öffnen
+                </li>
+                <li>
+                  <b>Strg+I</b> — diese Übersicht ein-/ausblenden
+                </li>
+              </ul>
+            </div>
+          )}
+        </div>
       </div>
 
       {!selection && <p className="text-sm text-[var(--color-text-muted)]">Wähle eine Kategorie oder einen Tag, um die echten Buchungen {year ?? ''} Monat für Monat zu sehen.</p>}
@@ -98,14 +149,14 @@ export default function Quickview({ year, onOpenInKonten }) {
             </h2>
             <span className="font-medium tabular-nums">{centsToWholeEuro(yearTotal)} €</span>
           </div>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:min-h-0 xl:flex-1 xl:grid-cols-6 xl:grid-rows-2">
             {months.map((m) => {
               const future = m.month > occurred
               return (
-                <section key={m.month} className={`flex min-w-0 flex-col rounded-lg border border-[var(--color-border)] ${future ? 'opacity-40' : ''}`}>
-                  <h3 className="border-b border-[var(--color-border)] pt-1.5 text-center font-semibold">{MONTH_NAMES[m.month - 1]}</h3>
+                <section key={m.month} className={`flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-[color-mix(in_srgb,var(--color-text)_35%,transparent)] bg-[var(--color-surface)] shadow-md ${future ? 'opacity-50' : ''}`}>
+                  <h3 className="bg-[color-mix(in_srgb,var(--color-text)_10%,var(--color-surface))] py-1.5 text-center font-semibold">{MONTH_NAMES[m.month - 1]}</h3>
                   {!future && (
-                    <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-center">
+                    <div className="border-b border-[color-mix(in_srgb,var(--color-text)_20%,transparent)] bg-[color-mix(in_srgb,var(--color-text)_5%,var(--color-surface))] px-2 py-1 text-center">
                       <div className="font-semibold tabular-nums">{centsToWholeEuro(m.total)} €</div>
                       <div className="text-xs text-[var(--color-text-muted)]">
                         {m.count} {m.count === 1 ? 'Buchung' : 'Buchungen'}
@@ -113,7 +164,7 @@ export default function Quickview({ year, onOpenInKonten }) {
                     </div>
                   )}
                   {!future && (
-                    <ul className="flex min-h-24 flex-col">
+                    <ul className="flex min-h-24 flex-1 flex-col overflow-y-auto">
                       {m.groups.slice(0, TOP_N).map((g) => (
                         <li key={g.label} className="flex items-baseline gap-1.5 text-sm" title={`${g.label}${g.count > 1 ? ` · ${g.count} Buchungen` : ''}`}>
                           <span className="w-[4.75rem] shrink-0 whitespace-nowrap px-1 text-right tabular-nums" style={{ background: amountTint(Math.abs(g.cents), minAbs, maxAbs) }}>

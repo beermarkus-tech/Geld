@@ -1758,3 +1758,9 @@ Markus: Quickview was meant to sum all bookings with the same name in a month (a
 ## Session 37, continued a twenty-eighth time — 2026-10-02 — Fix: white screen from Quickview (Build 141)
 
 Markus saw a white empty screen over the whole app after Build 141. **Cause:** my own bug in the previous round — with no selection, `quickviewMonths()` returned months without the new `groups` list, and the (permanently mounted) Quickview read it at startup, so React crashed and took the whole app with it. **Fixed:** the empty months now carry `groups: []`; a test covers the no-selection case (81 tests). Checked in the browser harness: app loads, Quickview with a selection renders. Lesson: the grouping change was shipped without a browser run — it got one this time.
+
+## Session 37, continued a twenty-ninth time — 2026-10-02 — Quickview: Strg+L, (i) button, panel look
+
+Markus asked for Strg+L to open the category dropdown, an (i) hover button explaining it (Konten/Verlauf design), more visible month panels, and panels filling the full screen height at equal heights. Done in `Quickview.jsx` (new `active` prop from `App.jsx` so the shortcuts only fire while the screen is visible; Strg+I also toggles the popover as elsewhere); panels got a stronger border, shadow and tinted header; on xl screens the grid is `grid-rows-2` over the remaining height. Browser-harness checked: Strg+L focuses the dropdown's search box, all twelve panels equal height with the bottom edge at the screen's padding.
+
+**Risk to confirm on Markus's devices:** browsers reserve Strg+L (address bar) in some setups; the page asks the browser not to, which works in Chrome-family browsers in a normal tab but may not in an installed/standalone PWA window or on other browsers. Awaiting Markus's report.
