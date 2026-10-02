@@ -1576,3 +1576,12 @@ Harness deleted before commit. `npm run lint`, `npx vitest run` (71) and `npm ru
 **Choices made without asking:** only category and allocation-tag rows get comment cells (the group header and summary rows stay empty), as before; Enter inserts a new line.
 
 **Next session:** unchanged. First Markus's Außenstände repair run and panel confirmation, then his Planung comparison against the Gsheet.
+
+## Session 37, continued a tenth time — 2026-10-02 — Planung: double click to edit
+
+Markus: like in Konten and Verlauf, a cell needs a double click to enter. Done for Planung's comment cells and the Puffer figure (the only two editable things there):
+- A single click only selects (the textarea is read-only, with a focus ring); a double click, Enter or F2 starts editing, caret at the end of the text.
+- **Behavior change to flag:** Enter now *saves* and leaves edit mode (grid-like), Shift+Enter adds a line. Earlier today, Enter inserted a new line. Escape still discards; clicking away still saves.
+- The Puffer is a button that needs a double click (or Enter/F2) to turn into its input. On the phone this means a double tap, same as the grids.
+
+Verified in a harness: typing after a single click changes nothing; double click, F2 and Enter all enter edit mode; Enter, Escape and click-away behave as described; the Puffer saves 800000 only after a double click. Harness deleted. `npm run lint`, `npx vitest run` (71) and `npm run build` are clean.

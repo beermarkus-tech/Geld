@@ -395,8 +395,16 @@ function PufferCell({ cents, onSave, label }) {
     return (
       <button
         type="button"
-        onClick={() => setDraft(cents ? centsToWholeEuro(cents) : '')}
-        title="Puffer bearbeiten"
+        // Double click (or Enter/F2) to edit, like the grids (Oct 2026,
+        // Markus) — a single click only selects.
+        onDoubleClick={() => setDraft(cents ? centsToWholeEuro(cents) : '')}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === 'F2') {
+            e.preventDefault()
+            setDraft(cents ? centsToWholeEuro(cents) : '')
+          }
+        }}
+        title="Puffer — Doppelklick zum Bearbeiten"
         aria-label={`${label} bearbeiten`}
         className="tabular-figure underline decoration-dotted underline-offset-2"
       >
@@ -428,19 +436,24 @@ function PufferCell({ cents, onSave, label }) {
 
 // One comment cell: a plain textarea that grows with its content, so the
 // row grows with it (Oct 2026, Markus: "the cells will have to expand
-// flexibly with the content of the comments"). Saved when it loses focus
-// (and if the screen goes away mid-edit); Escape drops the unsaved change.
+// flexibly with the content of the comments"). Like a grid cell it is only
+// *selected* by a single click; a double click (or Enter/F2) starts editing
+// (Oct 2026, Markus). Enter saves, Shift+Enter adds a line, Escape drops the
+// unsaved change; clicking away saves too (and so does the screen going
+// away mid-edit).
 function CommentBox({ y, target, c, cell = true }) {
   const saved = c.commentFor.get(`${y}:${target.targetId}`) ?? ''
   const [draft, setDraft] = useState(saved)
+  const [editing, setEditing] = useState(false)
   const ref = useRef(null)
-  const focused = useRef(false)
+  const editingRef = useRef(false)
+  editingRef.current = editing
   const latest = useRef({ draft, saved })
   latest.current = { draft, saved }
 
-  // A change arriving from Firestore replaces the text unless it's being typed in.
+  // A change arriving from Firestore replaces the text unless it's being edited.
   useEffect(() => {
-    if (!focused.current) setDraft(saved)
+    if (!editingRef.current) setDraft(saved)
   }, [saved])
 
   function fit() {
@@ -455,6 +468,14 @@ function CommentBox({ y, target, c, cell = true }) {
     return () => window.removeEventListener('resize', fit)
   }, [])
 
+  // Entering edit mode puts the caret at the end of the text.
+  useEffect(() => {
+    if (!editing) return
+    const el = ref.current
+    el.focus()
+    el.setSelectionRange(el.value.length, el.value.length)
+  }, [editing])
+
   function commit() {
     const { draft: d, saved: s } = latest.current
     if (d.trim() !== s) c.saveComment(y, target, d.trim())
@@ -468,24 +489,36 @@ function CommentBox({ y, target, c, cell = true }) {
       ref={ref}
       rows={1}
       value={draft}
+      readOnly={!editing}
       aria-label={`Kommentar ${y} ${target.label}`}
-      onFocus={() => {
-        focused.current = true
-      }}
+      title={editing ? undefined : 'Doppelklick zum Bearbeiten'}
+      onDoubleClick={() => setEditing(true)}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => {
-        focused.current = false
+        setEditing(false)
         commit()
       }}
       onKeyDown={(e) => {
+        if (!editing) {
+          if (e.key === 'Enter' || e.key === 'F2') {
+            e.preventDefault()
+            setEditing(true)
+          }
+          return
+        }
         if (e.key === 'Escape') {
           setDraft(saved)
           latest.current = { draft: saved, saved }
-          e.currentTarget.blur()
+          setEditing(false)
+        } else if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault()
+          commit()
+          setEditing(false)
         }
       }}
       className={
-        'block w-full resize-none overflow-hidden bg-transparent text-sm leading-5 whitespace-pre-wrap hover:bg-[var(--color-line-row-tint)] focus:bg-[var(--color-surface)] focus:outline-2 focus:-outline-offset-2 focus:outline-[var(--color-computed)] ' +
+        'block w-full resize-none overflow-hidden bg-transparent text-sm leading-5 whitespace-pre-wrap focus:outline-2 focus:-outline-offset-2 focus:outline-[var(--color-computed)] ' +
+        (editing ? 'cursor-text bg-[var(--color-surface)] ' : 'cursor-default select-none hover:bg-[var(--color-line-row-tint)] ') +
         (cell ? 'px-3 py-1' : 'rounded border border-[var(--color-border)] px-2 py-1')
       }
     />
