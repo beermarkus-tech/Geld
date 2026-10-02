@@ -131,7 +131,7 @@ export default function Aussenstaende({ onOpenInKonten }) {
                 <div className="flex items-center gap-3 pt-1 text-sm">
                   <button
                     type="button"
-                    onClick={() => onOpenInKonten({ kind: 'tag', name: claim.name, year: null, month: null, from: 'aussenstaende' })}
+                    onClick={() => onOpenInKonten({ kind: 'tag', name: claim.name, tagId: claim.id, year: null, month: null, from: 'aussenstaende' })}
                     className="text-[var(--color-computed)] underline"
                   >
                     In Konten anzeigen

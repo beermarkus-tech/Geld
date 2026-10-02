@@ -375,6 +375,13 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     const api = gridRef.current?.api
     if (!jump || !api || appliedJumpRef.current === jump.id) return
     appliedJumpRef.current = jump.id
+    // A claim opened from Außenstände: the real tag filter (like clicking the
+    // claim in the pinned panel), which spans every year of the claim.
+    if (jump.tagId) {
+      api.setFilterModel(null)
+      setAccountFilter(jump.tagId)
+      return
+    }
     setAccountFilter(null)
     const text = (filter) => ({ filterType: 'text', type: 'contains', filter })
     api.setFilterModel({
@@ -1389,8 +1396,11 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     // tagFilterMatchIds() so the row filter and the toolbar's own total
     // can't quietly disagree on what counts as a match.
     const tagMatchIds = accountFilter && !filteredAccountId ? tagFilterMatchIds(accountFilter, tags) : null
+    const isClaimTagFilter = Boolean(tagMatchIds) && claimStatus.all.has(accountFilter)
     return transactions
-      .filter((t) => t.date.startsWith(year))
+      // A claim's tag filter shows the claim across all years (a claim often
+      // spans two — Oct 2026, Markus); every other filter stays year-based.
+      .filter((t) => isClaimTagFilter || t.date.startsWith(year))
       // Soft-deleted rows (spec.md §2.9a's layer 4) stay hidden by default,
       // same as every other view — the "Kürzlich gelöscht" toggle is the
       // one deliberate exception that lets them back into the grid itself,
@@ -1407,7 +1417,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       })
       .slice()
       .sort((a, b) => (a.date === b.date ? a.id.localeCompare(b.id) : a.date.localeCompare(b.date)))
-  }, [transactions, year, accountFilter, filteredAccountId, tags, showDeleted, receivableView])
+  }, [transactions, year, accountFilter, filteredAccountId, tags, showDeleted, receivableView, claimStatus])
 
   // Once a pending row (addRow's new row, or a just-edited row that may
   // have moved) actually settles into `rows` — via the Firestore
@@ -2371,7 +2381,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     : accountFilter && !filteredAccountId
       ? filteredTagForSum?.class === 'allocation'
         ? tagJahresende(accountFilter, Number(year), activeTransactions, tags)
-        : tagFilterTotal(accountFilter, `${year}-12-31`, activeTransactions, receivableIds, tags)
+        : tagFilterTotal(accountFilter, claimStatus.all.has(accountFilter) ? '9999-12-31' : `${year}-12-31`, activeTransactions, receivableIds, tags)
       : null
   // Shown for any column filter or account filter (Markus, Sept 2026) — a
   // tag filter keeps its own tag balance above instead (his call).
