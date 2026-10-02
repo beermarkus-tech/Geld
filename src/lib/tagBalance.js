@@ -132,6 +132,23 @@ export function tagFilterMatchIds(tagId, tags) {
   return ids
 }
 
+// One tagged line's contribution to a claim/loan/grouping tag's total — the
+// rules above, per line, so tagFilterTotal() and the Außenstände screen
+// (lib/claims.js, which lists the very lines the total adds up) can never
+// disagree. null = the line doesn't count (a transfer between two other
+// accounts).
+//
+// @param {{fromAccountId: string|null, toAccountId: string|null}} tx
+// @param {{amountCents: number}} line
+// @param {string} aussenstaendeAccountId
+// @returns {number|null}
+export function claimLineContribution(tx, line, aussenstaendeAccountId) {
+  if (tx.fromAccountId === aussenstaendeAccountId) return -line.amountCents
+  if (tx.toAccountId === aussenstaendeAccountId) return line.amountCents
+  if (!tx.fromAccountId || !tx.toAccountId) return line.amountCents
+  return null
+}
+
 // @param {string} tagId
 // @param {string} asOfDate  "YYYY-MM-DD"
 // @param {Array} transactions
@@ -144,9 +161,7 @@ export function tagFilterTotal(tagId, asOfDate, transactions, aussenstaendeAccou
     if (tx.date > asOfDate) continue
     for (const line of tx.lines ?? []) {
       if (!(line.tags ?? []).some((id) => matchIds.has(id))) continue
-      if (tx.fromAccountId === aussenstaendeAccountId) total -= line.amountCents
-      else if (tx.toAccountId === aussenstaendeAccountId) total += line.amountCents
-      else if (!tx.fromAccountId || !tx.toAccountId) total += line.amountCents
+      total += claimLineContribution(tx, line, aussenstaendeAccountId) ?? 0
     }
   }
   return total

@@ -1804,3 +1804,13 @@ Markus: filtering Konten by date hid the sub-lines of split bookings (e.g. Amazo
 ## Session 37, continued a thirty-seventh time — 2026-10-02 — Sidebar swap, Strg+G, (i) cleanup
 
 Markus: removed "Pfeiltasten — bewegen" from Quickview's (i); swapped Quickview and Planung in the sidebar and their hotkeys (now Strg+4 Quickview, Strg+5 Planung); Strg+G = the month link's action. `NavShell.jsx`: `ALL_ITEMS` now follows an explicit `NAV_ORDER`; the phone bottom bar (`PRIMARY_ITEMS`) was deliberately not touched, so on phone Planung keeps its bottom-bar slot and Quickview stays under "More". `Quickview.jsx`: Strg+G opens Konten on the cursor's month (current calendar month without a cursor), listed in the (i). Harness-checked. Also answered in chat what Monatsabschluss is (spec §3h) — no code, not yet built (PLAN.md Phase 7).
+
+## Session 37, continued a thirty-eighth time — 2026-10-02 — Außenstände (PLAN.md Phase 5)
+
+Markus chose Außenstände first (before Dashboard). **Built:** `src/Aussenstaende.jsx` (cards per claim/loan, Offen/Abgeschlossen tabs, lines grouped by claim-category tag, "In Konten anzeigen", "Ausbuchen…" close-out dialog); `src/lib/claims.js` + 4 tests (86 total); `tagFilterTotal` refactored onto a shared per-line `claimLineContribution()` (behavior unchanged, tests green); Konten's red open-claim dot on the Unterkategorie; Konten `jump` generalized (`from`, optional month) and the Esc-back handler in `App.jsx` now returns to whichever screen opened Konten. spec §3g, CODEMAP, PLAN updated. Harness-checked with a fake loan (50 out, 45 back → open 5,00; Ausbuchen → net 0, moves to Abgeschlossen, dots in Konten clear) and a fake trip tag with a Meal category.
+
+**Not verified on real data** — especially how Markus's real Airbus trips and Amazon returns are modelled (as transfers to/from Außenstände vs. single-sided expenses): the net is the existing `tagFilterTotal` rule, so if a real claim shows an odd sign or doesn't net to zero when settled, that is where to look.
+
+**Observed, not changed:** Konten's pinned Außenstände box also lists claim-category tags (e.g. "Meal") as their own rows, because it discovers any tag on an Außenstände-touching booking; the new screen excludes them. Awaiting Markus whether the panel should do the same.
+
+**Next:** Markus tests Außenstände on real data; then Fortschritt (§3j) or Dashboard (PLAN Phase 6).

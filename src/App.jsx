@@ -8,6 +8,7 @@ import { waitForInitialAuthState } from './lib/authReady'
 import { focusScreenCursor } from './lib/screenCursor'
 import NavShell, { ALL_ITEMS } from './NavShell'
 import PlaceholderScreen from './PlaceholderScreen'
+import Aussenstaende from './Aussenstaende'
 import Planung from './Planung'
 import Quickview from './Quickview'
 import Verlauf from './Verlauf'
@@ -53,10 +54,10 @@ export default function App() {
     setQuickviewFrom(null)
     setView('verlauf')
   }
-  // 'quickview' while Konten was opened from there — Esc then goes back.
+  // The screen Konten was opened from ('quickview'/'aussenstaende') — Esc then goes back.
   const [kontenFrom, setKontenFrom] = useState(null)
   const openInKonten = (j) => {
-    setKontenFrom('quickview')
+    setKontenFrom(j.from ?? 'quickview')
     setKontenJump({ ...j, id: Date.now() })
     setView('konten')
   }
@@ -79,18 +80,18 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [view])
 
-  // Esc in Konten goes back to Quickview when Konten was opened from there
+  // Esc in Konten goes back to Quickview/Außenstände when Konten was opened from there
   // (Oct 2026, Markus) — but never while Escape belongs to something else: an
   // open filter popup, a cell being edited, a modal, or a focused field.
   useEffect(() => {
-    if (view !== 'konten' || kontenFrom !== 'quickview') return
+    if (view !== 'konten' || !kontenFrom) return
     const onKeyDown = (e) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return
       const a = document.activeElement
       if (a && ['INPUT', 'TEXTAREA', 'SELECT'].includes(a.tagName)) return
       if (document.querySelector('.fixed.inset-0, .ag-popup, .ag-cell-inline-editing')) return
       setKontenFrom(null)
-      setView('quickview')
+      setView(kontenFrom)
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -229,13 +230,17 @@ export default function App() {
           onBack={quickviewFrom === 'verlauf' ? goBackToVerlauf : null}
         />
       </div>
+      {/* Mounted once, only hidden — like the other data screens (Oct 2026). */}
+      <div className={view === 'aussenstaende' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
+        <Aussenstaende onOpenInKonten={openInKonten} />
+      </div>
       {view === 'importexport' && <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} />}
       {/* Every other nav item (Dashboard, Quickview, Fortschritt,
           Monatsabschluss, Außenstände, Settings) isn't built yet —
           resolved Sept 2026 (Markus): a real nav entry exists for each
           from the start anyway, landing on a plain placeholder rather than
           being left out until its own phase ships. */}
-      {!['konten', 'verlauf', 'planung', 'quickview', 'importexport'].includes(view) && (
+      {!['konten', 'verlauf', 'planung', 'quickview', 'aussenstaende', 'importexport'].includes(view) && (
         <PlaceholderScreen title={ALL_ITEMS.find((i) => i.id === view)?.label ?? view} />
       )}
     </NavShell>
