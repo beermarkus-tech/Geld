@@ -54,7 +54,6 @@ export function claimLines(tagId, transactions, tags, receivableIds) {
         txId: tx.id,
         lineIndex,
         date: tx.date,
-        accountId: receivableIds.has(tx.fromAccountId) ? tx.fromAccountId : receivableIds.has(tx.toAccountId) ? tx.toAccountId : null,
         label: tx.displayLabel || line.note || '',
         detail: tx.detail ?? '',
         cents,
@@ -76,9 +75,6 @@ export function claimOverview(tags, transactions, receivableIds) {
       id,
       name: byId[id]?.name ?? id,
       net: tagFilterTotal(id, '9999-12-31', transactions, receivableIds, tags),
-      // The receivable account the claim sits on: that of its latest booking
-      // touching one (the one a close-out must book from).
-      accountId: [...lines].reverse().find((l) => l.accountId)?.accountId ?? AUSSENSTAENDE_ACCOUNT_ID,
       lines,
       lastDate: lines.reduce((m, l) => (l.date > m ? l.date : m), ''),
     }
@@ -86,28 +82,4 @@ export function claimOverview(tags, transactions, receivableIds) {
   return claims
     .filter((c) => c.lines.length > 0)
     .sort((a, b) => (a.net === 0) - (b.net === 0) || b.lastDate.localeCompare(a.lastDate) || a.name.localeCompare(b.name, 'de'))
-}
-
-// The close-out booking (spec §3g): moves the residual from the claim's
-// receivable account (`accountId`, default Außenstände) to a real category, carrying the claim tag, so the claim's net
-// becomes exactly zero and the shortfall is booked as a real, categorized
-// expense. `residualCents` is the claim's net (negative = still outstanding);
-// the booking is single-sided *from* Außenstände with that same signed amount
-// (an expense for a negative residual, income for a positive one), whose
-// contribution (−amount) cancels the net.
-export function closeOutTransaction({ id, tagId, tagName, residualCents, categoryId, date, accountId = AUSSENSTAENDE_ACCOUNT_ID, now = Date.now() }) {
-  const label = `Ausbuchung ${tagName}`
-  return {
-    id,
-    date,
-    fromAccountId: accountId,
-    toAccountId: null,
-    amountCents: residualCents,
-    rawDescription: label,
-    displayLabel: label,
-    detail: '',
-    lines: [{ amountCents: residualCents, categoryId, note: '', tags: [tagId] }],
-    createdAt: now,
-    updatedAt: now,
-  }
 }

@@ -7,7 +7,7 @@ import CategoryEditor from './CategoryEditor'
 import { db } from './firebase'
 import KontoEditor from './KontoEditor'
 import { jahresende } from './lib/balance'
-import { claimOverview, receivableAccountIds } from './lib/claims'
+import { claimOverview, claimTagIds, receivableAccountIds } from './lib/claims'
 import { centsToEuro } from './lib/format'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { withRemainder } from './lib/split'
@@ -2270,13 +2270,10 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       // list, same as the loan mechanism already described in spec.md
       // §3a) is exactly "does its total come out to zero."
       if (group === 'Außenstände' && [...groupAccountIds].some((id) => receivableIds.has(id))) {
-        const candidateTagIds = new Set()
-        activeTransactions.forEach((t) => {
-          if (receivableIds.has(t.fromAccountId) || receivableIds.has(t.toAccountId)) {
-            ;(t.lines ?? []).forEach((l) => (l.tags ?? []).forEach((tagId) => candidateTagIds.add(tagId)))
-          }
-        })
-        const claimItems = [...candidateTagIds]
+        // Same claim discovery as the Außenstände screen (lib/claims.js): a
+        // migrated claim is the line's *first* raw tag; later raw tags are
+        // labels (Meal, Hotel, …) and must not show up as claims of their own.
+        const claimItems = claimTagIds(tags, activeTransactions, receivableIds)
           .map((tagId) => ({
             id: tagId,
             name: tagById[tagId]?.name ?? tagId,

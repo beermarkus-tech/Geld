@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { AUSSENSTAENDE_ACCOUNT_ID as AUS, claimLines, claimOverview, claimTagIds, closeOutTransaction, receivableAccountIds } from './claims'
+import { AUSSENSTAENDE_ACCOUNT_ID as AUS, claimLines, claimOverview, claimTagIds, receivableAccountIds } from './claims'
 import { tagFilterTotal } from './tagBalance'
 
 // Synthetic fixtures only.
@@ -52,33 +52,15 @@ describe('legacy claims whose tags are raw strings without a tag document', () =
 })
 
 describe('claims on the other receivable accounts (CPAM, Airbus)', () => {
-  it('are found, totalled, and closed out from their own account', () => {
+  it('are found and totalled', () => {
     const txs = [tx('exp', '2026-05-01', 'visa', 'airbus', 20000, ['trip']), tx('back', '2026-06-01', 'airbus', 'bnp', 15000, ['trip'])]
     const o = claimOverview(tags, txs, REC)
     expect(o).toHaveLength(1)
     expect(o[0].net).toBe(5000)
-    expect(o[0].accountId).toBe('airbus')
-    const close = closeOutTransaction({ id: 'c', tagId: 'trip', tagName: 'T', residualCents: o[0].net, categoryId: 'x', date: '2026-07-01', accountId: o[0].accountId })
-    expect(close.fromAccountId).toBe('airbus')
-    expect(tagFilterTotal('trip', '9999-12-31', [...txs, close], REC, tags)).toBe(0)
   })
 
   it('receivableAccountIds() takes every receivable-group account', () => {
     const ids = receivableAccountIds([{ id: 'a', group: 'receivable' }, { id: 'b', group: 'cash' }, { id: 'c', group: 'receivable' }])
     expect([...ids]).toEqual(['a', 'c'])
-  })
-})
-
-describe('closeOutTransaction()', () => {
-  it('brings an under-paid loan to exactly zero (and an over-paid one too)', () => {
-    for (const repaid of [4500, 5500]) {
-      const txs = [tx('out', '2026-09-05', 'bar', AUS, 5000, ['loan']), tx('back', '2026-09-20', AUS, 'bar', repaid, ['loan'])]
-      const residual = tagFilterTotal('loan', '9999-12-31', txs, REC, tags)
-      expect(residual).not.toBe(0)
-      const close = closeOutTransaction({ id: 'c', tagId: 'loan', tagName: 'Dirk Sept', residualCents: residual, categoryId: 'sonstiges', date: '2026-10-01' })
-      expect(tagFilterTotal('loan', '9999-12-31', [...txs, close], REC, tags)).toBe(0)
-      expect(close.lines[0].amountCents).toBe(close.amountCents)
-      expect(close.toAccountId).toBeNull()
-    }
   })
 })
