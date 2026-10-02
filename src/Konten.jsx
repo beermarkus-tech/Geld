@@ -7,7 +7,7 @@ import CategoryEditor from './CategoryEditor'
 import { db } from './firebase'
 import KontoEditor from './KontoEditor'
 import { jahresende } from './lib/balance'
-import { claimOverview, claimTagIds, receivableAccountIds } from './lib/claims'
+import { AUSSENSTAENDE_ACCOUNT_ID, claimOverview, claimTagIds, receivableAccountIds } from './lib/claims'
 import { centsToEuro } from './lib/format'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { withRemainder } from './lib/split'
@@ -2269,15 +2269,20 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       // Außenstände. "Open" (shown) vs. "settled" (silently drops off the
       // list, same as the loan mechanism already described in spec.md
       // §3a) is exactly "does its total come out to zero."
-      if (group === 'Außenstände' && [...groupAccountIds].some((id) => receivableIds.has(id))) {
+      // Claim rows are for the shared Außenstände account only (friends' loans,
+      // Amazon returns) — CPAM and Reisekosten Airbus are their own accounts
+      // with their own row above and get their per-claim view on the
+      // Außenstände screen (Oct 2026, Markus: they showed up twice here).
+      if (group === 'Außenstände' && groupAccountIds.has(AUSSENSTAENDE_ACCOUNT_ID)) {
+        const sharedAccount = new Set([AUSSENSTAENDE_ACCOUNT_ID])
         // Same claim discovery as the Außenstände screen (lib/claims.js): a
         // migrated claim is the line's *first* raw tag; later raw tags are
         // labels (Meal, Hotel, …) and must not show up as claims of their own.
-        const claimItems = claimTagIds(tags, activeTransactions, receivableIds)
+        const claimItems = claimTagIds(tags, activeTransactions, sharedAccount)
           .map((tagId) => ({
             id: tagId,
             name: tagById[tagId]?.name ?? tagId,
-            cents: tagFilterTotal(tagId, `${year}-12-31`, activeTransactions, receivableIds, tags),
+            cents: tagFilterTotal(tagId, `${year}-12-31`, activeTransactions, AUSSENSTAENDE_ACCOUNT_ID, tags),
             tag: tagById[tagId],
           }))
           .filter((i) => i.cents !== 0)
@@ -2285,7 +2290,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       }
       return { group, items, total, tagItems }
     })
-  }, [accounts, activeTransactions, tags, tagById, year, receivableIds])
+  }, [accounts, activeTransactions, tags, tagById, year])
 
   const stillLoading = !(loaded.accounts && loaded.categories && loaded.tags && loaded.transactions)
 
