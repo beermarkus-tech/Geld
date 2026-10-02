@@ -1585,6 +1585,10 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         // Blank and non-editable for a line row — a split transaction has
         // exactly one date, at the parent level; only the economic
         // breakdown (category/tags/note/amount) splits across lines.
+        // A line row shows no date of its own, but for filtering it carries its
+        // booking's date (Oct 2026, Markus: split lines vanished under a date
+        // filter) — one date per booking, lines inherit it.
+        filterValueGetter: (p) => (p.data.__isLine ? p.data.__parent.date : p.data.date),
         valueGetter: (p) => (p.data.__isLine ? '' : p.data.date),
         editable: (p) => !p.data.__isLine && !isRowDeleted(p.data),
         // Explicitly false, not left to infer — AG Grid samples this
