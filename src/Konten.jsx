@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { collection, deleteDoc, doc, onSnapshot, setDoc } from 'firebase/firestore'
+import { collection, deleteDoc, doc, getDocs, onSnapshot, setDoc, writeBatch } from 'firebase/firestore'
 import { AgGridReact } from 'ag-grid-react'
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community'
 
@@ -12,6 +12,7 @@ import { centsToEuro } from './lib/format'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { withRemainder } from './lib/split'
 import { registerScreenCursor } from './lib/screenCursor'
+import { unusedTagIds } from './lib/unusedTags'
 import { visibleSum } from './lib/visibleSum'
 import { tagFilterMatchIds, tagFilterTotal, tagJahresende } from './lib/tagBalance'
 import { qualifiedTagName, tagColorVar, tagParent } from './lib/tagStyle'
@@ -669,6 +670,8 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       reconciliationTargetAccountIds: [],
       groupingType,
       archived: false,
+      // lets the unused-tag cleanup leave a brand-new tag alone for a day
+      createdAt: Date.now(),
     })
     return id
   }
@@ -2294,6 +2297,18 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         cents: jahresende(a.id, Number(year), activeTransactions),
       }))
       const total = items.reduce((sum, i) => sum + i.cents, 0)
+      // The shared Außenstände account's own row only shows while it holds
+      // something not already listed as a claim below (Oct 2026, Markus: a
+      // 30 € claim "Stefan" appeared twice, as the account and as the tag):
+      // its balance is non-zero AND some booking on it carries no claim tag.
+      // CPAM and Reisekosten Airbus always show their own row.
+      const hasUntaggedOnShared = activeTransactions.some(
+        (t) =>
+          t.date <= `${year}-12-31` &&
+          (t.fromAccountId === AUSSENSTAENDE_ACCOUNT_ID || t.toAccountId === AUSSENSTAENDE_ACCOUNT_ID) &&
+          (t.lines ?? []).some((l) => !(l.tags ?? []).some((id) => claimStatus.all.has(id))),
+      )
+      const shownItems = items.filter((i) => i.id !== AUSSENSTAENDE_ACCOUNT_ID || (i.cents !== 0 && hasUntaggedOnShared))
       // Allocation-tag reconciliation, surfaced here per spec.md §3a's own
       // "Live consistency checks" note ("should surface here, since
       // Konten's pinned header is one of the natural places for always-on
@@ -2333,11 +2348,39 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
             tag: tagById[tagId],
           }))
           .filter((i) => i.cents !== 0)
-        return { group, items, total, tagItems: [...tagItems, ...claimItems] }
+        return { group, items: shownItems, total, tagItems: [...tagItems, ...claimItems] }
       }
-      return { group, items, total, tagItems }
+      return { group, items: shownItems, total, tagItems }
     })
-  }, [accounts, activeTransactions, tags, tagById, year])
+  }, [accounts, activeTransactions, tags, tagById, year, claimStatus])
+
+  // Removes tags nothing refers to any more, once per app load after
+  // everything is in (Oct 2026, Markus; lib/unusedTags.js has the rules). Also
+  // reads budgets/yearSettings once, as breakdown lines and comments point at tags.
+  const tagCleanupDoneRef = useRef(false)
+  const allLoaded = loaded.accounts && loaded.categories && loaded.tags && loaded.transactions
+  useEffect(() => {
+    if (!allLoaded || tagCleanupDoneRef.current || transactions.length === 0) return
+    tagCleanupDoneRef.current = true
+    ;(async () => {
+      try {
+        const [budgetSnap, settingsSnap] = await Promise.all([getDocs(collection(db, 'budgets')), getDocs(collection(db, 'categoryYearSettings'))])
+        const ids = unusedTagIds({
+          tags,
+          transactions,
+          budgets: budgetSnap.docs.map((d) => d.data()),
+          yearSettings: settingsSnap.docs.map((d) => d.data()),
+        })
+        for (let i = 0; i < ids.length; i += 400) {
+          const batch = writeBatch(db)
+          ids.slice(i, i + 400).forEach((id) => batch.delete(doc(db, 'tags', id)))
+          await batch.commit()
+        }
+      } catch {
+        // best effort — tried again on the next app load
+      }
+    })()
+  }, [allLoaded, tags, transactions])
 
   const stillLoading = !(loaded.accounts && loaded.categories && loaded.tags && loaded.transactions)
 
