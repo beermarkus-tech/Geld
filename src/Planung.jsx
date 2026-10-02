@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { collection, doc, onSnapshot, setDoc } from 'firebase/firestore'
 
 import { db } from './firebase'
@@ -19,7 +19,8 @@ import { centsToWholeEuro, parseWholeEuroInput } from './lib/format'
 // own Plan0/Plan1/Prog figures. Nothing here edits a budget amount; the
 // only inputs are the per-year Puffer (settings/{year}.minCashBufferCents)
 // and a free-text comment per category/allocation tag per year
-// (categoryYearSettings.comment, §2.7c).
+// (categoryYearSettings.comment, §2.7c), edited right in two comment columns
+// (one behind each year) that can be hidden together.
 
 // Jahresanfang's starting cash (§3c, resolved Sept 2026, Markus): every
 // account in these three reportingGroups, balance on Dec 31 of the prior
@@ -32,6 +33,16 @@ const LENSES = [
   { id: 'prog', label: 'Prog' },
 ]
 const LENS_KEY = 'geld-planung-lens'
+const SHOW_COMMENTS_KEY = 'geld-planung-show-comments'
+
+// Whether the two comment columns are shown — per device, shown by default.
+function readShowComments() {
+  try {
+    return localStorage.getItem(SHOW_COMMENTS_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
 
 // Per-device convenience only (same try/catch pattern as NavShell's
 // sidebar state) — a storage failure just means it starts on Plan 0.
@@ -88,8 +99,7 @@ export default function Planung({ year }) {
   const [yearSettings, setYearSettings] = useState([])
   const [settingsByYear, setSettingsByYear] = useState({})
   const [lens, setLens] = useState(readLens)
-  // Which comment editor is open: `${year}:${targetId}`, or null.
-  const [openComment, setOpenComment] = useState(null)
+  const [showComments, setShowComments] = useState(readShowComments)
 
   const planYear = Number(year)
   const refYear = planYear - 1
@@ -123,6 +133,15 @@ export default function Planung({ year }) {
     setLens(id)
     try {
       localStorage.setItem(LENS_KEY, id)
+    } catch {
+      // per-device convenience only
+    }
+  }
+
+  function chooseShowComments(on) {
+    setShowComments(on)
+    try {
+      localStorage.setItem(SHOW_COMMENTS_KEY, on ? '1' : '0')
     } catch {
       // per-device convenience only
     }
@@ -271,7 +290,7 @@ export default function Planung({ year }) {
 
   if (!report) return null
 
-  const commentProps = { commentFor, openComment, setOpenComment, saveComment, refYear, planYear }
+  const commentProps = { commentFor, saveComment, refYear, planYear, showComments }
 
   return (
     <div className="min-h-0 flex-1 overflow-auto px-4 py-4 md:px-5">
@@ -298,6 +317,10 @@ export default function Planung({ year }) {
             ))}
           </span>
         </span>
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={showComments} onChange={(e) => chooseShowComments(e.target.checked)} />
+          Kommentare
+        </label>
       </div>
 
       <BudgetChart years={[report.ref, report.plan]} />
@@ -403,67 +426,70 @@ function PufferCell({ cents, onSave, label }) {
   )
 }
 
-function CommentIcon({ y, target, commentFor, openComment, setOpenComment }) {
-  const key = `${y}:${target.targetId}`
-  const text = commentFor.get(key)
-  return (
-    <button
-      type="button"
-      onClick={() => setOpenComment(openComment === key ? null : key)}
-      title={text ?? `${y}: Kein Kommentar — klicken zum Hinzufügen`}
-      aria-label={`Kommentar ${y} ${target.label}`}
-      className={`ml-1 text-xs leading-none ${text ? '' : 'opacity-30 grayscale hover:opacity-70'}`}
-    >
-      💬
-    </button>
-  )
-}
+// One comment cell: a plain textarea that grows with its content, so the
+// row grows with it (Oct 2026, Markus: "the cells will have to expand
+// flexibly with the content of the comments"). Saved when it loses focus
+// (and if the screen goes away mid-edit); Escape drops the unsaved change.
+function CommentBox({ y, target, c, cell = true }) {
+  const saved = c.commentFor.get(`${y}:${target.targetId}`) ?? ''
+  const [draft, setDraft] = useState(saved)
+  const ref = useRef(null)
+  const focused = useRef(false)
+  const latest = useRef({ draft, saved })
+  latest.current = { draft, saved }
 
-function CommentEditor({ y, target, commentFor, saveComment, setOpenComment }) {
-  const [draft, setDraft] = useState(commentFor.get(`${y}:${target.targetId}`) ?? '')
-  function save() {
-    saveComment(y, target, draft.trim())
-    setOpenComment(null)
+  // A change arriving from Firestore replaces the text unless it's being typed in.
+  useEffect(() => {
+    if (!focused.current) setDraft(saved)
+  }, [saved])
+
+  function fit() {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
   }
-  return (
-    <div className="flex flex-col gap-1.5 text-left">
-      <span className="text-xs font-semibold text-[var(--color-text-muted)]">
-        Kommentar {y} — {target.label}
-      </span>
-      <textarea
-        autoFocus
-        rows={2}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') setOpenComment(null)
-          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) save()
-        }}
-        className="w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-1.5 text-sm font-normal whitespace-normal"
-      />
-      <div className="flex gap-2">
-        <button type="button" onClick={save} className="rounded-md bg-[var(--color-computed)] px-3 py-1 text-sm font-medium text-white">
-          Speichern
-        </button>
-        <button type="button" onClick={() => setOpenComment(null)} className="rounded-md border border-[var(--color-border)] px-3 py-1 text-sm">
-          Abbrechen
-        </button>
-      </div>
-    </div>
-  )
-}
+  useLayoutEffect(fit, [draft])
+  useEffect(() => {
+    window.addEventListener('resize', fit)
+    return () => window.removeEventListener('resize', fit)
+  }, [])
 
-// Saved comments for a row, shown under it in the report ("2026: …").
-function CommentLines({ target, commentFor, refYear, planYear }) {
-  const lines = [refYear, planYear]
-    .map((y) => [y, commentFor.get(`${y}:${target.targetId}`)])
-    .filter(([, text]) => text)
-  if (lines.length === 0) return null
-  return lines.map(([y, text]) => (
-    <div key={y} className="text-xs font-normal whitespace-normal text-[var(--color-text-muted)] italic">
-      ↳ {y}: {text}
-    </div>
-  ))
+  function commit() {
+    const { draft: d, saved: s } = latest.current
+    if (d.trim() !== s) c.saveComment(y, target, d.trim())
+  }
+  const commitRef = useRef(commit)
+  commitRef.current = commit
+  useEffect(() => () => commitRef.current(), [])
+
+  return (
+    <textarea
+      ref={ref}
+      rows={1}
+      value={draft}
+      aria-label={`Kommentar ${y} ${target.label}`}
+      onFocus={() => {
+        focused.current = true
+      }}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        focused.current = false
+        commit()
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          setDraft(saved)
+          latest.current = { draft: saved, saved }
+          e.currentTarget.blur()
+        }
+      }}
+      className={
+        'block w-full resize-none overflow-hidden bg-transparent text-sm leading-5 whitespace-pre-wrap hover:bg-[var(--color-line-row-tint)] focus:bg-[var(--color-surface)] focus:outline-2 focus:-outline-offset-2 focus:outline-[var(--color-computed)] ' +
+        (cell ? 'px-3 py-1' : 'rounded border border-[var(--color-border)] px-2 py-1')
+      }
+    />
+  )
 }
 
 function splitPill(split) {
@@ -477,8 +503,11 @@ function splitPill(split) {
 // section (SECTION_TINT).
 const TH_BASE = 'sticky top-0 whitespace-nowrap border-b border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-3 font-medium'
 const TH = `${TH_BASE} z-10 text-right`
-const TD = 'tabular-figure whitespace-nowrap border-b border-[var(--color-border)] px-3 py-1 text-right'
-const NAME_TD = 'sticky left-0 whitespace-nowrap border-b border-[var(--color-border)] px-3 py-1 text-left'
+const TD = 'tabular-figure whitespace-nowrap border-b border-[var(--color-border)] px-3 py-1 text-right align-top'
+const NAME_TD = 'sticky left-0 whitespace-nowrap border-b border-[var(--color-border)] px-3 py-1 text-left align-top'
+// A comment column cell has no padding of its own — the textarea inside
+// fills it, so the whole cell is the click target.
+const COMMENT_TD = 'min-w-[14rem] border-b border-[var(--color-border)] p-0 align-top'
 
 function blankZero(cents) {
   return cents === 0 ? '' : euro(cents)
@@ -487,7 +516,7 @@ function blankZero(cents) {
 // A group header row that carries its own group's totals (Markus, Sept
 // 2026: "put the sub group totals into the subgroup headers") — label and
 // every figure in the group's own color, the whole row in its section tint.
-function GroupHeader({ t, section }) {
+function GroupHeader({ t, section, showComments }) {
   const style = { backgroundColor: SECTION_TINT[section], color: SECTION_COLOR[section] }
   return (
     <tr className="font-semibold" style={style}>
@@ -495,7 +524,9 @@ function GroupHeader({ t, section }) {
         {t.label}
       </td>
       <td className={TD}>{blankZero(t.ref)}</td>
+      {showComments && <td className={COMMENT_TD} />}
       <td className={TD}>{blankZero(t.plan)}</td>
+      {showComments && <td className={COMMENT_TD} />}
       <td className={TD}>{blankZero(t.split.regularYear)}</td>
       <td className={TD}>{blankZero(t.split.regularMonth)}</td>
       <td className={TD}>{blankZero(t.split.lumpYear)}</td>
@@ -504,50 +535,43 @@ function GroupHeader({ t, section }) {
 }
 
 function DataRow({ r, section, c }) {
-  const { refYear, planYear } = c
+  const { refYear, planYear, showComments } = c
   const pill = splitPill(r.split)
-  const editing = c.openComment === `${refYear}:${r.targetId}` ? refYear : c.openComment === `${planYear}:${r.targetId}` ? planYear : null
   return (
-    <>
-      <tr>
-        <td className={`${NAME_TD} pl-6`} style={{ backgroundColor: SECTION_TINT[section] }}>
-          {r.label}
-          <CommentLines target={r} {...c} />
+    <tr>
+      <td className={`${NAME_TD} pl-6`} style={{ backgroundColor: SECTION_TINT[section] }}>
+        {r.label}
+      </td>
+      <td className={TD}>{blankZero(r.ref)}</td>
+      {showComments && (
+        <td className={COMMENT_TD}>
+          <CommentBox y={refYear} target={r} c={c} />
         </td>
-        <td className={TD}>
-          {blankZero(r.ref)}
-          <CommentIcon y={refYear} target={r} {...c} />
-        </td>
-        <td className={TD}>
-          {blankZero(r.plan)}
-          <CommentIcon y={planYear} target={r} {...c} />
-        </td>
-        <td className={TD}>{blankZero(r.split.regularYear)}</td>
-        <td className={TD}>{blankZero(r.split.regularMonth)}</td>
-        <td className={TD}>
-          {blankZero(r.split.lumpYear)}
-          {pill && (
-            <span className="ml-1.5 inline-block rounded-full bg-[var(--color-savings-tint)] px-1.5 py-px font-sans text-xs font-medium text-[var(--color-savings)]">
-              {pill}
-            </span>
-          )}
-        </td>
-      </tr>
-      {editing && (
-        <tr>
-          <td colSpan={6} className="border-b border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2">
-            <CommentEditor key={c.openComment} y={editing} target={r} {...c} />
-          </td>
-        </tr>
       )}
-    </>
+      <td className={TD}>{blankZero(r.plan)}</td>
+      {showComments && (
+        <td className={COMMENT_TD}>
+          <CommentBox y={planYear} target={r} c={c} />
+        </td>
+      )}
+      <td className={TD}>{blankZero(r.split.regularYear)}</td>
+      <td className={TD}>{blankZero(r.split.regularMonth)}</td>
+      <td className={TD}>
+        {blankZero(r.split.lumpYear)}
+        {pill && (
+          <span className="ml-1.5 inline-block rounded-full bg-[var(--color-savings-tint)] px-1.5 py-px font-sans text-xs font-medium text-[var(--color-savings)]">
+            {pill}
+          </span>
+        )}
+      </td>
+    </tr>
   )
 }
 
 function Group({ t, rows, section, c }) {
   return (
     <>
-      <GroupHeader t={t} section={section} />
+      <GroupHeader t={t} section={section} showComments={c.showComments} />
       {rows.map((r) => (
         <DataRow key={r.targetId} r={r} section={section} c={c} />
       ))}
@@ -557,7 +581,7 @@ function Group({ t, rows, section, c }) {
 
 // A summary row (Jahresanfang, Budget band): only the two year columns
 // carry a value. Each value is either plain cents or `{ node, color }`.
-function BandRow({ label, refValue, planValue, color, bold = false }) {
+function BandRow({ label, refValue, planValue, color, bold = false, showComments }) {
   const cell = (v) => (typeof v === 'number' ? { node: euro(v), color } : { node: v.node, color: color ?? v.color })
   const r = cell(refValue)
   const p = cell(planValue)
@@ -569,9 +593,11 @@ function BandRow({ label, refValue, planValue, color, bold = false }) {
       <td className={TD} style={r.color ? { color: r.color } : undefined}>
         {r.node}
       </td>
+      {showComments && <td className="border-b border-[var(--color-border)]" />}
       <td className={TD} style={p.color ? { color: p.color } : undefined}>
         {p.node}
       </td>
+      {showComments && <td className="border-b border-[var(--color-border)]" />}
       <td colSpan={3} className="border-b border-[var(--color-border)]" />
     </tr>
   )
@@ -579,16 +605,16 @@ function BandRow({ label, refValue, planValue, color, bold = false }) {
 
 // The visual split between the report's three blocks (Markus, Sept 2026):
 // Einnahmen/Fixkosten → the Budget band → Ausgaben.
-function BlockGap() {
+function BlockGap({ showComments }) {
   return (
     <tr aria-hidden="true">
-      <td colSpan={6} className="h-5 border-b border-[var(--color-border)] bg-[var(--color-bg)] p-0" />
+      <td colSpan={showComments ? 8 : 6} className="h-5 border-b border-[var(--color-border)] bg-[var(--color-bg)] p-0" />
     </tr>
   )
 }
 
 function ReportTable({ report, savePuffer, ...c }) {
-  const { refYear, planYear } = c
+  const { refYear, planYear, showComments } = c
   const { ref, plan } = report
   return (
     <table className="w-full border-separate border-spacing-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-sm">
@@ -596,35 +622,39 @@ function ReportTable({ report, savePuffer, ...c }) {
         <tr>
           <th className={`${TH_BASE} left-0 z-20 text-left`}>Kategorie</th>
           <th className={TH}>{refYear}</th>
+          {showComments && <th className={`${TH_BASE} z-10 min-w-[14rem] text-left`}>Kommentar {refYear}</th>}
           <th className={TH}>{planYear}</th>
+          {showComments && <th className={`${TH_BASE} z-10 min-w-[14rem] text-left`}>Kommentar {planYear}</th>}
           <th className={TH}>Regulär Jahr</th>
           <th className={TH}>Regulär Monat</th>
           <th className={TH}>Einmal Jahr</th>
         </tr>
       </thead>
       <tbody>
-        <BandRow label="Alle Barkonten" refValue={ref.jahresanfangRaw} planValue={plan.jahresanfangRaw} color="var(--color-computed)" />
+        <BandRow label="Alle Barkonten" refValue={ref.jahresanfangRaw} planValue={plan.jahresanfangRaw} color="var(--color-computed)" showComments={showComments} />
         <BandRow
           label="Puffer"
           refValue={{ node: <PufferCell cents={ref.puffer} onSave={(v) => savePuffer(refYear, v)} label={`Puffer ${refYear}`} /> }}
           planValue={{ node: <PufferCell cents={plan.puffer} onSave={(v) => savePuffer(planYear, v)} label={`Puffer ${planYear}`} /> }}
+          showComments={showComments}
         />
-        <BandRow label="Jahresanfang (Barkonten − Puffer)" refValue={ref.startCash} planValue={plan.startCash} color="var(--color-computed)" bold />
+        <BandRow label="Jahresanfang (Barkonten − Puffer)" refValue={ref.startCash} planValue={plan.startCash} color="var(--color-computed)" bold showComments={showComments} />
         <Group t={report.einnahmenTotal} rows={report.einnahmen} section="einnahmen" c={c} />
         <Group t={report.fixkostenTotal} rows={report.fixkosten} section="fixkosten" c={c} />
 
-        <BlockGap />
-        <BandRow label="Budget" refValue={ref.budget} planValue={plan.budget} color="var(--color-computed)" bold />
+        <BlockGap showComments={showComments} />
+        <BandRow label="Budget" refValue={ref.budget} planValue={plan.budget} color="var(--color-computed)" bold showComments={showComments} />
         <BandRow
           label="Ausgaben vs. Budget — sollte nahe Null sein"
           refValue={{ node: euro(ref.ausgabenVsBudget), color: deltaColor(ref.ausgabenVsBudget) }}
           planValue={{ node: euro(plan.ausgabenVsBudget), color: deltaColor(plan.ausgabenVsBudget) }}
           bold
+          showComments={showComments}
         />
-        <BandRow label="… gebildete Rücklagen (Teil der Ausgaben)" refValue={-ref.ruecklagen} planValue={-plan.ruecklagen} color="var(--color-savings)" />
+        <BandRow label="… gebildete Rücklagen (Teil der Ausgaben)" refValue={-ref.ruecklagen} planValue={-plan.ruecklagen} color="var(--color-savings)" showComments={showComments} />
 
-        <BlockGap />
-        <GroupHeader t={report.ausgabenInklTotal} section="ausgaben" />
+        <BlockGap showComments={showComments} />
+        <GroupHeader t={report.ausgabenInklTotal} section="ausgaben" showComments={showComments} />
         {report.ausgabenGroups.map((g) => (
           <Group key={g.name} t={g.total} rows={g.rows} section="ausgaben" c={c} />
         ))}
@@ -637,9 +667,8 @@ function ReportTable({ report, savePuffer, ...c }) {
 // Phone (§1b.7): the same report as a scrolling stack of cards — one code
 // path, just a different arrangement below the md breakpoint.
 function Card({ r, c }) {
-  const { refYear, planYear } = c
+  const { refYear, planYear, showComments } = c
   const pill = splitPill(r.split)
-  const editingYear = [refYear, planYear].find((y) => c.openComment === `${y}:${r.targetId}`)
   return (
     <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-sm">
       <div className="mb-1 font-semibold">{r.label}</div>
@@ -647,12 +676,16 @@ function Card({ r, c }) {
         [refYear, r.ref],
         [planYear, r.plan],
       ].map(([y, v]) => (
-        <div key={y} className="flex justify-between">
-          <span className="text-[var(--color-text-muted)]">
-            {y}
-            <CommentIcon y={y} target={r} {...c} />
-          </span>
-          <span className="tabular-figure">{euro(v)}</span>
+        <div key={y} className="mb-1">
+          <div className="flex justify-between">
+            <span className="text-[var(--color-text-muted)]">{y}</span>
+            <span className="tabular-figure">{euro(v)}</span>
+          </div>
+          {showComments && (
+            <div className="mt-0.5">
+              <CommentBox y={y} target={r} c={c} cell={false} />
+            </div>
+          )}
         </div>
       ))}
       {pill && (
@@ -661,12 +694,6 @@ function Card({ r, c }) {
             Regulär {r.split.percent}% · Einmal {100 - r.split.percent}%
           </span>
           <span className="tabular-figure">{euro(r.split.lumpYear)}</span>
-        </div>
-      )}
-      <CommentLines target={r} {...c} />
-      {editingYear && (
-        <div className="mt-2">
-          <CommentEditor key={c.openComment} y={editingYear} target={r} {...c} />
         </div>
       )}
     </div>

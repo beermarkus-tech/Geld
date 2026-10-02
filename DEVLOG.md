@@ -1552,3 +1552,27 @@ Four small requests from Markus, all done.
 - The comment field's placeholder is just "Kommentar" in a lighter gray (the cell description moved into the field's hover title), and the × is larger (20px).
 
 Verified in a disposable harness (NavShell + Verlauf): measured widths 76/76, headers centered, no € sign, "-120.000" shown whole, sidebar hidden after clicking Planung and back after the burger. Harness deleted. `npm run lint`, `npx vitest run` (71) and `npm run build` are clean.
+
+## Session 37, continued a ninth time — 2026-10-02 — Planung: comment columns instead of icons
+
+Markus's request: Planung's comment icons and pop-up editors replaced by two inline comment columns, one behind each year, rows growing with the comments, plus a checkbox to hide/show both together.
+
+**Done** (`src/Planung.jsx`; the design is in spec.md §3c):
+- Removed the 💬 icons, the pop-up editor rows and the "↳ 2026: …" lines under row names (tablet table and phone cards).
+- New `CommentBox`, a textarea that grows with its content, in a "Kommentar 2025" column after the 2025 figures and a "Kommentar 2026" column after the 2026 figures. Rows get as tall as their comments need. It saves on blur and on unmount; Escape drops an unsaved change. Existing comments carry over unchanged (same `categoryYearSettings.comment` field).
+- A "Kommentare" checkbox in the header strip hides/shows both columns together, remembered per device and shown by default.
+- The phone cards show the same boxes under each year's figure.
+
+**Verified** in a disposable Planung harness (async mock Firestore):
+- existing comments appear in the right columns;
+- a long comment makes its row 109px tall versus 29px for a normal row, and typing three lines grows the row live (29 → 69px);
+- the text saves to the right document on blur, and Escape discards;
+- the checkbox removes both columns and the comment boxes (a re-shown column keeps its text);
+- the phone layout has no horizontal overflow;
+- no 💬 anywhere.
+
+Harness deleted before commit. `npm run lint`, `npx vitest run` (71) and `npm run build` are clean.
+
+**Choices made without asking:** only category and allocation-tag rows get comment cells (the group header and summary rows stay empty), as before; Enter inserts a new line.
+
+**Next session:** unchanged. First Markus's Außenstände repair run and panel confirmation, then his Planung comparison against the Gsheet.
