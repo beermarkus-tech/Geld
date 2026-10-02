@@ -804,16 +804,20 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     return { txs, sum }
   }, [filteredAccountId, receivableIds, claimStatus, transactions, showDeleted])
 
-  // Purple/allocation tags only (spec.md §1b.4/§2.5) — a grouping tag has
-  // no reconciliationTargetAccountIds of its own to order around. `null`
+  // Purple/allocation tags (spec.md §1b.4/§2.5) and claim tags (receivable accounts) — any other
+  // grouping tag has no accounts of its own to order around. `null`
   // when there's nothing to reorder around, so allocationSideOrder()'s own
   // early-return covers every other case uniformly.
   const filteredAllocationTargets = useMemo(() => {
     if (!accountFilter || filteredAccountId) return null
+    // A claim (Außenstände) is viewed from its receivable account: that
+    // account always on the left, arrow showing where the money went (Oct
+    // 2026, Markus) — the same reordering an allocation tag gets.
+    if (claimStatus.all.has(accountFilter)) return receivableIds
     const tag = tagById[accountFilter]
     if (tag?.class !== 'allocation') return null
     return new Set(tag.reconciliationTargetAccountIds ?? [])
-  }, [accountFilter, filteredAccountId, tagById])
+  }, [accountFilter, filteredAccountId, tagById, claimStatus, receivableIds])
 
   // Each column's "parent-level" comparable/display value, extracted so
   // both its valueGetter (parent-row display) and its comparator (every

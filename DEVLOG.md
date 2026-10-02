@@ -1892,3 +1892,7 @@ Markus asked for the correcting (ausgleichende) bookings on the Außenstände sc
 ## Session 37, continued a fifty-second time — 2026-10-02 — Außenstände: date before title
 
 Line order on the Außenstände cards is now date, title, amount (was title · date, amount); the date has a fixed width so the titles line up. `Aussenstaende.jsx` only.
+
+## Session 37, continued a fifty-third time — 2026-10-02 — Claim view from the receivable account's side
+
+Markus: "In Konten anzeigen" should show the claim from the Außenstände account's perspective, that account always on the left. **Done (`Konten.jsx`):** for a claim tag the existing allocation-tag reordering (`allocationSideOrder`) now uses the receivable accounts as its targets (`filteredAllocationTargets`), so Konto reads "Reisekosten Airbus ← BNP Konto" and Betrag is signed from the receivable's side. Harness-checked (+500 / −200 for a claim and its repayment). No data changes.
