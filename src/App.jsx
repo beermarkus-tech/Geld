@@ -5,6 +5,7 @@ import { auth } from './firebase'
 import ImportExportScreen from './ImportExportScreen'
 import Konten from './Konten'
 import { waitForInitialAuthState } from './lib/authReady'
+import { focusScreenCursor } from './lib/screenCursor'
 import NavShell, { ALL_ITEMS } from './NavShell'
 import PlaceholderScreen from './PlaceholderScreen'
 import Planung from './Planung'
@@ -36,6 +37,24 @@ export default function App() {
   // session, not surviving a reload.
   const [kontenFocus, setKontenFocus] = useState(null)
   const [verlaufFocus, setVerlaufFocus] = useState(null)
+
+  // Tab with nothing focused (right after switching screens or reloading)
+  // puts the cursor on the active screen's remembered cell, or its first
+  // visible one (Oct 2026, Markus) — so the mouse is never needed just to
+  // place the cursor once. Only when real focus is on the page itself, never
+  // while a modal is open or focus sits in a control, so ordinary tabbing
+  // through controls is untouched. Screens register via lib/screenCursor.js.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key !== 'Tab' || e.ctrlKey || e.metaKey || e.altKey) return
+      const a = document.activeElement
+      if (a && a !== document.body && a !== document.documentElement) return
+      if (document.querySelector('.fixed.inset-0')) return
+      if (focusScreenCursor(view)) e.preventDefault()
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [view])
 
   useEffect(() => {
     let active = true

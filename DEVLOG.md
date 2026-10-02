@@ -1608,3 +1608,22 @@ Markus: Planung was recalculated every time he switched screens. **Cause:** `App
 **Verified** in a harness that mimics App's two-screen structure: after switching away and back, the table is the same DOM node, no listener was re-created (8 subscriptions, 0 unsubscribes), the scroll position, the cursor cell and a tall comment row's height are unchanged, and the arrow keys work immediately. Harness deleted. `npm run lint`, `npx vitest run` (71) and `npm run build` are clean.
 
 **Trade-off, same as the other screens:** Planung's listeners now stay open for the whole session (CODEMAP's "known duplication" note about repeated subscriptions grows by one more screen). If a fourth screen needs the same data, that is the moment to lift the subscriptions into one shared provider.
+
+## Session 37, continued a thirteenth time — 2026-10-02 — Tab places the cursor on every screen
+
+Markus: on any screen, pressing Tab after switching screens or reloading should place the cursor on its previous position or on one of the first visible cells, so the mouse isn't needed to place it once.
+
+**Built:** one shared mechanism (`src/lib/screenCursor.js`). Konten, Verlauf and Planung each register a "place the cursor" function: the remembered cell if there is one, otherwise the first cell in view (Konten: the Datum cell of the first row in view; Verlauf: its first month cell; Planung: the first editable cell in view). `App.jsx` listens for a plain Tab while focus is on the page itself (nothing focused, no dialog open) and calls the active screen's function, cancelling the browser's own Tab. Focus in any control means Tab behaves as before. `NavShell` also drops focus from a nav button right after it was used, so the following Tab counts as "nothing focused". Screens without a cell cursor (Dashboard, Import/Export, the placeholders) are untouched.
+
+**Already worked and left alone:** switching to a screen that remembers a position restores the cursor immediately (Konten, Verlauf; Planung since the persistence change). The new Tab handling covers what that couldn't: a reload (nothing remembered) and a first visit.
+
+**Verified** against the real `App` in a harness (Firebase and sign-in mocked, all three screens mounted):
+- Tab after load → Konten's first visible Datum cell.
+- Switch to Verlauf → Tab → its first month cell; Planung → Tab → its first editable cell.
+- Returning to each screen restores the remembered position, and blur + Tab lands there too.
+- Clicking a sidebar item keeps working, and Tab from a control still moves to the next control.
+- After a reload, Tab → the first visible cell.
+
+Harness deleted. `npm run lint`, `npx vitest run` (71) and `npm run build` are clean.
+
+**One behavior to be aware of:** when a screen has already restored its cursor on switching, a following Tab moves the cursor on by one cell (ordinary grid Tab), it does not "stay". Tab only places the cursor when nothing is focused yet.

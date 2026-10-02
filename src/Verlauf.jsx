@@ -13,6 +13,7 @@ import {
 } from './lib/budget'
 import { ALLOCATION_TAG_ORDER, GROUP_ORDER, SUBCAT_ORDER, isKnownSubcat } from './lib/categoryOrder'
 import { centsToWholeEuro, parseWholeEuroInput } from './lib/format'
+import { registerScreenCursor } from './lib/screenCursor'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { slugify } from './TagEditor'
 
@@ -555,6 +556,25 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     const node = gridApiRef.current?.getRowNode(rowId)
     if (node) gridApiRef.current.setFocusedCell(node.rowIndex, colId, node.rowPinned)
   }
+  // Tab with nothing focused (lib/screenCursor.js, App.jsx): the remembered
+  // cell if it still exists, else the first month cell of the first row in
+  // view.
+  function placeCursorFromTab() {
+    const api = gridApiRef.current
+    if (!api) return false
+    const rememberedId = lastFocusedRowIdRef.current
+    if (rememberedId && api.getRowNode(rememberedId)) {
+      focusRowNow(rememberedId, focusedColIdRef.current)
+      return true
+    }
+    const row = api.getFirstDisplayedRowIndex()
+    if (row == null || row < 0) return false
+    api.setFocusedCell(row, focusedColIdRef.current)
+    return true
+  }
+  const placeCursorRef = useRef(placeCursorFromTab)
+  placeCursorRef.current = placeCursorFromTab
+  useEffect(() => registerScreenCursor('verlauf', () => placeCursorRef.current()), [])
   // Claiming focus also snapshots the current scroll position, restored on
   // every `rowData` change for a couple of seconds afterward (Markus, twice
   // now: "after creating a breakdown row, the grid still jumps all the way

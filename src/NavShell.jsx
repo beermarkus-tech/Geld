@@ -138,6 +138,9 @@ export default function NavShell({
   function navigate(id) {
     onNavigate(id)
     setMoreOpen(false)
+    // The nav button that was just used must not keep keyboard focus: the
+    // next Tab should place the cursor on the new screen (lib/screenCursor.js).
+    document.activeElement?.blur?.()
   }
 
   useEffect(() => {

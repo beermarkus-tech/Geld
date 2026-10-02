@@ -14,6 +14,7 @@ import {
 } from './lib/budget'
 import { ALLOCATION_TAG_ORDER, GROUP_ORDER, SUBCAT_ORDER, isKnownSubcat } from './lib/categoryOrder'
 import { centsToWholeEuro, parseWholeEuroInput } from './lib/format'
+import { registerScreenCursor } from './lib/screenCursor'
 
 // Planung (spec.md §3c) — an annotated, read-only report over Verlauf's
 // own Plan0/Plan1/Prog figures. Nothing here edits a budget amount; the
@@ -306,6 +307,26 @@ export default function Planung({ year, active = true }) {
   }, [accounts, categories, tags, transactions, budgets, settingsByYear, lens, planYear, refYear])
 
   const commentProps = { commentFor, saveComment, refYear, planYear, showComments, active }
+
+  // Tab with nothing focused (lib/screenCursor.js, App.jsx): the remembered
+  // cell if it is still there, else the first editable cell that is in view.
+  function placeCursorFromTab() {
+    const root = scrollRef.current
+    if (!root) return false
+    const cells = [...root.querySelectorAll('[data-nav-row]')].filter((el) => el.offsetParent !== null)
+    const cell = lastCellRef.current
+    let target = cell ? cells.find((el) => el.dataset.navRow === cell.row && el.dataset.navCol === cell.col) : null
+    if (!target) {
+      const top = root.getBoundingClientRect().top
+      target = cells.find((el) => el.getBoundingClientRect().top >= top) ?? cells[0]
+    }
+    if (!target) return false
+    target.focus({ preventScroll: !!cell })
+    return true
+  }
+  const placeCursorRef = useRef(placeCursorFromTab)
+  placeCursorRef.current = placeCursorFromTab
+  useEffect(() => registerScreenCursor('planung', () => placeCursorRef.current()), [])
 
   // Coming back to the screen: scroll and cursor exactly where they were.
   useLayoutEffect(() => {

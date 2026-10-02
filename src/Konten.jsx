@@ -10,6 +10,7 @@ import { jahresende } from './lib/balance'
 import { centsToEuro } from './lib/format'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { withRemainder } from './lib/split'
+import { registerScreenCursor } from './lib/screenCursor'
 import { visibleSum } from './lib/visibleSum'
 import { tagFilterMatchIds, tagFilterTotal, tagJahresende } from './lib/tagBalance'
 import { qualifiedTagName, tagColorVar, tagParent } from './lib/tagStyle'
@@ -449,7 +450,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   function restoreLastFocusDirect() {
     const target = lastFocusedRef.current
     const api = gridRef.current?.api
-    if (!target || !api) return
+    if (!target || !api) return false
     let node = api.getRowNode(target.id)
     if (target.lineIndex != null) {
       let lineNode = null
@@ -458,11 +459,26 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       })
       if (lineNode) node = lineNode
     }
-    if (!node) return
+    if (!node) return false
     api.ensureIndexVisible(node.rowIndex)
     api.setFocusedCell(node.rowIndex, target.colId)
     node.setSelected(true, true)
+    return true
   }
+  // Tab with nothing focused (lib/screenCursor.js, App.jsx): the remembered
+  // cell if there is one, else the Datum cell of the first row in view.
+  function placeCursorFromTab() {
+    if (restoreLastFocusDirect()) return true
+    const api = gridRef.current?.api
+    const row = api?.getFirstDisplayedRowIndex()
+    if (row == null || row < 0) return false
+    api.setFocusedCell(row, 'date')
+    api.getDisplayedRowAtIndex(row)?.setSelected(true, true)
+    return true
+  }
+  const placeCursorRef = useRef(placeCursorFromTab)
+  placeCursorRef.current = placeCursorFromTab
+  useEffect(() => registerScreenCursor('konten', () => placeCursorRef.current()), [])
   useEffect(() => {
     const onKeyDown = (e) => {
       if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return
