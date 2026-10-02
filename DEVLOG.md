@@ -1916,3 +1916,9 @@ Markus asked that a holiday tag (e.g. Schottland: Ausgaben) is shown instead of 
 ## Session 37, continued a fifty-seventh time — 2026-10-02 — Quickview: rows fill the panel
 
 Markus (screenshot, Build 169): the booking rows left empty space in the tall month panels. `Quickview.jsx`: the list is a flex column whose rows each take an equal share of the panel height (min 1.5 rem, max 2.75 rem, text vertically centred; the amount tint spans the row). Harness-checked with busy and sparse months. A month with very few rows still ends in some blank space once the cap is reached.
+
+## Session 37, continued a fifty-eighth time — 2026-10-02 — Rename breakdown lines in Verlauf
+
+Markus asked to rename the Aufschlüsselungszeilen in Verlauf by editing the cells, and whether that breaks anything. **Answer:** a breakdown line *is* a tag (its budget rows point at the tag id), so renaming it renames the tag — safe because every reference is by id (spec §3i), but global: the same tag shown in Konten, Quickview, Außenstände and in other categories/years changes too. **Done (`Verlauf.jsx`):** the `rowTitle` cell of a breakdown row and of its Übergruppe (Rollup) row is editable (double-click) via a `renameTag()` that writes `tags/{id}.name`; empty or sibling-duplicate names are refused with a message; Prog/Plan1/Plan0 stay fixed. Harness-checked: "Ausgaben" → "Spesen" renames the tag and the cell updates from the snapshot.
+
+**Not covered:** keyboard-only renaming (that column is not part of the cursor navigation; mouse double-click or touch); renaming never changes the tag's id/slug, so a renamed tag keeps its old slug internally (harmless).

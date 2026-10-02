@@ -914,6 +914,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         // after the last one" affordance.
         breakdownActionsSpanKey: blockKey,
         breakdownTagId: tagId,
+        renameTagId: tagId,
         breakdownLabel: tagName(tagId),
         months: line.months,
         yearTotal: line.yearTotal,
@@ -980,6 +981,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         // (automatisch) behind the übergruppe label") — the row's own
         // tint/style already distinguishes it as the computed rollup,
         // the suffix was redundant.
+        renameTagId: parentId,
         breakdownLabel: tagName(parentId),
         months: rollupMonths,
         yearTotal: rollupMonths.reduce((a, b) => a + b, 0),
@@ -1061,6 +1063,26 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // shared abstraction across two screens isn't worth the indirection —
   // flagged in CODEMAP.md as accepted, deliberate duplication to watch,
   // same discipline already applied elsewhere in this codebase.
+  // Renaming a breakdown line (or its Übergruppe) in place (Oct 2026, Markus):
+  // it renames the *tag* itself — the id never changes, so every booking,
+  // budget row and filter that points at it follows automatically (spec §3i:
+  // rename is always safe). The name changes everywhere that tag is shown
+  // (Konten's Tags column, Quickview, Außenstände, other categories/years
+  // that use the same tag). Refused when empty or when a sibling under the
+  // same parent already has that name (it would look like a duplicate).
+  function renameTag(tagId, rawName) {
+    const name = String(rawName ?? '').trim()
+    const tag = tagById.get(tagId)
+    if (!tag || !name || name === tag.name) return false
+    const clash = tags.some((t) => t.id !== tagId && (t.parentTag ?? null) === (tag.parentTag ?? null) && t.name.trim().toLowerCase() === name.toLowerCase())
+    if (clash) {
+      window.alert(`„${name}“ gibt es an dieser Stelle schon — bitte einen anderen Namen wählen.`)
+      return false
+    }
+    setDoc(doc(db, 'tags', tagId), { ...tag, name })
+    return true
+  }
+
   function createPlainGroupingTag(name, parentTag) {
     let id = slugify(name)
     if (tags.some((t) => t.id === id)) id = `${id}-${Math.random().toString(36).slice(2, 6)}`
@@ -1620,6 +1642,13 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         // longer breakdown-line name was clipping against `truncate`
         // (still kept as a safety net for a genuinely long one).
         width: 124,
+        // Breakdown lines and their Übergruppe can be renamed by editing the
+        // cell (double-click, like everywhere else); Prog/Plan1/Plan0 are fixed labels.
+        editable: (p) => Boolean(p.data.renameTagId),
+        valueSetter: (p) => {
+          renameTag(p.data.renameTagId, p.newValue)
+          return false // the new name arrives with the tag's own snapshot
+        },
         cellClass: (p) => `truncate${p.data.rowLabel?.includes('breakdown') || p.data.rowLabel === 'Rollup' ? ' text-xs' : ''}`,
         cellStyle: (p) => {
           // Real vertical centering, same fix/reasoning as the month
