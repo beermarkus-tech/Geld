@@ -1896,3 +1896,7 @@ Line order on the Außenstände cards is now date, title, amount (was title · d
 ## Session 37, continued a fifty-third time — 2026-10-02 — Claim view from the receivable account's side
 
 Markus: "In Konten anzeigen" should show the claim from the Außenstände account's perspective, that account always on the left. **Done (`Konten.jsx`):** for a claim tag the existing allocation-tag reordering (`allocationSideOrder`) now uses the receivable accounts as its targets (`filteredAllocationTargets`), so Konto reads "Reisekosten Airbus ← BNP Konto" and Betrag is signed from the receivable's side. Harness-checked (+500 / −200 for a claim and its repayment). No data changes.
+
+## Session 37, continued a fifty-fourth time — 2026-10-02 — New Außenstände booking now shows in the panel at once
+
+Markus: a freshly added booking on Außenstände didn't show in the pinned panel until a tag was added and removed again. **Cause:** a new row has `lines: []`; my "has an untagged booking" test looked at lines only, so a line-less booking never counted. **Fix (`Konten.jsx`):** such a booking counts as untagged, and the row now shows the *sum of the untagged bookings* (not the full balance, as Markus described it) — hidden when that sum is 0. Harness-checked: a line-less 30 € booking shows "Außenstände 30,00 €"; a tagged one appears only as its claim row. This answers the question left open in the forty-eighth entry (full balance vs. untagged remainder).

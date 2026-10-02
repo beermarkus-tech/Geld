@@ -2363,16 +2363,30 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       const total = items.reduce((sum, i) => sum + i.cents, 0)
       // The shared Außenstände account's own row only shows while it holds
       // something not already listed as a claim below (Oct 2026, Markus: a
-      // 30 € claim "Stefan" appeared twice, as the account and as the tag):
-      // its balance is non-zero AND some booking on it carries no claim tag.
+      // 30 € claim "Stefan" appeared twice, as the account and as the tag).
       // CPAM and Reisekosten Airbus always show their own row.
-      const hasUntaggedOnShared = activeTransactions.some(
-        (t) =>
-          t.date <= `${year}-12-31` &&
-          (t.fromAccountId === AUSSENSTAENDE_ACCOUNT_ID || t.toAccountId === AUSSENSTAENDE_ACCOUNT_ID) &&
-          (t.lines ?? []).some((l) => !(l.tags ?? []).some((id) => claimStatus.all.has(id))),
-      )
-      const shownItems = items.filter((i) => i.id !== AUSSENSTAENDE_ACCOUNT_ID || (i.cents !== 0 && hasUntaggedOnShared))
+      // Its amount is what the *untagged* bookings on it add up to (the tagged
+      // ones are the claim rows below); a booking without lines yet (a row
+      // just added, before any tag/category is set) counts as untagged.
+      let untaggedOnShared = 0
+      for (const t of activeTransactions) {
+        if (t.date > `${year}-12-31`) continue
+        const touchesFrom = t.fromAccountId === AUSSENSTAENDE_ACCOUNT_ID
+        if (!touchesFrom && t.toAccountId !== AUSSENSTAENDE_ACCOUNT_ID) continue
+        const single = !t.fromAccountId || !t.toAccountId
+        const lines = t.lines ?? []
+        if (lines.length === 0) {
+          untaggedOnShared += touchesFrom ? -Math.abs(t.amountCents) : Math.abs(t.amountCents)
+          continue
+        }
+        for (const l of lines) {
+          if ((l.tags ?? []).some((id) => claimStatus.all.has(id))) continue
+          untaggedOnShared += single ? l.amountCents : touchesFrom ? -l.amountCents : l.amountCents
+        }
+      }
+      const shownItems = items
+        .map((i) => (i.id === AUSSENSTAENDE_ACCOUNT_ID ? { ...i, cents: untaggedOnShared } : i))
+        .filter((i) => i.id !== AUSSENSTAENDE_ACCOUNT_ID || i.cents !== 0)
       // Allocation-tag reconciliation, surfaced here per spec.md §3a's own
       // "Live consistency checks" note ("should surface here, since
       // Konten's pinned header is one of the natural places for always-on
