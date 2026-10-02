@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { collection, deleteDoc, doc, onSnapshot, setDoc, writeBatch } from 'firebase/firestore'
+import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { AgGridReact } from 'ag-grid-react'
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community'
 
@@ -446,6 +447,8 @@ function AddBreakdownModal({ parentOptions, tagExistsGloballyByName, onSubmit, o
 }
 
 export default function Verlauf({ year, initialFocus, onFocusChange, active = true, onOpenQuickview }) {
+  // Hidden screens keep the newest data aside instead of recomputing on every save elsewhere.
+  const syncWhenVisible = useDeferWhileHidden(active)
   const [categories, setCategories] = useState([])
   const [tags, setTags] = useState([])
   const [transactions, setTransactions] = useState([])
@@ -747,7 +750,10 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
       // Soft-deleted transactions (spec.md §2.9a) never count toward any
       // actual — same rule as Konten's own activeTransactions (real bug
       // found Sept 2026 while building Planung: Verlauf never filtered them).
-      onSnapshot(collection(db, 'transactions'), (snap) => setTransactions(snap.docs.map((d) => d.data()).filter((t) => !t.deletedAt))),
+      onSnapshot(collection(db, 'transactions'), (snap) => {
+        const next = snap.docs.map((d) => d.data()).filter((t) => !t.deletedAt)
+        syncWhenVisible(() => setTransactions(next))
+      }),
       onSnapshot(collection(db, 'budgets'), (snap) => setBudgets(snap.docs.map((d) => d.data()))),
       onSnapshot(collection(db, 'cellComments'), (snap) => setCellComments(snap.docs.map((d) => d.data()))),
     ]

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { collection, doc, onSnapshot, setDoc } from 'firebase/firestore'
 
+import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { db } from './firebase'
 import { jahresanfang } from './lib/balance'
 import {
@@ -107,6 +108,8 @@ function deltaColor(cents) {
 }
 
 export default function Planung({ year, active = true }) {
+  // Hidden screens keep the newest data aside instead of recomputing on every save elsewhere.
+  const syncWhenVisible = useDeferWhileHidden(active)
   const [accounts, setAccounts] = useState([])
   const [categories, setCategories] = useState([])
   const [tags, setTags] = useState([])
@@ -133,7 +136,10 @@ export default function Planung({ year, active = true }) {
       onSnapshot(collection(db, 'categories'), (snap) => setCategories(snap.docs.map((d) => d.data()))),
       onSnapshot(collection(db, 'tags'), (snap) => setTags(snap.docs.map((d) => d.data()))),
       // Soft-deleted transactions (§2.9a) never count toward anything here.
-      onSnapshot(collection(db, 'transactions'), (snap) => setTransactions(snap.docs.map((d) => d.data()).filter((t) => !t.deletedAt))),
+      onSnapshot(collection(db, 'transactions'), (snap) => {
+        const next = snap.docs.map((d) => d.data()).filter((t) => !t.deletedAt)
+        syncWhenVisible(() => setTransactions(next))
+      }),
       onSnapshot(collection(db, 'budgets'), (snap) => setBudgets(snap.docs.map((d) => d.data()))),
       onSnapshot(collection(db, 'categoryYearSettings'), (snap) => setYearSettings(snap.docs.map((d) => d.data()))),
     ]

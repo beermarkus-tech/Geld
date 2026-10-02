@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { collection, onSnapshot } from 'firebase/firestore'
 
+import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { db } from './firebase'
 import { centsToWholeEuro } from './lib/format'
 import { occurredMonthCount, quickviewMonths } from './lib/quickview'
@@ -38,6 +39,8 @@ function amountTint(abs, minAbs, maxAbs) {
 const todayIso = () => new Date().toISOString().slice(0, 10)
 
 export default function Quickview({ year, onOpenInKonten, active = true, preset = null, onBack = null }) {
+  // Hidden screens keep the newest data aside instead of recomputing on every save elsewhere.
+  const syncWhenVisible = useDeferWhileHidden(active)
   const [categories, setCategories] = useState([])
   const [tags, setTags] = useState([])
   const [transactions, setTransactions] = useState([])
@@ -103,7 +106,10 @@ export default function Quickview({ year, onOpenInKonten, active = true, preset 
     const unsubs = [
       onSnapshot(collection(db, 'categories'), (snap) => setCategories(snap.docs.map((d) => d.data()))),
       onSnapshot(collection(db, 'tags'), (snap) => setTags(snap.docs.map((d) => d.data()))),
-      onSnapshot(collection(db, 'transactions'), (snap) => setTransactions(snap.docs.map((d) => d.data()).filter((t) => !t.deletedAt))),
+      onSnapshot(collection(db, 'transactions'), (snap) => {
+        const next = snap.docs.map((d) => d.data()).filter((t) => !t.deletedAt)
+        syncWhenVisible(() => setTransactions(next))
+      }),
     ]
     return () => unsubs.forEach((u) => u())
   }, [])

@@ -1,4 +1,4 @@
-import { claimLineContribution, tagFilterMatchIds, tagFilterTotal } from './tagBalance'
+import { claimLineContribution, tagFilterMatchIds } from './tagBalance'
 
 // Außenstände's lookups (spec.md §3g) — everything is a query over tagged
 // Konten lines; no claim data of its own, no stored status. Plain data in,
@@ -70,12 +70,44 @@ export function claimLines(tagId, transactions, tags, receivableIds) {
 // status there is.
 export function claimOverview(tags, transactions, receivableIds) {
   const byId = Object.fromEntries(tags.map((t) => [t.id, t]))
-  const claims = claimTagIds(tags, transactions, receivableIds).map((id) => {
-    const lines = claimLines(id, transactions, tags, receivableIds)
+  const claimIds = new Set(claimTagIds(tags, transactions, receivableIds))
+  // One pass over every booking (not one pass per claim — with ~100 claims and
+  // thousands of bookings that made every save take noticeable time): each
+  // line counts for every claim whose tag it carries, a child tag also for its
+  // parent claim (as tagFilterMatchIds() does).
+  const lineSets = new Map([...claimIds].map((id) => [id, []]))
+  for (const tx of transactions) {
+    ;(tx.lines ?? []).forEach((line, lineIndex) => {
+      const tagIds = line.tags ?? []
+      if (tagIds.length === 0) return
+      let targets = null
+      for (const t of tagIds) {
+        for (const c of [t, byId[t]?.parentTag]) {
+          if (c && claimIds.has(c) && !(targets && targets.has(c))) (targets ??= new Set()).add(c)
+        }
+      }
+      if (!targets) return
+      const cents = claimLineContribution(tx, line, receivableIds)
+      if (cents === null) return
+      const entry = {
+        txId: tx.id,
+        lineIndex,
+        date: tx.date,
+        accountId: receivableIds.has(tx.fromAccountId) ? tx.fromAccountId : receivableIds.has(tx.toAccountId) ? tx.toAccountId : null,
+        label: tx.displayLabel || line.note || '',
+        detail: tx.detail ?? '',
+        cents,
+        tagIds,
+      }
+      for (const c of targets) lineSets.get(c).push(entry)
+    })
+  }
+  const claims = [...claimIds].map((id) => {
+    const lines = lineSets.get(id).sort((a, b) => a.date.localeCompare(b.date) || a.txId.localeCompare(b.txId))
     return {
       id,
       name: byId[id]?.name ?? id,
-      net: tagFilterTotal(id, '9999-12-31', transactions, receivableIds, tags),
+      net: lines.reduce((s, l) => s + l.cents, 0),
       lines,
       lastDate: lines.reduce((m, l) => (l.date > m ? l.date : m), ''),
     }

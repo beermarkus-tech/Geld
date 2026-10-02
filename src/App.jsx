@@ -232,7 +232,7 @@ export default function App() {
       </div>
       {/* Mounted once, only hidden — like the other data screens (Oct 2026). */}
       <div className={view === 'aussenstaende' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
-        <Aussenstaende onOpenInKonten={openInKonten} />
+        <Aussenstaende onOpenInKonten={openInKonten} active={view === 'aussenstaende'} />
       </div>
       {view === 'importexport' && <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} />}
       {/* Every other nav item (Dashboard, Quickview, Fortschritt,

@@ -146,8 +146,13 @@ export function tagFilterMatchIds(tagId, tags) {
 //   single hardcoded account made every CPAM/Airbus claim invisible,
 //   Oct 2026, Markus: "Außenstände shows zero but should show 1.245,45")
 // @returns {number|null}
+// One account id, or any iterable of them, as a Set — passing a Set through
+// untouched, so hot loops (every line of every booking) never rebuild one.
+const asIdSet = (ids) => (ids instanceof Set ? ids : typeof ids === 'string' ? new Set([ids]) : new Set(ids))
+
 export function claimLineContribution(tx, line, receivableAccountIds) {
-  const isReceivable = typeof receivableAccountIds === 'string' ? (id) => id === receivableAccountIds : (id) => new Set(receivableAccountIds).has(id)
+  const receivable = asIdSet(receivableAccountIds)
+  const isReceivable = (id) => receivable.has(id)
   // A genuinely single-sided booking (only one account set — e.g. a claim
   // written off as an expense, booked on the receivable account itself) has no
   // "other side" to read a direction from: the line's own natural sign is its
@@ -170,7 +175,7 @@ export function claimLineContribution(tx, line, receivableAccountIds) {
 // @param {string|Iterable<string>} aussenstaendeAccountId  one receivable account id, or all of them
 // @param {Array} tags
 export function tagFilterTotal(tagId, asOfDate, transactions, aussenstaendeAccountId, tags) {
-  const receivable = typeof aussenstaendeAccountId === 'string' ? aussenstaendeAccountId : new Set(aussenstaendeAccountId)
+  const receivable = asIdSet(aussenstaendeAccountId)
   const matchIds = tagFilterMatchIds(tagId, tags)
   let total = 0
   for (const tx of transactions) {

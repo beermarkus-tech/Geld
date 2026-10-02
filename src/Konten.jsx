@@ -594,7 +594,13 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     const claims = claimOverview(tags, activeTransactions, receivableIds)
     return { all: new Set(claims.map((c) => c.id)), open: new Set(claims.filter((c) => c.net !== 0).map((c) => c.id)) }
   }, [tags, activeTransactions, receivableIds])
-  const openClaimIds = claimStatus.open
+  // Same Set object while its contents are unchanged, so the grid's cells are
+  // only refreshed when a claim really opens/closes — not on every save.
+  const stableOpenIdsRef = useRef(claimStatus.open)
+  if (stableOpenIdsRef.current.size !== claimStatus.open.size || [...claimStatus.open].some((id) => !stableOpenIdsRef.current.has(id))) {
+    stableOpenIdsRef.current = claimStatus.open
+  }
+  const openClaimIds = stableOpenIdsRef.current
   const openClaimIdsRef = useRef(openClaimIds)
   openClaimIdsRef.current = openClaimIds
 

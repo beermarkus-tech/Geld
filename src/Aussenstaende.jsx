@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { collection, onSnapshot } from 'firebase/firestore'
 
+import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { db } from './firebase'
 import { balance } from './lib/balance'
 import { claimOverview, receivableAccountIds } from './lib/claims'
@@ -11,7 +12,9 @@ import { centsToEuro } from './lib/format'
 // tagged lines net to zero.
 const shortDate = (iso) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.`
 
-export default function Aussenstaende({ onOpenInKonten }) {
+export default function Aussenstaende({ onOpenInKonten, active = true }) {
+  // Hidden screens keep the newest data aside instead of recomputing on every save elsewhere.
+  const syncWhenVisible = useDeferWhileHidden(active)
   const [accounts, setAccounts] = useState([])
   const [tags, setTags] = useState([])
   const [transactions, setTransactions] = useState([])
@@ -22,7 +25,10 @@ export default function Aussenstaende({ onOpenInKonten }) {
     const unsubs = [
       onSnapshot(collection(db, 'accounts'), (snap) => setAccounts(snap.docs.map((d) => d.data()))),
       onSnapshot(collection(db, 'tags'), (snap) => setTags(snap.docs.map((d) => d.data()))),
-      onSnapshot(collection(db, 'transactions'), (snap) => setTransactions(snap.docs.map((d) => d.data()).filter((t) => !t.deletedAt))),
+      onSnapshot(collection(db, 'transactions'), (snap) => {
+        const next = snap.docs.map((d) => d.data()).filter((t) => !t.deletedAt)
+        syncWhenVisible(() => setTransactions(next))
+      }),
     ]
     return () => unsubs.forEach((u) => u())
   }, [])

@@ -1858,3 +1858,11 @@ Markus (screenshots): the Reisekosten-Airbus claim ("Airbus", 68,85 €) has boo
 ## Session 37, continued a forty-sixth time — 2026-10-02 — Außenstände: check block removed
 
 Markus (Außenstände now matches his expectations): remove the per-account "durch Claims erklärt / Differenz" rows under the total. Removed from `Aussenstaende.jsx` together with `accountReconciliation()` and its test (89 tests). The header total ("Außenstände gesamt") stays.
+
+## Session 37, continued a forty-seventh time — 2026-10-02 — Every save took about a second
+
+Markus: "since a while each action takes a second or so". **Reproduced** in the browser harness with ~7.000 bookings + 90 claims (the real volume is of that order): ~120 ms per save in a production build on this machine (a tablet is several times slower), ~300 ms in the dev build. **Causes found by profiling:** (1) my claim code (Außenstände, run in Konten and again on the Außenstände screen on every save): `claimOverview` scanned all bookings once *per claim* and `claimLineContribution` rebuilt a `Set` on every call; (2) every one of the always-mounted screens (Planung, Verlauf, Quickview, Außenstände) re-rendered and recomputed its whole report on every save made in Konten; (3) Konten refreshed the Unterkategorie cells on every save because the open-claims Set was a new object each time.
+
+**Fixes:** `claimOverview` is a single pass and `asIdSet` avoids per-call Sets (`lib/claims.js`, `lib/tagBalance.js`); a new `useDeferWhileHidden` hook makes hidden screens keep the newest transactions aside and apply them when shown (first load always applies); the open-claims Set keeps its identity while its contents don't change. **Result in the harness:** median save latency ~115 ms → ~40 ms (production build). Checked that a screen opened after edits made elsewhere shows them.
+
+**Not done:** the remaining ~40 ms is mostly Konten's own grid; bigger wins would need AG Grid-level changes. Tell Markus's tablet numbers (still noticeable?) before going further.
