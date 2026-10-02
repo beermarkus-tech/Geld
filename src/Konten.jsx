@@ -583,10 +583,11 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // Every receivable account (Außenstände, CPAM, Reisekosten Airbus, …) — a
   // claim's money sits on whichever of them it belongs to.
   const receivableIds = useMemo(() => receivableAccountIds(accounts), [accounts])
-  const openClaimIds = useMemo(
-    () => new Set(claimOverview(tags, activeTransactions, receivableIds).filter((c) => c.net !== 0).map((c) => c.id)),
-    [tags, activeTransactions, receivableIds],
-  )
+  const claimStatus = useMemo(() => {
+    const claims = claimOverview(tags, activeTransactions, receivableIds)
+    return { all: new Set(claims.map((c) => c.id)), open: new Set(claims.filter((c) => c.net !== 0).map((c) => c.id)) }
+  }, [tags, activeTransactions, receivableIds])
+  const openClaimIds = claimStatus.open
   const openClaimIdsRef = useRef(openClaimIds)
   openClaimIdsRef.current = openClaimIds
 
@@ -713,6 +714,35 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // accountFilter is actually a tag, which every place below that used to
   // read accountFilter directly for this purpose now reads instead.
   const filteredAccountId = accountFilter && accountById[accountFilter] ? accountFilter : null
+
+  // Filtering by a receivable account (Außenstände/CPAM/Reisekosten Airbus)
+  // shows only what is still open on it (Oct 2026, Markus: it listed the
+  // whole history and a meaningless total): every year, and only bookings
+  // that carry an open claim's tag or no claim tag at all — a booking whose
+  // claim tags are all closed (nets to zero) is hidden. `sum` is the account's
+  // open amount, counted line by line (a mixed booking such as an opening
+  // balance contributes only its open lines), which equals the account's
+  // balance when every claim nets as it should.
+  const receivableView = useMemo(() => {
+    if (!filteredAccountId || !receivableIds.has(filteredAccountId)) return null
+    const isClosedLine = (l) => {
+      const claimTags = (l.tags ?? []).filter((id) => claimStatus.all.has(id))
+      return claimTags.length > 0 && !claimTags.some((id) => claimStatus.open.has(id))
+    }
+    let sum = 0
+    const txs = []
+    for (const t of transactions) {
+      if (!showDeleted && t.deletedAt) continue
+      if (t.fromAccountId !== filteredAccountId && t.toAccountId !== filteredAccountId) continue
+      const openLines = (t.lines ?? []).filter((l) => !isClosedLine(l))
+      if (openLines.length === 0 && (t.lines ?? []).length > 0) continue
+      txs.push(t)
+      if (t.deletedAt) continue
+      const single = !t.fromAccountId || !t.toAccountId
+      for (const l of openLines) sum += single ? l.amountCents : t.toAccountId === filteredAccountId ? l.amountCents : -l.amountCents
+    }
+    return { txs, sum }
+  }, [filteredAccountId, receivableIds, claimStatus, transactions, showDeleted])
 
   // Purple/allocation tags only (spec.md §1b.4/§2.5) — a grouping tag has
   // no reconciliationTargetAccountIds of its own to order around. `null`
@@ -1350,6 +1380,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   }, [accountFilter, filteredAccountId, tagById])
 
   const rows = useMemo(() => {
+    if (receivableView) return receivableView.txs.slice().sort((a, b) => (a.date === b.date ? a.id.localeCompare(b.id) : a.date.localeCompare(b.date)))
     if (!year) return []
     // A tag filter's own match set — the filtered tag itself plus every
     // *direct* child under it (Markus: filtering by a parent like
@@ -1376,7 +1407,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       })
       .slice()
       .sort((a, b) => (a.date === b.date ? a.id.localeCompare(b.id) : a.date.localeCompare(b.date)))
-  }, [transactions, year, accountFilter, filteredAccountId, tags, showDeleted])
+  }, [transactions, year, accountFilter, filteredAccountId, tags, showDeleted, receivableView])
 
   // Once a pending row (addRow's new row, or a just-edited row that may
   // have moved) actually settles into `rows` — via the Firestore
@@ -2335,8 +2366,9 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     setVisibleSumCents(visibleSum(visible, Boolean(filteredAccountId)))
   }
 
-  const tagFilterSum =
-    accountFilter && !filteredAccountId
+  const tagFilterSum = receivableView
+    ? receivableView.sum
+    : accountFilter && !filteredAccountId
       ? filteredTagForSum?.class === 'allocation'
         ? tagJahresende(accountFilter, Number(year), activeTransactions, tags)
         : tagFilterTotal(accountFilter, `${year}-12-31`, activeTransactions, receivableIds, tags)
