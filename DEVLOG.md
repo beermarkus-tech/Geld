@@ -1754,3 +1754,7 @@ Markus (with a screenshot of his Gsheet Deepdive) kept the top-10 lists and the 
 Markus: Quickview was meant to sum all bookings with the same name in a month (all Lidl → one "Lidl" total), sorted by that total. Done in `lib/quickview.js` (`groups` per month: name = `displayLabel` ignoring case/spaces, one sum and count per name, sorted by |sum|; +1 test, 80 total) and `Quickview.jsx` (rows show sum + name + "×N"; top 10 names per month; the colour scale now runs over those sums; the Konten link appears when a month has more than ten names and still filters by month + selection). spec.md §3e corrected (it said top 10 largest *transactions*).
 
 **Note:** two differently spelled names ("Lidl" vs "LIDL Toulouse") stay separate rows — only case/space differences are merged. Awaiting Markus if he wants fuzzier matching.
+
+## Session 37, continued a twenty-eighth time — 2026-10-02 — Fix: white screen from Quickview (Build 141)
+
+Markus saw a white empty screen over the whole app after Build 141. **Cause:** my own bug in the previous round — with no selection, `quickviewMonths()` returned months without the new `groups` list, and the (permanently mounted) Quickview read it at startup, so React crashed and took the whole app with it. **Fixed:** the empty months now carry `groups: []`; a test covers the no-selection case (81 tests). Checked in the browser harness: app loads, Quickview with a selection renders. Lesson: the grouping change was shipped without a browser run — it got one this time.

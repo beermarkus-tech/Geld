@@ -22,7 +22,7 @@ import { tagFilterMatchIds } from './tagBalance'
 //   12 entries Jan..Dec; `entries` are the single lines, `groups` the per-name
 //   sums sorted by |sum|, largest first (what the screen lists)
 export function quickviewMonths(selection, year, transactions, tags) {
-  const months = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, total: 0, count: 0, entries: [] }))
+  const months = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, total: 0, count: 0, entries: [], groups: [] }))
   if (!selection) return months
   const tag = selection.kind === 'tag' ? tags.find((t) => t.id === selection.id) : null
   const matchIds = tag ? tagFilterMatchIds(tag.id, tags) : null

@@ -65,6 +65,14 @@ describe('quickviewMonths() grouping by name', () => {
   })
 })
 
+describe('quickviewMonths() without a selection', () => {
+  it('returns 12 empty months that still carry an (empty) groups list — Quickview renders them before anything is picked', () => {
+    const m = quickviewMonths(null, 2026, [], [])
+    expect(m).toHaveLength(12)
+    expect(m.every((x) => Array.isArray(x.groups) && x.groups.length === 0)).toBe(true)
+  })
+})
+
 describe('occurredMonthCount()', () => {
   it('is real elapsed calendar time', () => {
     expect(occurredMonthCount(2025, '2026-10-02')).toBe(12)
