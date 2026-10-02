@@ -66,6 +66,17 @@ describe('claims on the other receivable accounts (CPAM, Airbus)', () => {
   })
 })
 
+describe('single-sided bookings on a receivable account (write-offs)', () => {
+  it('count with their own natural sign, as in the migration', () => {
+    // a 100 € claim fully written off as an expense booked on the receivable itself
+    const txs = [
+      tx('open', '2026-01-02', 'bar', AUS, 10000, ['loan']),
+      tx('writeoff', '2026-02-02', AUS, null, -10000, ['loan']),
+    ]
+    expect(claimOverview(tags, txs, REC)[0].net).toBe(0)
+  })
+})
+
 describe('accountReconciliation()', () => {
   it('shows an account\'s balance next to what its claims explain, exposing untagged bookings', () => {
     const accounts = [{ id: AUS, name: 'Außenstände', group: 'receivable' }, { id: 'bar', name: 'Bar', group: 'cash' }]

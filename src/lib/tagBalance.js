@@ -148,9 +148,19 @@ export function tagFilterMatchIds(tagId, tags) {
 // @returns {number|null}
 export function claimLineContribution(tx, line, receivableAccountIds) {
   const isReceivable = typeof receivableAccountIds === 'string' ? (id) => id === receivableAccountIds : (id) => new Set(receivableAccountIds).has(id)
-  if (isReceivable(tx.fromAccountId)) return -line.amountCents
-  if (isReceivable(tx.toAccountId)) return line.amountCents
+  // A genuinely single-sided booking (only one account set — e.g. a claim
+  // written off as an expense, booked on the receivable account itself) has no
+  // "other side" to read a direction from: the line's own natural sign is its
+  // contribution, exactly as migration/transform-transactions.py's
+  // allocation_tag_delta() does. (Reading it by position instead flipped such
+  // a booking's sign — Oct 2026, Markus: "2025-11 BLR" showed 251,74 € open.)
   if (!tx.fromAccountId || !tx.toAccountId) return line.amountCents
+  // A transfer: + when money arrives on a receivable account, − when it leaves;
+  // between two receivables, or between two other accounts, it doesn't count.
+  const from = isReceivable(tx.fromAccountId)
+  const to = isReceivable(tx.toAccountId)
+  if (to && !from) return line.amountCents
+  if (from && !to) return -line.amountCents
   return null
 }
 
