@@ -25,8 +25,7 @@ import { registerScreenCursor } from './lib/screenCursor'
 
 // Jahresanfang's starting cash (§3c, resolved Sept 2026, Markus): every
 // account in these three reportingGroups, balance on Dec 31 of the prior
-// year — Sparkonten/Geldanlage stay out. (Livret A Tagesgeld is a Barkonten
-// account now, §2.2, so it counts through the group.)
+// year — Sparkonten (incl. Livret A Tagesgeld)/Geldanlage stay out.
 const START_CASH_GROUPS = ['Barkonten', 'Bargeld', 'Außenstände']
 
 const LENSES = [

@@ -1718,3 +1718,15 @@ Markus confirmed the four pending items: the `accounts.json` re-import (Livret A
 **Removed, as promised:** the temporary repair section in Import/Export → Sicherung (`RetiredAccountRepair`), `src/lib/retiredAccounts.js` and its 4 tests, and Planung's transitional `START_CASH_EXTRA_ACCOUNTS` rule (Livret A Tagesgeld counts through its Barkonten group now). The permanent part stays: `migration/transform-transactions.py` routes Amazon returns and loans to `aussenstaende`. Lint clean, tests 74, build clean; CODEMAP updated.
 
 **Next (Markus's choice): Quickview, PLAN.md Phase 5** (with Außenstände and Fortschritt), pulled ahead of Phase 3 (CSV import) and Phase 4 (parallel-run month). It needs a PLAN.md reordering when started. Still open elsewhere: Verlauf's phone layout (last unbuilt Phase 2 piece), the split-line-to-virtual-account design question, the §2.8a Barkonten check scope (Barkonten now includes Livret A Tagesgeld; Bargeld still undecided), Ctrl+H device confirmation, the "account totals" ambiguity, the deferred Verlauf gridline bug.
+
+## Session 37, continued a twenty-fourth time — 2026-10-02 — Rollback: Livret A Tagesgeld stays a Sparkonto
+
+Markus reversed the "Livret A Tagesgeld is a Barkonto" decision (it was never applied to the live panels on his side). Corrects the twenty-third entry, which said Tagesgeld sits under Barkonten in the live data: it does not — the live data is, and stays, Sparkonten.
+
+**Changed (records only, no behavior change in the code):** `migration/seed/accounts.json` has `livret-a-tagesgeld` back at `reportingGroup: "Sparkonten"`; spec.md §2.2 (definitions, decision note, accounts table) and §3c (Jahresanfang) say Livret A Tagesgeld is a Sparkonto and not part of starting cash; CODEMAP.md and the comment on `START_CASH_GROUPS` in `src/Planung.jsx` match. Planung's start cash was already Barkonten + Bargeld + Außenstände, so nothing recomputes differently.
+
+**Unchanged:** the `Tagesgeld` tag stays label-only and hidden from the Verlauf/Planung Rücklagen rows (spec §2.4) — Markus did not revoke that. Do not re-import the accounts.json sent earlier in this session's Barkonten version.
+
+**Open (awaiting Markus):** the label-only rule was justified by "readily available cash", which sits oddly with the account not counting as starting cash; confirm both stay as they are.
+
+**Next:** Quickview (PLAN.md Phase 5), reordering PLAN.md when started.

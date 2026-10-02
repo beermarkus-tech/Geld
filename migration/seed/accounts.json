@@ -4,7 +4,7 @@
   { "id": "paypal", "name": "PayPal", "group": "payment", "reportingGroup": "Barkonten", "parentAccountId": null, "isVirtual": false, "tracked": true },
   { "id": "visa-airbus", "name": "Visa Airbus", "group": "payment", "reportingGroup": "Barkonten", "parentAccountId": null, "isVirtual": false, "tracked": true },
   { "id": "livret-a-sparen", "name": "Livret A Sparen", "group": "savings", "reportingGroup": "Sparkonten", "parentAccountId": null, "isVirtual": false, "tracked": true },
-  { "id": "livret-a-tagesgeld", "name": "Livret A Tagesgeld", "group": "savings", "reportingGroup": "Barkonten", "parentAccountId": null, "isVirtual": false, "tracked": true },
+  { "id": "livret-a-tagesgeld", "name": "Livret A Tagesgeld", "group": "savings", "reportingGroup": "Sparkonten", "parentAccountId": null, "isVirtual": false, "tracked": true },
   { "id": "consors-verrechnungskonto", "name": "Consors", "group": "investment-cash", "reportingGroup": "Barkonten", "parentAccountId": null, "isVirtual": false, "tracked": true },
   { "id": "smartbroker-verrechnungskonto", "name": "Smartbroker", "group": "investment-cash", "reportingGroup": "Barkonten", "parentAccountId": null, "isVirtual": false, "tracked": true },
   { "id": "coinbase-verrechnungskonto", "name": "Coinbase", "group": "investment-cash", "reportingGroup": "Barkonten", "parentAccountId": null, "isVirtual": false, "tracked": true },
