@@ -37,9 +37,28 @@ export function balance(accountId, asOfDate, transactions) {
   return total
 }
 
-/** balance(accountId, Dec 31 of year-1, transactions) — spec.md §2.1/§2.3. */
+// The bookkeeping plug account of the one opening-balance transaction per
+// account (spec.md §2.3).
+const ANCHOR_ACCOUNT_ID = 'jahresabschluss'
+const isAnchor = (tx) => tx.fromAccountId === ANCHOR_ACCOUNT_ID || tx.toAccountId === ANCHOR_ACCOUNT_ID
+
+/** The account's balance at the start of `year` — spec.md §2.1/§2.3: the
+ * balance on Dec 31 of year-1, **plus the Jahresabschluß opening-balance
+ * anchor when it is dated at the start of this very year**. The anchor is
+ * dated to the start of the earliest imported year (e.g. 2025-01-01), so for
+ * that first year there is no prior-year balance to look up at all — its
+ * Jahresanfang *is* the anchor (Oct 2026, Markus: Planung showed 0 for the
+ * first year). For every later year the anchor lies before Dec 31 of the
+ * previous year and is already part of the running sum, so nothing is
+ * counted twice. */
 export function jahresanfang(accountId, year, transactions) {
-  return balance(accountId, `${year - 1}-12-31`, transactions)
+  const priorYearEnd = `${year - 1}-12-31`
+  const yearStart = `${year}-01-01`
+  return balance(
+    accountId,
+    '9999-12-31',
+    transactions.filter((tx) => tx.date <= priorYearEnd || (isAnchor(tx) && tx.date <= yearStart)),
+  )
 }
 
 /** balance(accountId, Dec 31 of year, transactions) — the companion lookup

@@ -1669,3 +1669,11 @@ Markus asked for the previous change to be recorded properly, as a real change i
 ## Session 37, continued a seventeenth time — 2026-10-02 — Planung: yellow Budget lines
 
 Markus: the three rows Budget, Ausgaben vs. Budget and gebildete Rücklagen get a yellow tint to set them apart. Done in `src/Planung.jsx`: `BUDGET_BAND_TINT` (the existing `--color-breakdown-tint` token, which has a dark-mode value) on those three `BandRow`s, including the sticky name cell, and on the phone's Budget card. Checked by screenshot in light mode, dark mode and the phone layout. Lint, tests (71) and build clean. spec.md §3c's layout paragraph notes it.
+
+## Session 37, continued an eighteenth time — 2026-10-02 — Planung: first year's starting cash
+
+Markus: Planung's "Alle Barkonten" was missing for 2025, the first year in the database. **Cause:** `jahresanfang()` looked up the balance on Dec 31 of the previous year (2024-12-31), but spec §2.3's single Jahresabschluß opening-balance anchor is dated 2025-01-01 — so for the first year the lookup found nothing and read 0. That also made the 2025 Jahresanfang, Budget and "Ausgaben vs. Budget" wrong (they all build on it).
+
+**Fixed** in the shared `jahresanfang()` (`src/lib/balance.js`): it now also counts Jahresabschluß anchor transactions dated at the year's own start. Later years are unchanged (their anchor already lies before the previous Dec 31, so there is no double count); a negative anchor counts as negative. 3 new tests (balance.test.js, 74 total). spec.md §2.3 clarified, CODEMAP updated. Verified in Planung with a harness: anchors of 1.000 € (bank), 474 € (Livret A Tagesgeld), 200 € (Außenstände) and 5.000 € (Livret A Sparen, excluded) plus a 300 € booking in 2025 give 1.674 € for 2025 and 1.974 € for 2026.
+
+**For Markus's Gsheet comparison:** the 2025 column's "Alle Barkonten", Jahresanfang, Budget and "Ausgaben vs. Budget" now carry the real opening balances, which is what the spec's worked example (104.344 €) was computed from.

@@ -75,6 +75,21 @@ describe('jahresanfang() / jahresende()', () => {
     expect(jahresanfang('bnp-konto', 2026, all)).toBe(80000)
   })
 
+  it('the first year in the database starts from the Jahresabschluß anchor dated at its start (§2.3), not from 0', () => {
+    expect(jahresanfang('bnp-konto', 2025, all)).toBe(100000)
+  })
+
+  it('counts a negative anchor (an overdrawn account) as a negative opening balance', () => {
+    const overdrawn = { id: 'ja-visa', date: '2025-01-01', fromAccountId: 'visa-airbus', toAccountId: 'jahresabschluss', amountCents: 30000 }
+    expect(jahresanfang('visa-airbus', 2025, [overdrawn])).toBe(-30000)
+  })
+
+  it('does not count the anchor twice for later years, and ignores ordinary 2025 bookings in the first year\'s start', () => {
+    expect(jahresanfang('bnp-konto', 2026, all)).toBe(80000)
+    const jan1Expense = { date: '2025-01-01', fromAccountId: 'bnp-konto', toAccountId: null, amountCents: -5000 }
+    expect(jahresanfang('bnp-konto', 2025, [JAHRESABSCHLUSS, jan1Expense])).toBe(100000)
+  })
+
   it('computes Jahresende(2025) the same way, for Prognose to compare against', () => {
     expect(jahresende('bnp-konto', 2025, all)).toBe(80000)
     expect(jahresende('bnp-konto', 2025, all)).toBe(jahresanfang('bnp-konto', 2026, all))
