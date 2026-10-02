@@ -123,9 +123,8 @@ export default function Aussenstaende({ onOpenInKonten, active = true }) {
                           title={correcting ? 'Ausgleichsbuchung' : undefined}
                           className={`flex items-baseline gap-3 rounded px-1 py-0.5 text-sm ${correcting ? 'bg-[var(--color-income-tint)] text-[var(--color-income)]' : ''}`}
                         >
-                          <span className="min-w-0 flex-1 truncate">
-                            {l.detail || l.label} <span className={correcting ? 'opacity-70' : 'text-[var(--color-text-muted)]'}>· {shortDate(l.date)}</span>
-                          </span>
+                          <span className={`w-12 shrink-0 tabular-nums ${correcting ? 'opacity-70' : 'text-[var(--color-text-muted)]'}`}>{shortDate(l.date)}</span>
+                          <span className="min-w-0 flex-1 truncate">{l.detail || l.label}</span>
                           <span className="shrink-0 tabular-nums">{centsToEuro(l.cents)} €</span>
                         </div>
                       )

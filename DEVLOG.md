@@ -1888,3 +1888,7 @@ Markus liked the line; asked for its amount in the Betrag column and the same li
 ## Session 37, continued a fifty-first time — 2026-10-02 — Außenstände: correcting bookings in green
 
 Markus asked for the correcting (ausgleichende) bookings on the Außenstände screen in a different colour. **Done (`Aussenstaende.jsx`):** a line whose sign is opposite to the claim's oldest line counts as correcting and gets the green tint/text (existing income-tint token) plus tooltip "Ausgleichsbuchung". Harness-checked on a loan (50 out, 45 back → the 45 line green) and a trip claim. **Limit:** purely directional — if a claim's first booking is itself the "returning" side, the colours swap for that claim.
+
+## Session 37, continued a fifty-second time — 2026-10-02 — Außenstände: date before title
+
+Line order on the Außenstände cards is now date, title, amount (was title · date, amount); the date has a fixed width so the titles line up. `Aussenstaende.jsx` only.
