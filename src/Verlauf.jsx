@@ -1627,7 +1627,8 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         headerName: '',
         colId: 'rowTitle',
         pinned: 'left',
-        suppressNavigable: true,
+        // Navigable (Oct 2026, Markus): the cursor can reach the row names with
+        // the arrow keys; Enter edits a breakdown/Übergruppe name (see below).
         // Brought back (Markus, Sept 2026 — spec.md §3b's own original
         // "third column... either the plan-line name (Prog/Plan1/Plan0)
         // or, for a breakdown row, that breakdown item's name" design,
@@ -1990,6 +1991,9 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
           // own saved cursor position (`onFocusChange`, Markus: "save the
           // cursor position... place the cursor there again upon
           // switching") is reported up to `App.jsx`.
+          // The cursor stays in the cells: Up from the first row no longer
+          // jumps into the column headers (Oct 2026, Markus).
+          suppressHeaderFocus
           onCellFocused={(e) => {
             if (e.rowIndex == null || !e.column) return
             const colId = e.column.getColId()
@@ -2002,7 +2006,8 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
             if (rowId) {
               lastFocusedRowIdRef.current = rowId
               onFocusChange?.({ rowId, colId })
-              setCommentCell({ rowId, colId })
+              // A name cell carries no comment (only numbers do).
+              setCommentCell(colId === 'rowTitle' ? null : { rowId, colId })
             }
           }}
           // Del/Ctrl+D/Ctrl++ (Markus, Sept 2026) — all three act on
