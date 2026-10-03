@@ -27,9 +27,8 @@ function Chip({ tag, label, onRemove, title }) {
 // Konten's Tags column editor (spec.md §2.5), built on the shared tag box
 // (TagBox.jsx — same list, look and keys as Verlauf's boxes since Oct 2026).
 // The tags already on the line sit above as removable chips; the list offers
-// every tag (allocation tags, grouping tags, and old plain-text values still
-// in use — reusing the exact string keeps old trip/claim labels from forking
-// into near-duplicates), and a "Neu … — Typ" row per type when the typed text
+// every tag (allocation and grouping tags; the old plain-text values became
+// real tags in Oct 2026, PLAN.md Phase 5b step 6), and a "Neu … — Typ" row per type when the typed text
 // doesn't exist yet. "Schottland:Fähre" creates/reuses the parent and the
 // child (lib/tagActions.js). With an empty field the 5 most recently used tags
 // come first.
@@ -43,7 +42,7 @@ function Chip({ tag, label, onRemove, title }) {
 // Anspruchsart (claim-category) tags are only offered once a claim tag is on
 // the line (spec.md §2.5's sequencing rule).
 const TagEditor = forwardRef(function TagEditor(props, ref) {
-  const { data, tags, usedTagValues, recentTagValues = [], initialTagIds = [], onApply, onCreateTag, onTabAddRow, api } = props
+  const { data, tags, recentTagValues = [], initialTagIds = [], onApply, onCreateTag, onTabAddRow, api } = props
   const [selectedIds, setSelectedIds] = useState(initialTagIds)
   const usage = useTagUsage()
 
@@ -54,12 +53,11 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
 
   const tagById = useMemo(() => Object.fromEntries(tags.map((t) => [t.id, t])), [tags])
   const qName = (t) => qualifiedTagName(t, tagById)
-  const legacyCandidates = useMemo(() => [...usedTagValues].filter((v) => !tagById[v]).map((v) => ({ id: v, name: v })), [usedTagValues, tagById])
   const hasClaimTag = selectedIds.some((id) => tagById[id]?.groupingType === 'claim')
 
   function getOptions(rawText) {
     const text = rawText.trim().toLowerCase()
-    const candidates = [...tags.filter((t) => t.class === 'allocation'), ...tags.filter((t) => t.class === 'grouping'), ...legacyCandidates]
+    const candidates = [...tags.filter((t) => t.class === 'allocation'), ...tags.filter((t) => t.class === 'grouping')]
     const eligible = candidates
       .filter((t) => !t.archived && !selectedIds.includes(t.id))
       .filter((t) => t.groupingType !== 'claim-category' || hasClaimTag)
@@ -90,13 +88,11 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
     }))
   }
 
-  // Not when the text names an existing tag (incl. allocation tags and old
-  // plain-text values — "dirk sept" must not offer a duplicate).
+  // Not when the text names an existing tag (incl. allocation tags).
   function getCreateTypes(rawText) {
     const text = rawText.trim().toLowerCase()
     if (!text || findTagByText(tags, rawText)) return []
     if (tags.some((t) => t.class === 'allocation' && t.name.toLowerCase() === text)) return []
-    if (legacyCandidates.some((t) => t.name.toLowerCase() === text)) return []
     return CREATE_TYPES.filter((o) => o.groupingType !== 'claim-category' || hasClaimTag)
   }
 

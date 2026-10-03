@@ -90,7 +90,7 @@ See `CLAUDE.md` for how this fits alongside `spec.md` and `DEVLOG.md`.
 
 ---
 
-## Phase 5b — Tag cleanup: one central tag system (inserted Oct 2026)
+## Phase 5b — Tag cleanup: one central tag system (inserted Oct 2026) — done Oct 2026, Builds 199–206
 
 Markus (Oct 2026): "there should be only one central list that all sheets refer to." The database already holds one `tags` collection, but every screen kept its own copy, its own create/rename/count code, its own pill drawing and its own tag box — the source of several recent bugs (types not showing elsewhere, tags created without a type, tags looking unused while a Plan0 line held them). Agreed with Markus, step by step, one build each:
 

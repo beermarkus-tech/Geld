@@ -25,15 +25,10 @@ export function claimTagIds(tags, transactions, receivableIds) {
   for (const tx of transactions) {
     if (!receivableIds.has(tx.fromAccountId) && !receivableIds.has(tx.toAccountId)) continue
     for (const line of tx.lines ?? []) {
-      ;(line.tags ?? []).forEach((id, i) => {
-        // Pre-mechanism lines (incl. the whole Gsheet migration) carry the tag as
-        // a raw string with no tag document behind it (spec §2.5) — the claim
-        // is its first tag, any later raw string is a label, not a claim
-        // (Oct 2026, Markus: "still no bookings shown" — requiring a tag
-        // document hid every migrated claim).
-        if (!byId[id] && i > 0) return
-        if (!excluded(id)) ids.add(id)
-      })
+      // Since the old plain-text tags were converted (Oct 2026, PLAN.md Phase 5b
+      // step 6) every tag here has a record: labels within a claim are typed
+      // Anspruchsart and excluded, no "first plain-text tag" rule needed.
+      for (const id of line.tags ?? []) if (!excluded(id)) ids.add(id)
     }
   }
   return [...ids]

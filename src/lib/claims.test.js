@@ -39,15 +39,15 @@ describe('claim discovery and totals', () => {
   })
 })
 
-describe('legacy claims whose tags are raw strings without a tag document', () => {
-  it('are found by their first tag and named by it; a second raw string is a label, not a claim', () => {
-    const txs = [
-      tx('a', '2026-03-09', 'visa', 'airbus', 5000, ['2026-03 GET', 'Hotel']),
-      tx('b', '2026-04-22', 'airbus', 'bnp', 2000, ['2026-03 GET']),
+describe('labels within a claim', () => {
+  it('a tag typed Anspruchsart is a label, not a claim', () => {
+    const t = [
+      { id: '2026-03 GET', name: '2026-03 GET', class: 'grouping', groupingType: 'claim' },
+      { id: 'Hotel', name: 'Hotel', class: 'grouping', groupingType: 'claim-category' },
     ]
-    expect(claimTagIds([], txs, REC)).toEqual(['2026-03 GET'])
-    const o = claimOverview([], txs, REC)
-    expect(o.map((c) => [c.name, c.net])).toEqual([['2026-03 GET', 3000]])
+    const txs = [tx('a', '2026-03-09', 'visa', 'airbus', 5000, ['2026-03 GET', 'Hotel']), tx('b', '2026-04-22', 'airbus', 'bnp', 2000, ['2026-03 GET'])]
+    expect(claimTagIds(t, txs, REC)).toEqual(['2026-03 GET'])
+    expect(claimOverview(t, txs, REC).map((c) => [c.name, c.net])).toEqual([['2026-03 GET', 3000]])
   })
 })
 

@@ -57,7 +57,7 @@ function PlainTagRow({ id, usage, targetNames }) {
           <TagPill size="md">{id}</TagPill>
         </span>
         <span className="text-xs text-[var(--color-text-muted)]">nur Text</span>
-        <button type="button" onClick={() => setOpen((o) => !o)} className="w-40 shrink-0 text-right text-xs tabular-nums text-[var(--color-text-muted)] hover:underline">
+        <button type="button" onClick={() => setOpen((o) => !o)} className="w-60 shrink-0 whitespace-nowrap text-right text-xs tabular-nums text-[var(--color-text-muted)] hover:underline">
           {usage.lines} {usage.lines === 1 ? 'Buchungszeile' : 'Buchungszeilen'}
           {usage.deletedLines > 0 && ` (+${usage.deletedLines} gelöscht)`} {open ? '▴' : '▾'}
         </button>
@@ -187,7 +187,7 @@ function TagRow({ tag, depth, label, usage, targetNames, twin, parents, hasChild
           type="button"
           onClick={() => setOpen((o) => !o)}
           title="Zeigen, wo dieser Tag verwendet wird"
-          className="w-40 shrink-0 text-right text-xs tabular-nums text-[var(--color-text-muted)] hover:underline"
+          className="w-60 shrink-0 whitespace-nowrap text-right text-xs tabular-nums text-[var(--color-text-muted)] hover:underline"
         >
           {usage.lines} {usage.lines === 1 ? 'Buchungszeile' : 'Buchungszeilen'}
           {usage.deletedLines > 0 && ` (+${usage.deletedLines} gelöscht)`}
@@ -271,7 +271,7 @@ export default function Settings() {
   const rowProps = (tag) => ({ usage: usageOf(usage, tag.id), targetNames, twin: twins.has(tag.id), parents, hasChildren: withChildren.has(tag.id), onRename: rename, onSetType: setType, onMove: move })
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
+    <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
       <section className="flex flex-col gap-3">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h2 className="text-lg font-semibold">Tags</h2>

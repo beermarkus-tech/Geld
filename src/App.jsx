@@ -126,11 +126,12 @@ export default function App() {
   // Quickview/Verlauf, disarming a delete) marks it with preventDefault.
   useEffect(() => {
     let busy = false
+    // A read-only field (Planung's comment cells while not being edited) is just a cell.
     const before = (e) => {
       if (e.key !== 'Escape') return
       const a = document.activeElement
       busy =
-        Boolean(a && (['INPUT', 'TEXTAREA', 'SELECT'].includes(a.tagName) || a.isContentEditable || a.closest?.('[data-sidebar]'))) ||
+        Boolean(a && ((['INPUT', 'TEXTAREA', 'SELECT'].includes(a.tagName) && !a.readOnly) || a.isContentEditable || a.closest?.('[data-sidebar]'))) ||
         Boolean(document.querySelector('.fixed.inset-0, .ag-popup, .ag-cell-inline-editing, [data-quick-filter]'))
     }
     const after = (e) => {

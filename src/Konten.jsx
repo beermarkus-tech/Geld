@@ -646,8 +646,6 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
 
   const accountById = useMemo(() => Object.fromEntries(accounts.map((a) => [a.id, a])), [accounts])
   const categoryById = useMemo(() => Object.fromEntries(categories.map((c) => [c.id, c])), [categories])
-  // Every distinct value (real tag id or legacy free-text string alike —
-  // indistinguishable at the data level) currently sitting in some line's
   // Every real aggregation/suggestion computation below reads this, not
   // `transactions` directly — a soft-deleted row (spec.md §2.9a's layer 4)
   // stays in `transactions` (so it can still be found/restored/purged) but
@@ -680,17 +678,6 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   const openClaimIdsRef = useRef(openClaimIds)
   openClaimIdsRef.current = openClaimIds
 
-  // `tags[]`, across every loaded transaction, any year — not scoped to
-  // the selected year, since a tag used at all should stay reachable.
-  // Drives TagEditor's usage-based suggestion list (Markus, real-usage
-  // feedback): an unused grouping tag doesn't clutter the empty-input
-  // browse view, and a pre-existing free-text string becomes a real
-  // reusable suggestion instead of only ever showing up already-applied.
-  const usedTagValues = useMemo(() => {
-    const set = new Set()
-    activeTransactions.forEach((t) => (t.lines ?? []).forEach((l) => (l.tags ?? []).forEach((v) => set.add(v))))
-    return set
-  }, [activeTransactions])
   // Every used value again, ordered by when it was actually *applied* —
   // each transaction's own `updatedAt` (persistTx, above), not its booking
   // `date` (Markus caught this: tagging an old January row today didn't
@@ -2245,7 +2232,6 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           p.data.__isLine
             ? {
                 tags,
-                usedTagValues,
                 recentTagValues,
                 initialTagIds: p.data.__parent.lines[p.data.__lineIndex]?.tags ?? [],
                 onApply: (_data, tagIds) => applyTagsToLine(p.data.__parent, p.data.__lineIndex, tagIds),
@@ -2254,7 +2240,6 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
               }
             : {
                 tags,
-                usedTagValues,
                 recentTagValues,
                 initialTagIds: (p.data.lines ?? [])[0]?.tags ?? [],
                 onApply: applyTagsDirect,
@@ -2351,7 +2336,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps -- accountName/categoryName/groupName/ensureLine/handleDeleteClick/toggleExpanded/createTag close over these
-    [accountById, categoryById, tagById, usedTagValues, recentTagValues, accountFilter, accounts, categories, tags, confirmDeleteId, expandedIds],
+    [accountById, categoryById, tagById, recentTagValues, accountFilter, accounts, categories, tags, confirmDeleteId, expandedIds],
   )
 
   const panel = useMemo(() => {
