@@ -59,7 +59,7 @@ function Chip({ label, colorVar, onRemove, title }) {
 // change for the fast/default path, arrowing down is purely additive).
 // claim-category is only offered here under the same sequencing rule as
 // everywhere else (a claim tag already on the line).
-const CREATE_TYPES = [
+export const CREATE_TYPES = [
   { groupingType: null, label: 'Unbestimmt' },
   { groupingType: 'project', label: 'Reise/Projekt' },
   { groupingType: 'statement', label: 'Abrechnung' },

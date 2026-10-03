@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { collection, deleteDoc, doc, onSnapshot, setDoc, writeBatch } from 'firebase/firestore'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { TAG_RENAME_MESSAGES, validateTagRename } from './lib/tagRename'
-import { tagColorVar } from './lib/tagStyle'
+import { qualifiedTagName, tagColorVar } from './lib/tagStyle'
+import { findTagByText, splitTagText, tagKey } from './lib/tagPicker'
 import ui from './lib/uiState'
 import { AgGridReact } from 'ag-grid-react'
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community'
@@ -19,7 +20,7 @@ import { ALLOCATION_TAG_ORDER, GROUP_ORDER, SUBCAT_ORDER, isBudgetPlannedTag, is
 import { centsToWholeEuro, parseWholeEuroInput } from './lib/format'
 import { registerScreenCursor } from './lib/screenCursor'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
-import { slugify } from './TagEditor'
+import { CREATE_TYPES, slugify } from './TagEditor'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 syncAgGridColorScheme()
@@ -336,21 +337,19 @@ function CellCommentField({ cell, description, savedText, onSave, onDone, inputR
   )
 }
 
-function AddBreakdownModal({ parentOptions, tagExistsGloballyByName, onSubmit, onCancel }) {
-  const [nameText, setNameText] = useState('')
-  const [groupText, setGroupText] = useState('')
-  const [groupOpen, setGroupOpen] = useState(false)
-  // -1 = nothing highlighted (a plain Enter submits the form instead of
-  // picking a suggestion) — Markus: "I should be able to navigate the
-  // breakdown line modal with arrow keys", same up/down-then-Enter pattern
-  // as Konten's own TagEditor suggestion list.
-  const [highlight, setHighlight] = useState(-1)
-  const nameInputRef = useRef(null)
+// "Add breakdown line" (Oct 2026, Markus): a breakdown line's title is a tag, so
+// this works like the Tags column in Konten — type to search the existing
+// tags (pick with Up/Down + Enter or a click), or create a new one: a plain
+// label makes a parent tag, "Schottland:Hotels" a child under "Schottland"
+// (reused when it exists), and the "Neu …" rows below pick the tag's type.
+function AddBreakdownModal({ tags, excludeIds, onSubmit, onCancel }) {
+  const [text, setText] = useState('')
+  const [highlight, setHighlight] = useState(0)
+  const inputRef = useRef(null)
 
   useEffect(() => {
-    nameInputRef.current?.focus()
+    inputRef.current?.focus()
   }, [])
-
   useEffect(() => {
     const onKeyDown = (e) => {
       if (e.key === 'Escape') onCancel()
@@ -359,119 +358,107 @@ function AddBreakdownModal({ parentOptions, tagExistsGloballyByName, onSubmit, o
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [onCancel])
 
-  const text = groupText.trim().toLowerCase()
-  // The suggestion *list* stays scoped to this one category/allocation tag
-  // (parentOptions, "available parent tags in that subcategory") — but
-  // whether typing an exact name will reuse an existing tag or create a
-  // brand new one checks *every* tag, not just this category's own
-  // (tagExistsGloballyByName) — otherwise typing a name already used as a
-  // breakdown parent for some *other* category (a real tag, just not one
-  // suggested here) would silently create a duplicate tag under a
-  // disambiguated id instead of reusing it, the same "reuse by exact name"
-  // rule Konten.jsx's own createTag() already applies globally.
-  const matches = parentOptions.filter((t) => text === '' || t.name.toLowerCase().includes(text))
-  const willReuse = text !== '' && tagExistsGloballyByName(text)
+  const tagById = useMemo(() => Object.fromEntries(tags.map((t) => [t.id, t])), [tags])
+  const typed = text.trim()
+  const key = tagKey(typed)
+  const suggestions = useMemo(
+    () =>
+      tags
+        .filter((t) => t.class === 'grouping' && !t.archived && !excludeIds.has(t.id))
+        .map((t) => ({ tag: t, label: qualifiedTagName(t, tagById) }))
+        .filter((o) => key === '' || tagKey(o.label).includes(key))
+        .sort((a, b) => a.label.localeCompare(b.label))
+        .slice(0, 25),
+    [tags, tagById, excludeIds, key],
+  )
+  const exists = typed !== '' && Boolean(findTagByText(tags, typed))
+  const createOptions = typed !== '' && !exists ? CREATE_TYPES.filter((o) => o.groupingType !== 'claim-category') : []
+  const optionCount = suggestions.length + createOptions.length
 
-  function pick(name) {
-    setGroupText(name)
-    setGroupOpen(false)
-    setHighlight(-1)
-  }
-
-  function submit() {
-    const trimmedName = nameText.trim()
-    if (!trimmedName) return
-    onSubmit({ name: trimmedName, groupName: groupText.trim() })
+  function choose(idx) {
+    if (idx < suggestions.length) onSubmit({ tagId: suggestions[idx].tag.id })
+    else if (createOptions[idx - suggestions.length]) onSubmit({ text: typed, groupingType: createOptions[idx - suggestions.length].groupingType })
   }
 
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center" onClick={onCancel}>
       <div className="absolute inset-0 bg-black/40" />
-      <div
-        className="relative flex w-full max-w-sm flex-col gap-3 rounded-lg bg-[var(--color-surface)] p-5"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="relative flex w-full max-w-sm flex-col gap-3 rounded-lg bg-[var(--color-surface)] p-5" onClick={(e) => e.stopPropagation()}>
         <p className="text-sm font-medium">Neue Aufschlüsselungszeile</p>
-        <label className="flex flex-col gap-1 text-xs text-[var(--color-text-muted)]">
-          Name (z. B. „Hotels“)
-          <input
-            ref={nameInputRef}
-            type="text"
-            value={nameText}
-            onChange={(e) => setNameText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                submit()
-              }
-            }}
-            className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-sm text-[var(--color-text)]"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-[var(--color-text-muted)]">
-          Übergruppe (optional, z. B. „Schottland“) — bestehende wählen oder neu anlegen
-          <input
-            type="text"
-            value={groupText}
-            onChange={(e) => {
-              setGroupText(e.target.value)
-              setGroupOpen(true)
-              setHighlight(-1)
-            }}
-            onFocus={() => setGroupOpen(true)}
-            onKeyDown={(e) => {
-              if (e.key === 'ArrowDown') {
-                e.preventDefault()
-                setGroupOpen(true)
-                setHighlight((i) => Math.min(matches.length - 1, i + 1))
-              } else if (e.key === 'ArrowUp') {
-                e.preventDefault()
-                setHighlight((i) => Math.max(-1, i - 1))
-              } else if (e.key === 'Enter') {
-                e.preventDefault()
-                if (groupOpen && highlight >= 0 && matches[highlight]) pick(matches[highlight].name)
-                else submit()
-              }
-            }}
-            className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-sm text-[var(--color-text)]"
-          />
-        </label>
-        {groupOpen && matches.length > 0 && (
-          <ul className="max-h-32 overflow-auto rounded border border-[var(--color-border)] text-sm">
-            {matches.map((t, idx) => (
-              <li key={t.id}>
-                <button
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault()
-                    pick(t.name)
-                  }}
-                  className={'flex w-full px-2 py-1 text-left ' + (idx === highlight ? 'bg-[var(--color-computed)] text-white' : 'hover:bg-[var(--color-bg)]')}
-                >
-                  {t.name}
-                </button>
-              </li>
-            ))}
+        <input
+          ref={inputRef}
+          type="text"
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value)
+            setHighlight(0)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowDown') {
+              e.preventDefault()
+              setHighlight((i) => Math.min(optionCount - 1, i + 1))
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault()
+              setHighlight((i) => Math.max(0, i - 1))
+            } else if (e.key === 'Enter') {
+              e.preventDefault()
+              if (optionCount > 0) choose(highlight)
+            }
+          }}
+          placeholder="Tag suchen oder neu erstellen… (z.B. Schottland:Hotels)"
+          aria-label="Tag"
+          className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-sm text-[var(--color-text)]"
+        />
+        {optionCount > 0 && (
+          <ul className="max-h-60 overflow-auto rounded border border-[var(--color-border)] text-sm">
+            {suggestions.map((o, idx) => {
+              const colorVar = tagColorVar(o.tag)
+              return (
+                <li key={o.tag.id}>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      choose(idx)
+                    }}
+                    className={'flex w-full items-center gap-2 px-2 py-1 text-left ' + (idx === highlight ? 'bg-[var(--color-computed)] text-white' : 'hover:bg-[var(--color-bg)]')}
+                  >
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-full border border-[var(--color-text-muted)]"
+                      style={colorVar ? { backgroundColor: `var(${colorVar})`, borderColor: `var(${colorVar})` } : undefined}
+                    />
+                    {o.label}
+                  </button>
+                </li>
+              )
+            })}
+            {createOptions.map((opt, i) => {
+              const idx = suggestions.length + i
+              const colorVar = opt.groupingType ? tagColorVar({ class: 'grouping', groupingType: opt.groupingType }) : null
+              return (
+                <li key={opt.groupingType ?? 'null'}>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      choose(idx)
+                    }}
+                    className={'flex w-full items-center gap-2 px-2 py-1 text-left italic ' + (idx === highlight ? 'bg-[var(--color-computed)] text-white' : 'hover:bg-[var(--color-bg)]')}
+                  >
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-full border border-[var(--color-text-muted)]"
+                      style={colorVar ? { backgroundColor: `var(${colorVar})`, borderColor: `var(${colorVar})` } : undefined}
+                    />
+                    Neu „{typed}“ — {opt.label}
+                  </button>
+                </li>
+              )
+            })}
           </ul>
         )}
-        {groupText.trim() !== '' && !willReuse && (
-          <p className="text-xs italic text-[var(--color-text-muted)]">Neu „{groupText.trim()}“ wird angelegt</p>
-        )}
-        <div className="mt-1 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]"
-          >
+        <div className="flex justify-end">
+          <button type="button" onClick={onCancel} className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]">
             Abbrechen
-          </button>
-          <button
-            type="button"
-            onClick={submit}
-            disabled={!nameText.trim()}
-            className="rounded-md bg-[var(--color-computed)] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-          >
-            Hinzufügen
           </button>
         </div>
       </div>
@@ -1130,7 +1117,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     return true
   }
 
-  function createPlainGroupingTag(name, parentTag) {
+  function createPlainGroupingTag(name, parentTag, groupingType = null) {
     let id = slugify(name)
     if (tags.some((t) => t.id === id)) id = `${id}-${Math.random().toString(36).slice(2, 6)}`
     setDoc(doc(db, 'tags', id), {
@@ -1139,7 +1126,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
       parentTag,
       class: 'grouping',
       reconciliationTargetAccountIds: [],
-      groupingType: null,
+      groupingType,
       archived: false,
       // New this round (Markus: "new breakdown lines should be added to
       // the bottom of the list... not the top") — breakdown/rollup
@@ -1153,27 +1140,8 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     return id
   }
 
-  // Every top-level tag already used as a breakdown line (standalone) or
-  // as some breakdown line's own parent, anywhere for this one category/
-  // allocation tag (any plan version, any year already loaded) — the
-  // "Übergruppe" combobox's own option list in AddBreakdownModal (Sept
-  // 2026, Markus: "parent tag is a dropdown field with available parent
-  // tags **in that subcategory**... that have been created earlier").
-  function parentTagOptionsFor(targetKey, targetId) {
-    const usedTagIds = new Set(budgets.filter((b) => b[targetKey] === targetId && b.breakdownTagId != null).map((b) => b.breakdownTagId))
-    const parentIds = new Set()
-    for (const tagId of usedTagIds) {
-      const t = tagById.get(tagId)
-      parentIds.add(t?.parentTag ?? tagId)
-    }
-    return [...parentIds]
-      .map((id) => tagById.get(id))
-      .filter(Boolean)
-      .sort((a, b) => a.name.localeCompare(b.name))
-  }
-
   // Adding a breakdown line (Sept 2026, Markus, reworked the same round —
-  // see AddBreakdownModal below for the actual parent/subtag UI this
+  // see AddBreakdownModal for the tag picker UI this
   // feeds). Always writes all 12 months right away, even where the value
   // is 0, rather than migration's own "skip a zero month" convention: a
   // brand new line otherwise has *no* budget document anywhere yet, and
@@ -1225,20 +1193,22 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // "I should be able to add a breakdown line without a parent") just
   // creates/reuses `name` itself as a standalone tag, same exact-match
   // reuse rule.
-  async function handleAddBreakdownSubmit({ name, groupName }) {
+  async function handleAddBreakdownSubmit({ tagId: pickedId, text, groupingType = null }) {
     const target = addModalTarget
     setAddModalTarget(null)
     if (!target) return
-    const findTopLevel = (n) => tags.find((t) => t.class === 'grouping' && !t.parentTag && t.name.toLowerCase() === n.toLowerCase())
-    let tagId
-    if (groupName) {
-      const parent = findTopLevel(groupName)
-      const parentId = parent ? parent.id : createPlainGroupingTag(groupName, null)
-      const child = tags.find((t) => t.class === 'grouping' && t.parentTag === parentId && t.name.toLowerCase() === name.toLowerCase())
-      tagId = child ? child.id : createPlainGroupingTag(name, parentId)
-    } else {
-      const existing = findTopLevel(name)
-      tagId = existing ? existing.id : createPlainGroupingTag(name, null)
+    let tagId = pickedId
+    if (!tagId) {
+      // "Parent:Child" reuses the parent by name (or creates it, untyped) and
+      // creates the child with the chosen type; a plain label is a parent tag.
+      const { parent, child } = splitTagText(text)
+      const found = findTagByText(tags, text)
+      if (found) tagId = found.id
+      else if (parent) {
+        const parentTag = findTagByText(tags, parent)
+        const parentId = parentTag ? parentTag.id : createPlainGroupingTag(parent, null)
+        tagId = createPlainGroupingTag(child, parentId, groupingType)
+      } else tagId = createPlainGroupingTag(child, null, groupingType)
     }
     // Focus follows the newly created/reused line once it renders, in the
     // *same column* it was already in (Markus: "after creating a
@@ -2235,8 +2205,8 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
 
       {addModalTarget && (
         <AddBreakdownModal
-          parentOptions={parentTagOptionsFor(addModalTarget.targetKey, addModalTarget.targetId)}
-          tagExistsGloballyByName={(name) => tags.some((t) => t.class === 'grouping' && !t.parentTag && t.name.toLowerCase() === name)}
+          tags={tags}
+          excludeIds={new Set(breakdownTagIdsFor(addModalTarget.targetKey, addModalTarget.targetId, addModalTarget.planVersion))}
           onSubmit={handleAddBreakdownSubmit}
           onCancel={closeAddModal}
         />

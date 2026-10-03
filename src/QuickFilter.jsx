@@ -17,10 +17,23 @@ import { confirmedModel, quickFilterPasses, quickItems, suggestionsFor } from '.
 // onKeyDown): AG Grid's own popup closes on Escape/Enter with a native listener
 // on an ancestor element, which would run first and close the popup.
 // Model shapes: lib/quickFilter.js.
+// What was typed / ticked when Enter was last pressed, per column — so closing
+// and reopening the popup shows the search box and list as left (Oct 2026).
+// Only trusted while the filter in the grid is still the one that produced it.
+const lastConfirmed = new Map()
+function restoredUi(colId, m) {
+  const last = lastConfirmed.get(colId)
+  if (m && last && JSON.stringify(last.model) === JSON.stringify(m)) return { text: last.text, ticked: [...last.ticked] }
+  return {
+    text: m?.filterType === 'text' && m.type === 'contains' ? String(m.filter ?? '') : '',
+    ticked: m?.filterType === 'values' ? [...m.values] : [],
+  }
+}
+
 export default function QuickFilter({ model, onModelChange, getValue, column, api, doesRowPassOtherFilter }) {
   const colId = column.getColId()
-  const [text, setText] = useState(model?.filterType === 'text' && model.type === 'contains' ? String(model.filter ?? '') : '')
-  const [ticked, setTicked] = useState(() => (model?.filterType === 'values' ? [...model.values] : []))
+  const [text, setText] = useState(() => restoredUi(colId, model).text)
+  const [ticked, setTicked] = useState(() => restoredUi(colId, model).ticked)
   const [highlight, setHighlight] = useState(-1)
   const [candidates, setCandidates] = useState([])
   const inputRef = useRef(null)
@@ -45,9 +58,9 @@ export default function QuickFilter({ model, onModelChange, getValue, column, ap
     },
     afterGuiAttached: () => {
       // Opened (again): start from the filter as it currently is.
-      const m = modelRef.current
-      setText(m?.filterType === 'text' && m.type === 'contains' ? String(m.filter ?? '') : '')
-      setTicked(m?.filterType === 'values' ? [...m.values] : [])
+      const ui = restoredUi(colId, modelRef.current)
+      setText(ui.text)
+      setTicked(ui.ticked)
       setHighlight(-1)
       collectCandidates()
       inputRef.current?.focus()
@@ -70,7 +83,10 @@ export default function QuickFilter({ model, onModelChange, getValue, column, ap
   }
   function confirm() {
     const { text: t, ticked: tk, highlight: h, items: its } = live.current
-    onModelChange(confirmedModel({ ticked: tk, highlighted: h >= 0 ? its[h] : null, text: t }))
+    const next = confirmedModel({ ticked: tk, highlighted: h >= 0 ? its[h] : null, text: t })
+    if (next) lastConfirmed.set(colId, { model: next, text: t, ticked: [...tk] })
+    else lastConfirmed.delete(colId)
+    onModelChange(next)
     close()
   }
   function toggle(item) {
@@ -158,6 +174,7 @@ export default function QuickFilter({ model, onModelChange, getValue, column, ap
           type="button"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
+            lastConfirmed.delete(colId)
             onModelChange(null)
             close()
           }}
