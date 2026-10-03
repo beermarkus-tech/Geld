@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, u
 import { collection, deleteDoc, doc, onSnapshot, setDoc, writeBatch } from 'firebase/firestore'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { TAG_RENAME_MESSAGES } from './lib/tagRename'
-import { qualifiedTagName, tagColorVar } from './lib/tagStyle'
+import { qualifiedTagName } from './lib/tagStyle'
 import { findTagByText, replaceOptions, tagKey } from './lib/tagPicker'
 import ui from './lib/uiState'
 import { AgGridReact } from 'ag-grid-react'
@@ -23,6 +23,7 @@ import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { usageHint } from './lib/tags'
 import { usageOf, useTagActions, useTagUsage, useTags } from './TagsProvider'
 import { budgetDoc, budgetDocId } from './lib/budgetDocs'
+import TagPill, { listRowClass, typeLook } from './TagPill'
 import { CREATE_TYPES } from './TagEditor'
 
 // Ctrl/Cmd+Delete deletes a row (Oct 2026, Markus); the grid's own "Delete clears
@@ -397,10 +398,12 @@ const TagTitleEditor = forwardRef(function TagTitleEditor({ value, eventKey, api
                   e.preventDefault()
                   finishWith(() => onReplace(t.id))
                 }}
-                className={'flex w-full items-baseline gap-2 px-2 py-1 text-left ' + (i === highlight ? 'bg-[var(--color-computed)] text-white' : 'hover:bg-[var(--color-bg)]')}
+                className={listRowClass(i === highlight)}
               >
-                <span className="min-w-0 flex-1 truncate">{t.name}</span>
-                <span className="shrink-0 text-xs opacity-70">{usageHint(usageOf(usage, t.id))}</span>
+                <span className="min-w-0 flex-1">
+                  <TagPill tag={t} />
+                </span>
+                <span className="shrink-0 text-xs text-[var(--color-text-muted)]">{usageHint(usageOf(usage, t.id))}</span>
               </button>
             </li>
           ))}
@@ -486,7 +489,6 @@ function AddBreakdownModal({ tags, excludeIds, onSubmit, onCancel }) {
         {optionCount > 0 && (
           <ul className="max-h-60 overflow-auto rounded border border-[var(--color-border)] text-sm">
             {suggestions.map((o, idx) => {
-              const colorVar = tagColorVar(o.tag)
               return (
                 <li key={o.tag.id}>
                   <button
@@ -495,21 +497,18 @@ function AddBreakdownModal({ tags, excludeIds, onSubmit, onCancel }) {
                       e.preventDefault()
                       choose(idx)
                     }}
-                    className={'flex w-full items-center gap-2 px-2 py-1 text-left ' + (idx === highlight ? 'bg-[var(--color-computed)] text-white' : 'hover:bg-[var(--color-bg)]')}
+                    className={listRowClass(idx === highlight)}
                   >
-                    <span
-                      className="h-2 w-2 shrink-0 rounded-full border border-[var(--color-text-muted)]"
-                      style={colorVar ? { backgroundColor: `var(${colorVar})`, borderColor: `var(${colorVar})` } : undefined}
-                    />
-                    <span className="min-w-0 flex-1 truncate">{o.label}</span>
-                    <span className="shrink-0 text-xs opacity-70">{usageHint(usageOf(usage, o.tag.id))}</span>
+                    <span className="min-w-0 flex-1">
+                      <TagPill tag={o.tag}>{o.label}</TagPill>
+                    </span>
+                    <span className="shrink-0 text-xs text-[var(--color-text-muted)]">{usageHint(usageOf(usage, o.tag.id))}</span>
                   </button>
                 </li>
               )
             })}
             {createOptions.map((opt, i) => {
               const idx = suggestions.length + i
-              const colorVar = opt.groupingType ? tagColorVar({ class: 'grouping', groupingType: opt.groupingType }) : null
               return (
                 <li key={opt.groupingType ?? 'null'}>
                   <button
@@ -518,13 +517,11 @@ function AddBreakdownModal({ tags, excludeIds, onSubmit, onCancel }) {
                       e.preventDefault()
                       choose(idx)
                     }}
-                    className={'flex w-full items-center gap-2 px-2 py-1 text-left italic ' + (idx === highlight ? 'bg-[var(--color-computed)] text-white' : 'hover:bg-[var(--color-bg)]')}
+                    className={listRowClass(idx === highlight)}
                   >
-                    <span
-                      className="h-2 w-2 shrink-0 rounded-full border border-[var(--color-text-muted)]"
-                      style={colorVar ? { backgroundColor: `var(${colorVar})`, borderColor: `var(${colorVar})` } : undefined}
-                    />
-                    Neu „{typed}“ — {opt.label}
+                    <span className="text-xs text-[var(--color-text-muted)]">Neu</span>
+                    <TagPill tag={typeLook(opt.groupingType)}>{typed}</TagPill>
+                    <span className="text-xs text-[var(--color-text-muted)]">— {opt.label}</span>
                   </button>
                 </li>
               )
@@ -1830,14 +1827,10 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
           // every tag in Konten (Oct 2026, Markus) — coloured by the tag's type,
           // a dashed neutral outline when it has none yet.
           if (p.data.renameTagId) {
-            const colorVar = tagColorVar(live.current.tagById.get(p.data.renameTagId))
             return (
-              <span
-                className={`max-w-full truncate rounded-full px-1.5 py-0.5 text-xs ${p.data.isChildLine ? 'ml-3' : ''} ${colorVar ? '' : 'border border-dashed border-[var(--color-text-muted)] text-[var(--color-text-muted)]'}`}
-                style={colorVar ? { color: `var(${colorVar})`, backgroundColor: `color-mix(in srgb, var(${colorVar}) 15%, transparent)` } : undefined}
-              >
+              <TagPill tag={live.current.tagById.get(p.data.renameTagId)} className={p.data.isChildLine ? 'ml-3' : ''}>
                 {p.value}
-              </span>
+              </TagPill>
             )
           }
           if (l !== 'Prog' && l !== 'Plan1' && l !== 'Plan0') return p.value

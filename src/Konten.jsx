@@ -20,6 +20,7 @@ import { tagBalance, tagFilterMatchIds, tagFilterTotal, tagJahresende } from './
 import { qualifiedTagName, tagColorVar, tagParent } from './lib/tagStyle'
 import { useTagActions, useTags } from './TagsProvider'
 import TagEditor from './TagEditor'
+import { pillLook } from './TagPill'
 
 // Ctrl/Cmd+Delete deletes a row (Oct 2026, Markus); the grid's own "Delete clears
 // the cell" must not run on it too — onCellKeyDown still sees the key.
@@ -2165,13 +2166,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
             <div className="flex h-full flex-wrap content-center items-center gap-1 py-0.5">
               {ids.map((id) => {
                 const t = tagById[id]
-                const colorVar = tagColorVar(t)
-                const chipClassName =
-                  'rounded-full px-1.5 py-0.5 text-xs ' +
-                  (colorVar ? '' : 'border border-dashed border-[var(--color-text-muted)] text-[var(--color-text-muted)]')
-                const chipStyle = colorVar
-                  ? { color: `var(${colorVar})`, backgroundColor: `color-mix(in srgb, var(${colorVar}) 15%, transparent)` }
-                  : undefined
+                const { className: chipClassName, style: chipStyle } = pillLook(t) // TagPill.jsx
                 const parent = tagParent(t, tagById)
                 // A child tag ("Schottland: Fähre") splits into two
                 // independently clickable halves (Markus: "I need to be

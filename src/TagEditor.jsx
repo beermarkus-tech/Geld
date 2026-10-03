@@ -1,31 +1,16 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 
 import { findTagByText, tagKey } from './lib/tagPicker'
-import { qualifiedTagName, tagColorVar } from './lib/tagStyle'
+import { qualifiedTagName } from './lib/tagStyle'
+import TagPill, { listRowClass, pillLook, typeLook } from './TagPill'
 
-// A tag chip, colored when its type is determined (allocation, or a
-// grouping tag with a real groupingType) and a plain neutral dashed
-// outline otherwise — covers both a genuine unspecified grouping tag and
-// an unresolved legacy free-text string (no `tag` object at all) with the
-// exact same look, on purpose: from the user's side, "not yet categorized"
-// and "not a real tracked tag at all" read the same until proven
-// otherwise (Markus, real-usage feedback — a colored fill on a brand new
-// unspecified tag looked inconsistent with how an old free-text tag
-// already rendered next to it).
-function Chip({ label, colorVar, onRemove, title }) {
+// A selected tag: its pill (TagPill.jsx) with a remove ×. Untyped tags and old
+// plain-text tags both get the dashed outline, on purpose (Markus): "not yet
+// categorized" and "not a real tracked tag" read the same until resolved.
+function Chip({ tag, label, onRemove, title }) {
+  const look = pillLook(tag)
   return (
-    <span
-      title={title}
-      className={
-        'flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ' +
-        (colorVar ? '' : 'border border-dashed border-[var(--color-text-muted)] text-[var(--color-text-muted)]')
-      }
-      style={
-        colorVar
-          ? { color: `var(${colorVar})`, backgroundColor: `color-mix(in srgb, var(${colorVar}) 15%, transparent)` }
-          : undefined
-      }
-    >
+    <span title={title} className={`${look.className.replace('inline-block', '')} inline-flex items-center gap-1`} style={look.style}>
       {label}
       <button type="button" onClick={onRemove} className="leading-none">
         ×
@@ -265,8 +250,8 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
         {selectedChips.map((t) => (
           <Chip
             key={t.id}
+            tag={tagById[t.id]}
             label={qName(t) || t.id}
-            colorVar={tagColorVar(tagById[t.id])}
             onRemove={() => removeChip(t.id)}
             title={tagById[t.id] ? undefined : 'Alter Freitext-Tag — noch nicht mit einem echten Tag verknüpft'}
           />
@@ -287,7 +272,6 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
       {(suggestions.length > 0 || createTypeOptions.length > 0) && (
         <ul className="max-h-48 overflow-auto rounded border border-[var(--color-border)] text-sm">
           {suggestions.map((t, idx) => {
-            const colorVar = tagColorVar(t)
             return (
               <li key={t.id}>
                 {/* Separator after the 5 most-recently-used (Markus) — only
@@ -300,23 +284,15 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
                     e.preventDefault()
                     selectSuggestion(idx)
                   }}
-                  className={
-                    'flex w-full items-center gap-2 px-2 py-1 text-left ' +
-                    (idx === highlight ? 'bg-[var(--color-computed)] text-white' : 'hover:bg-[var(--color-bg)]')
-                  }
+                  className={listRowClass(idx === highlight)}
                 >
-                  <span
-                    className="h-2 w-2 shrink-0 rounded-full border border-[var(--color-text-muted)]"
-                    style={colorVar ? { backgroundColor: `var(${colorVar})`, borderColor: `var(${colorVar})` } : undefined}
-                  />
-                  {qName(t)}
+                  <TagPill tag={tagById[t.id]}>{qName(t)}</TagPill>
                 </button>
               </li>
             )
           })}
           {createTypeOptions.map((opt, i) => {
             const idx = suggestions.length + i
-            const colorVar = opt.groupingType ? tagColorVar({ class: 'grouping', groupingType: opt.groupingType }) : null
             return (
               <li key={opt.groupingType ?? 'null'}>
                 <button
@@ -325,16 +301,11 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
                     e.preventDefault()
                     selectSuggestion(idx)
                   }}
-                  className={
-                    'flex w-full items-center gap-2 px-2 py-1 text-left italic ' +
-                    (idx === highlight ? 'bg-[var(--color-computed)] text-white' : 'hover:bg-[var(--color-bg)]')
-                  }
+                  className={listRowClass(idx === highlight)}
                 >
-                  <span
-                    className="h-2 w-2 shrink-0 rounded-full border border-[var(--color-text-muted)]"
-                    style={colorVar ? { backgroundColor: `var(${colorVar})`, borderColor: `var(${colorVar})` } : undefined}
-                  />
-                  Neu „{inputText.trim()}“ — {opt.label}
+                  <span className="text-xs text-[var(--color-text-muted)]">Neu</span>
+                  <TagPill tag={typeLook(opt.groupingType)}>{inputText.trim()}</TagPill>
+                  <span className="text-xs text-[var(--color-text-muted)]">— {opt.label}</span>
                 </button>
               </li>
             )

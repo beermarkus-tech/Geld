@@ -3,8 +3,8 @@ import { collection, onSnapshot } from 'firebase/firestore'
 
 import { db } from './firebase'
 import { TAG_RENAME_MESSAGES } from './lib/tagRename'
-import { tagColorVar } from './lib/tagStyle'
 import { CREATE_TYPES } from './TagEditor'
+import TagPill from './TagPill'
 import { usageOf, useTagActions, useTagUsage, useTags } from './TagsProvider'
 
 // Settings (spec.md §3i) — the first section, built Oct 2026 (Markus): Tags,
@@ -49,7 +49,6 @@ function TagRow({ tag, depth, usage, targetNames, onRename, onSetType }) {
   const [error, setError] = useState('')
   const inputRef = useRef(null)
   const locked = tag.class === 'allocation'
-  const colorVar = tagColorVar(tag)
 
   useEffect(() => {
     if (editing) inputRef.current?.select()
@@ -103,13 +102,8 @@ function TagRow({ tag, depth, usage, targetNames, onRename, onSetType }) {
             title={locked ? 'Festes Rücklagen-Tag — nicht umbenennbar' : 'Klicken zum Umbenennen'}
             className="min-w-0 flex-1 text-left"
           >
-            {/* Drawn as the tag's pill, as in Konten and Verlauf (Oct 2026, Markus). */}
-            <span
-              className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 align-middle ${locked ? '' : 'hover:underline'} ${colorVar ? '' : 'border border-dashed border-[var(--color-text-muted)] text-[var(--color-text-muted)]'}`}
-              style={colorVar ? { color: `var(${colorVar})`, backgroundColor: `color-mix(in srgb, var(${colorVar}) 15%, transparent)` } : undefined}
-            >
-              {tag.name}
-            </span>
+            {/* Drawn as the tag's pill (TagPill.jsx), as everywhere else. */}
+            <TagPill tag={tag} size="md" className={locked ? '' : 'hover:underline'} />
             {locked && <span className="ml-2" aria-label="gesperrt">🔒</span>}
           </button>
         )}
