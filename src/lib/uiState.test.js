@@ -42,22 +42,21 @@ describe('uiState', () => {
     expect(createUiState(memory({ 'geld-ui-state': JSON.stringify({ v: 99, a: { b: 1 } }) }), manual()).get('a', 'b')).toBeNull()
   })
 
-  it('drops the saved state when the previous run never cleared its restore mark (crash guard)', () => {
-    const store = memory({ 'geld-ui-state': JSON.stringify({ v: 1, a: { b: 1 } }), 'geld-ui-restoring': '123' })
-    const s = createUiState(store, manual())
-    expect(s.crashed).toBe(true)
-    expect(s.get('a', 'b')).toBeNull()
+  it('drops the saved state once after a crash was marked, and only then', () => {
+    const store = memory({ 'geld-ui-state': JSON.stringify({ v: 1, a: { b: 1 } }) })
+    createUiState(store, manual()).markCrashed()
+    const afterCrash = createUiState(store, manual())
+    expect(afterCrash.crashed).toBe(true)
+    expect(afterCrash.get('a', 'b')).toBeNull()
     expect(store.raw['geld-ui-state']).toBeUndefined()
+    afterCrash.set('a', 'b', 2)
+    afterCrash.flush()
+    expect(createUiState(store, manual()).get('a', 'b')).toBe(2) // normal again from the second start on
   })
 
-  it('clears the restore mark after the guard time, so a normal reload keeps the state', () => {
+  it('keeps the state however often the app is reloaded quickly', () => {
     const store = memory({ 'geld-ui-state': JSON.stringify({ v: 1, a: { b: 1 } }) })
-    const t = manual()
-    createUiState(store, t)
-    expect(store.raw['geld-ui-restoring']).toBeDefined()
-    t.run()
-    expect(store.raw['geld-ui-restoring']).toBeUndefined()
-    expect(createUiState(store, manual()).get('a', 'b')).toBe(1)
+    for (let i = 0; i < 5; i++) expect(createUiState(store, manual()).get('a', 'b')).toBe(1)
   })
 
   it('survives a storage that throws', () => {

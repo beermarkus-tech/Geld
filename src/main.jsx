@@ -4,6 +4,7 @@ import { registerSW } from 'virtual:pwa-register'
 
 import App from './App.jsx'
 import BuildBadge from './BuildBadge.jsx'
+import ErrorBoundary from './ErrorBoundary.jsx'
 import { initTheme } from './lib/theme.js'
 import './index.css'
 
@@ -12,7 +13,9 @@ initTheme()
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
     <BuildBadge />
   </StrictMode>
 )

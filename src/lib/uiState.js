@@ -8,16 +8,17 @@
 // Safety rules (the restore must never be able to break the app):
 //  * every storage access is wrapped — a failure means "no saved state";
 //  * the saved blob is versioned and ignored when it doesn't match;
-//  * a crash guard: the app marks "restoring" at start and clears the mark
-//    5 s later; if the mark is still there at the next start the previous run
-//    died during/after a restore, so the saved state is dropped;
+//  * a crash guard: when the app really crashes (a render error — the white
+//    screen, caught by ErrorBoundary.jsx) it calls markCrashed(); the next
+//    start then drops the saved state once and begins clean. (An earlier
+//    version dropped the state after any reload within 5 s of a start, which
+//    lost it whenever Markus pressed Ctrl+R a few times in a row.)
 //  * writes are debounced and skipped when nothing changed.
 
 const KEY = 'geld-ui-state'
-const GUARD_KEY = 'geld-ui-restoring'
+const CRASH_KEY = 'geld-ui-crashed'
 const VERSION = 1
 const WRITE_DELAY_MS = 400
-const GUARD_MS = 5000
 
 export function createUiState(storage, { setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
   const safe = {
@@ -45,10 +46,10 @@ export function createUiState(storage, { setTimer = setTimeout, clearTimer = cle
   }
 
   let state = {}
-  const crashed = safe.get(GUARD_KEY) !== null
+  const crashed = safe.get(CRASH_KEY) !== null
   if (crashed) {
     safe.remove(KEY)
-    safe.remove(GUARD_KEY)
+    safe.remove(CRASH_KEY)
   } else {
     try {
       const parsed = JSON.parse(safe.get(KEY) ?? 'null')
@@ -57,8 +58,6 @@ export function createUiState(storage, { setTimer = setTimeout, clearTimer = cle
       state = {}
     }
   }
-  safe.set(GUARD_KEY, String(Date.now()))
-  setTimer(() => safe.remove(GUARD_KEY), GUARD_MS)
 
   let lastWritten = JSON.stringify(state)
   let timer = null
@@ -85,7 +84,13 @@ export function createUiState(storage, { setTimer = setTimeout, clearTimer = cle
       if (timer === null) timer = setTimer(flush, WRITE_DELAY_MS)
     },
     flush,
-    /** True when the previous run did not survive its restore (state was dropped). */
+    /** Call when the app crashed: the next start ignores the saved state (once). */
+    markCrashed() {
+      clearTimer(timer)
+      timer = null
+      safe.set(CRASH_KEY, String(Date.now()))
+    },
+    /** True when the previous run crashed (the saved state was dropped). */
     crashed,
   }
 }

@@ -1952,3 +1952,7 @@ Markus approved the list (screen, year, Konten filters/sort/toggles/expanded/cur
 ## Session 37, continued a sixty-fifth time — 2026-10-03 — Quickview: Strg+K instead of Strg+L
 
 Quickview's "open the category/tag dropdown" shortcut is now Strg+K (Markus; same key as "go to the panel" in Konten and "comment box" in Verlauf, each only on its own screen). Konten's Strg+K handler was global and is now limited to when Konten is the visible screen (`active`), so it no longer fires from the other screens. Popover and spec updated. Note that older spec/devlog entries still mention Strg+L for Quickview — history, not changed.
+
+## Session 37, continued a sixty-sixth time — 2026-10-03 — Remembered state was lost on repeated reloads
+
+Markus: after a couple of Ctrl+R in a row the remembered state (screen, collapsed breakdown lines, …) was gone. **Cause (my crash guard):** it dropped the saved state whenever the previous start was less than 5 seconds old — exactly what quick repeated reloads look like — and it also would have wiped it after any quick reload while testing. **Fix:** the time-based guard is gone; a real crash is now detected by a new `ErrorBoundary` around `App` (render error → `markCrashed()` + a restart screen), and only then does the next start drop the saved state, once. `uiState` tests adapted (101 pass). Harness-checked: state (screen, Quickview selection, Konto filter) intact after five reloads 0.7 s apart. The new restart screen replaces the empty white screen for render errors.
