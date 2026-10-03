@@ -377,7 +377,7 @@ function AddBreakdownModal({ tags, excludeIds, onSubmit, onCancel }) {
               .filter((o) => key === '' || tagKey(o.label).includes(key))
               .sort((a, b) => a.label.localeCompare(b.label, 'de'))
               .slice(0, 25)
-              .map(({ t, label }) => ({ key: t.id, id: t.id, tag: t, label, hint: usageHint(usageOf(usage, t.id)) }))
+              .map(({ t, label }) => ({ key: t.id, id: t.id, tag: t, label, hint: usageHint(usageOf(usage, t.id)), drillText: t.parentTag ? undefined : `${t.name}: ` }))
           }}
           getCreateTypes={(text) => (text.trim() !== '' && !findTagByText(tags, text) ? createTypesFor(tags, text, CREATE_TYPES) : [])}
           onPick={(o) => onSubmit({ tagId: o.id })}

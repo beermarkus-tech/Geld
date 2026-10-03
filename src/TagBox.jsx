@@ -7,6 +7,8 @@ import TagPill, { listRowClass, typeLook } from './TagPill'
 // typed doesn't exist yet, one "Neu … — Typ" row per type. Same keys
 // everywhere:
 //   ↓ / ↑    move through the list
+//   →        on a parent (an option with `drillText`): the field becomes
+//            "Parent: " and the list shows its children
 //   Enter    picks the highlighted entry; with nothing highlighted → onEnterNone
 //   Esc      first puts the field back to how it started, then closes
 // Used by Konten's Tags column (several tags, chips above), Verlauf's "add
@@ -20,7 +22,7 @@ import TagPill, { listRowClass, typeLook } from './TagPill'
 //   startText / resetText   the field's first value / what Esc puts back (default: startText)
 //   autoHighlight           highlight the first entry as you type (Konten, add line)
 //                           or nothing until ↓ (the name editor: Enter renames)
-//   getOptions(text)        → [{ key, tag, label, hint?, separatorBefore? }]
+//   getOptions(text)        → [{ key, tag, label, hint?, separatorBefore?, drillText? }]
 //   getCreateTypes(text)    → the "Neu" types to offer (CREATE_TYPES entries), or []
 //   onPick(option) / onCreate(text, groupingType) / onEnterNone(text) / onClose()
 //   onKey(event, text)      other keys (Backspace, Tab …); return true when handled
@@ -66,7 +68,7 @@ export default function TagBox({
   }, [])
 
   const live = useRef({})
-  live.current = { text, shown, total, choose, onEnterNone, onClose, onKey, reset: resetText ?? startText }
+  live.current = { text, shown, total, options, choose, onEnterNone, onClose, onKey, reset: resetText ?? startText }
   useEffect(() => {
     const el = inputRef.current
     if (!el) return
@@ -86,6 +88,12 @@ export default function TagBox({
         stop()
         if (L.shown >= 0 && L.shown < L.total) L.choose(L.shown)
         else L.onEnterNone?.(L.text)
+      } else if (e.key === 'ArrowRight' && L.options[L.shown]?.drillText && el.selectionStart === L.text.length) {
+        // → on a highlighted parent opens it: the field becomes "Parent: " and
+        // the list shows its children (Oct 2026, Markus).
+        stop()
+        setText(L.options[L.shown].drillText)
+        setHighlight(first)
       } else if (e.key === 'Escape') {
         stop()
         if (L.text !== L.reset) {
@@ -134,6 +142,11 @@ export default function TagBox({
                   <TagPill tag={o.tag}>{o.label}</TagPill>
                 </span>
                 {o.hint && <span className="shrink-0 text-xs text-[var(--color-text-muted)]">{o.hint}</span>}
+                {o.drillText && (
+                  <span className="shrink-0 text-xs text-[var(--color-text-muted)]" title="→ zeigt die Untertags">
+                    ›
+                  </span>
+                )}
               </button>
             </li>
           ))}

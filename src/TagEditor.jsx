@@ -53,6 +53,20 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
 
   const tagById = useMemo(() => Object.fromEntries(tags.map((t) => [t.id, t])), [tags])
   const qName = (t) => qualifiedTagName(t, tagById)
+  // The top-level tags whose family this booking already uses (on any of its
+  // lines, or chosen here): "2026-05 HAM" for a line tagged "2026-05 HAM: Taxi".
+  const familyParents = useMemo(() => {
+    const tx = data?.__isLine ? data.__parent : data
+    const ids = new Set([...(tx?.lines ?? []).flatMap((l) => l.tags ?? []), ...selectedIds])
+    const out = new Map()
+    for (const id of ids) {
+      const t = tagById[id]
+      if (!t || t.class !== 'grouping') continue
+      const top = t.parentTag ? tagById[t.parentTag] : t
+      if (top && !top.parentTag) out.set(top.id, top)
+    }
+    return [...out.values()].slice(0, 3)
+  }, [data, selectedIds, tagById])
 
   function getOptions(rawText) {
     const text = rawText.trim().toLowerCase()
@@ -76,14 +90,36 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
       recentCount = recent.length
       list = [...recent, ...byId.values()].slice(0, 25)
     }
-    return list.map((t, i) => ({
+    const asOption = (t, i) => ({
       key: t.id,
       id: t.id,
       tag: tagById[t.id],
       label: qName(t) || t.id,
       hint: tagById[t.id]?.class === 'grouping' ? usageHint(usageOf(usage, t.id)) : null,
       separatorBefore: recentCount > 0 && i === recentCount,
-    }))
+      // A top-level tag can be opened with → to pick or add one of its children.
+      drillText: tagById[t.id]?.class === 'grouping' && !tagById[t.id].parentTag ? `${tagById[t.id].name}: ` : undefined,
+    })
+    // The booking's own family first (Oct 2026, Markus): typing "Hotel" while
+    // the booking already carries "2026-05 HAM" (or one of its children)
+    // offers "2026-05 HAM: Hotel" — the existing child, or a new one.
+    const family = []
+    const raw = rawText.trim()
+    if (raw && !raw.includes(':')) {
+      for (const p of familyParents) {
+        const kids = tags.filter((t) => t.parentTag === p.id && !t.archived && !selectedIds.includes(t.id))
+        kids.filter((k) => k.name.toLowerCase().includes(text)).forEach((k) => family.push(k))
+        if (!tags.some((t) => t.parentTag === p.id && t.name.trim().toLowerCase() === text))
+          family.push({ newUnder: p, name: raw })
+      }
+    }
+    const familyIds = new Set(family.filter((f) => f.id).map((f) => f.id))
+    const familyOptions = family.map((f) =>
+      f.newUnder
+        ? { key: `new:${f.newUnder.id}`, createText: `${f.newUnder.name}:${f.name}`, groupingType: f.newUnder.groupingType ?? null, tag: { class: 'grouping', groupingType: f.newUnder.groupingType ?? null }, label: `${f.newUnder.name}: ${f.name}`, hint: 'neu' }
+        : asOption(f, -1),
+    )
+    return [...familyOptions, ...list.filter((t) => !familyIds.has(t.id)).map(asOption)].slice(0, 30)
   }
 
   // Not when the text names an existing tag (incl. allocation tags).
@@ -113,7 +149,7 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
         placeholder="Tag suchen oder neu erstellen… (z.B. Schottland:Fähre)"
         getOptions={getOptions}
         getCreateTypes={getCreateTypes}
-        onPick={(o) => add(o.id)}
+        onPick={(o) => add(o.createText ? onCreateTag(o.createText, o.groupingType) : o.id)}
         onCreate={(text, groupingType) => add(onCreateTag(text, groupingType))}
         onEnterNone={apply}
         onClose={() => api.stopEditing(true)}

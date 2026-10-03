@@ -68,6 +68,8 @@ export function headerChildMapping(tags, childIds, newParentId) {
 // for "Parent:Child" under an existing parent only the parent's type — a
 // family shares one type, so the new child gets it anyway.
 export function createTypesFor(tags, text, types) {
+  // "Parent:" with nothing after it yet (right after → opened a parent): nothing to create.
+  if (String(text).trim().endsWith(':')) return []
   const { parent } = splitTagText(text)
   const p = parent ? findTagByText(tags, parent) : null
   if (!p || p.parentTag) return types
