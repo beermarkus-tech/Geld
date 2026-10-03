@@ -14,6 +14,7 @@ import Aussenstaende from './Aussenstaende'
 import Planung from './Planung'
 import Quickview from './Quickview'
 import Settings from './Settings'
+import TagCleanup from './TagCleanup'
 import Verlauf from './Verlauf'
 
 export default function App() {
@@ -253,6 +254,7 @@ export default function App() {
       <div className={view === 'aussenstaende' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
         <Aussenstaende onOpenInKonten={openInKonten} active={view === 'aussenstaende'} />
       </div>
+      <TagCleanup />
       {view === 'settings' && <Settings />}
       {view === 'importexport' && <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} />}
       {/* Every other nav item (Dashboard, Quickview, Fortschritt,

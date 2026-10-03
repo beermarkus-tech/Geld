@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { collection, deleteDoc, doc, getDocs, onSnapshot, setDoc, writeBatch } from 'firebase/firestore'
+import { collection, deleteDoc, doc, onSnapshot, setDoc } from 'firebase/firestore'
 import { AgGridReact } from 'ag-grid-react'
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community'
 
@@ -12,7 +12,6 @@ import { centsToEuro } from './lib/format'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { withRemainder } from './lib/split'
 import { registerScreenCursor } from './lib/screenCursor'
-import { unusedTagIds } from './lib/unusedTags'
 import QuickFilter from './QuickFilter'
 import { isKnownQuickModel } from './lib/quickFilter'
 import ui from './lib/uiState'
@@ -2474,42 +2473,8 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     })
   }, [accounts, activeTransactions, tags, tagById, year, claimStatus])
 
-  // Removes tags nothing refers to any more (Oct 2026, Markus; lib/unusedTags.js
-  // has the rules) — whenever the tags/bookings change, a few seconds after
-  // the last change. Candidates are first found from the bookings alone; only
-  // when there are some are budgets/yearSettings read once more (breakdown
-  // lines and comments also point at tags), and a candidate they keep is not
-  // asked about again this session. A tag created within the last 10 minutes
-  // is left alone (it is created a moment before it is applied to its line).
-  const tagCleanupKeepRef = useRef(new Set())
+  // (Unused tags are removed by TagCleanup.jsx, app-wide.)
   const allLoaded = loaded.accounts && loaded.categories && loaded.tags && loaded.transactions
-  useEffect(() => {
-    if (!allLoaded || transactions.length === 0) return
-    const graceMs = 10 * 60 * 1000
-    const candidates = unusedTagIds({ tags, transactions, graceMs }).filter((id) => !tagCleanupKeepRef.current.has(id))
-    if (candidates.length === 0) return
-    const timer = setTimeout(async () => {
-      try {
-        const [budgetSnap, settingsSnap] = await Promise.all([getDocs(collection(db, 'budgets')), getDocs(collection(db, 'categoryYearSettings'))])
-        const ids = unusedTagIds({
-          tags,
-          transactions,
-          budgets: budgetSnap.docs.map((d) => d.data()),
-          yearSettings: settingsSnap.docs.map((d) => d.data()),
-          graceMs,
-        })
-        candidates.filter((id) => !ids.includes(id)).forEach((id) => tagCleanupKeepRef.current.add(id))
-        for (let i = 0; i < ids.length; i += 400) {
-          const batch = writeBatch(db)
-          ids.slice(i, i + 400).forEach((id) => batch.delete(doc(db, 'tags', id)))
-          await batch.commit()
-        }
-      } catch {
-        // best effort — tried again on the next change
-      }
-    }, 5000)
-    return () => clearTimeout(timer)
-  }, [allLoaded, tags, transactions])
 
   // Remembered between sessions (lib/uiState.js).
   useEffect(() => ui.set('konten', 'accountFilter', accountFilter), [accountFilter])
