@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth'
 
 import { auth } from './firebase'
@@ -78,9 +78,22 @@ export default function App() {
   const [kontenFrom, setKontenFrom] = useState(null)
   const openInKonten = (j) => {
     setKontenFrom(j.from ?? 'quickview')
+    if (j.year) setYear(String(j.year)) // e.g. a booking opened from Settings › Tags
     setKontenJump({ ...j, id: Date.now() })
     setView('konten')
   }
+  // Settings › Tags → a plan line's category in Planung (Oct 2026, Markus); Esc
+  // in Planung then goes back to Settings (see the Esc handler below).
+  const [planungJump, setPlanungJump] = useState(null)
+  const [planungFrom, setPlanungFrom] = useState(null)
+  const openInPlanung = (j) => {
+    setPlanungFrom('settings')
+    if (j.year) setYear(String(j.year))
+    setPlanungJump({ ...j, id: Date.now() })
+    setView('planung')
+  }
+  const backRef = useRef(null)
+  backRef.current = view === 'planung' && planungFrom ? planungFrom : null
 
   // Tab with nothing focused (right after switching screens or reloading)
   // puts the cursor on the active screen's remembered cell, or its first
@@ -138,7 +151,15 @@ export default function App() {
       if (e.key !== 'Escape' || e.ctrlKey || e.metaKey || e.altKey) return
       const wasBusy = busy
       setTimeout(() => {
-        if (!wasBusy && !e.defaultPrevented) window.dispatchEvent(new Event('geld-open-nav'))
+        if (wasBusy || e.defaultPrevented) return
+        // A "back" step first (Planung opened from Settings › Tags).
+        if (backRef.current) {
+          const to = backRef.current
+          setPlanungFrom(null)
+          setView(to)
+          return
+        }
+        window.dispatchEvent(new Event('geld-open-nav'))
       }, 0)
     }
     window.addEventListener('keydown', before, true)
@@ -212,6 +233,7 @@ export default function App() {
         onNavigate={(v) => {
           setQuickviewFrom(null)
           setKontenFrom(null)
+          setPlanungFrom(null)
           setView(v)
         }}
         year={year}
@@ -275,7 +297,7 @@ export default function App() {
             every time i switch screens") — it keeps its state, scroll position
             and cursor cell, and never rebuilds its report on a screen switch. */}
         <div className={view === 'planung' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
-          <Planung year={planungYear} active={view === 'planung'} />
+          <Planung year={planungYear} active={view === 'planung'} jump={planungJump} />
         </div>
         {/* Quickview mounts once and is only hidden, like the screens above
             (Oct 2026, Markus), so its selection and scroll position stay. */}
@@ -288,7 +310,7 @@ export default function App() {
         <div className={view === 'aussenstaende' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
           <Aussenstaende onOpenInKonten={openInKonten} active={view === 'aussenstaende'} />
         </div>
-        {view === 'settings' && <Settings />}
+        {view === 'settings' && <Settings onOpenInKonten={openInKonten} onOpenInPlanung={openInPlanung} />}
         {view === 'importexport' && <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} />}
         {/* Every other nav item (Dashboard, Quickview, Fortschritt,
             Monatsabschluss, Außenstände, Settings) isn't built yet —

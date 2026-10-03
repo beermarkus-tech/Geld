@@ -455,6 +455,14 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     if (jump.tagId) {
       api.setFilterModel(null)
       setAccountFilter(jump.tagId)
+      // From Settings › Tags: the cursor on the clicked booking — on its line
+      // carrying the tag when the booking is split (opened for that).
+      if (jump.focusTxId) {
+        const tx = transactions.find((t) => t.id === jump.focusTxId)
+        const lineIndex = (tx?.lines?.length ?? 0) > 1 ? tx.lines.findIndex((l) => (l.tags ?? []).includes(jump.tagId)) : -1
+        if (lineIndex >= 0) setExpandedIds((prev) => new Set(prev).add(tx.id))
+        claimPendingFocus(jump.focusTxId, 'tags', lineIndex >= 0 ? lineIndex : null)
+      }
       return
     }
     setAccountFilter(null)

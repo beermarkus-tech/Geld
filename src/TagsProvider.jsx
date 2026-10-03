@@ -4,6 +4,7 @@ import { collection, doc, onSnapshot, writeBatch } from 'firebase/firestore'
 import { db } from './firebase'
 import { planFindOrCreate, planMove, planRename, planReplaceInBlock, planSetType } from './lib/tagActions'
 import { planPlainTagConversion } from './lib/tagConvert'
+import { planMerge } from './lib/tagMerge'
 import { EMPTY_USAGE, tagIndex, tagUsage } from './lib/tags'
 import TagCleanup from './TagCleanup'
 
@@ -33,6 +34,7 @@ export function useTagUsage() {
 //   rename(id, name)                 → { ok } or { ok: false, reason }
 //   setType(id, groupingType)
 //   move(id, newParentId | null)     → { ok } or { ok: false, reason }
+//   merge(fromId, intoId)            → { ok, done } or { ok: false, reason }
 //   previewPlainTags(receivableIds) / convertPlainTags(receivableIds) → old plain-text tags → records
 //   replaceInBlock({ year, targetKey, targetId, planVersion, oldTagId,
 //                    isHeader, lineTagIds, newTagId })
@@ -123,6 +125,13 @@ export default function TagsProvider({ children }) {
         const r = planMove(currentTags(), tagId, newParentId)
         if (r.ok) write([{ col: 'tags', id: tagId, data: r.doc }])
         return r
+      },
+      // Merge one tag into another (lib/tagMerge.js) → { ok, done } or { ok: false, reason }.
+      merge(fromId, intoId) {
+        const d = latest.current.data
+        const r = planMerge(currentTags(), fromId, intoId, { transactions: d.transactions ?? [], budgets: d.budgets ?? [], cellComments: d.cellComments ?? [] })
+        if (!r.ok) return r
+        return { ok: true, done: write(r.sets, r.deletes) }
       },
       setType(tagId, groupingType) {
         const next = planSetType(currentTags(), tagId, groupingType)

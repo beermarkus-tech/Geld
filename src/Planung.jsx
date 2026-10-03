@@ -109,7 +109,7 @@ function deltaColor(cents) {
   return 'var(--color-text)'
 }
 
-export default function Planung({ year, active = true }) {
+export default function Planung({ year, active = true, jump = null }) {
   // Hidden screens keep the newest data aside instead of recomputing on every save elsewhere.
   const syncWhenVisible = useDeferWhileHidden(active)
   const [accounts, setAccounts] = useState([])
@@ -375,6 +375,22 @@ export default function Planung({ year, active = true }) {
       el.querySelector(`[data-nav-row="${CSS.escape(cell.row)}"][data-nav-col="${cell.col}"]`)?.focus({ preventScroll: true })
     }
   }, [active, hasReport])
+
+  // Opened for one category from Settings › Tags (a plan line, Oct 2026): once
+  // the report for that year is there, the cursor goes on the category's first
+  // cell and it is scrolled into view. Applied once per jump.
+  const appliedJumpRef = useRef(null)
+  useEffect(() => {
+    if (!jump || !active || !report || appliedJumpRef.current === jump.id) return
+    if (jump.year && String(planYear) !== String(jump.year)) return
+    const row = scrollRef.current?.querySelector(`[data-target-row="${CSS.escape(jump.targetId)}"]`)
+    if (!row) return
+    // Its comment cell when comments are shown, else the row itself.
+    const el = row.querySelector('[data-nav-row]') ?? row
+    appliedJumpRef.current = jump.id
+    el.focus({ preventScroll: true })
+    el.scrollIntoView({ block: 'center' })
+  }, [jump, active, report, planYear])
 
   if (!report) return null
 
@@ -714,7 +730,9 @@ function DataRow({ r, section, c }) {
   const { refYear, planYear, showComments } = c
   const pill = splitPill(r.split)
   return (
-    <tr>
+    // data-target-row + tabIndex: Settings › Tags can open Planung on this row
+    // (the row takes the cursor, outlined).
+    <tr data-target-row={r.targetId} tabIndex={-1} className="focus:outline-2 focus:-outline-offset-2 focus:outline-[var(--color-computed)]">
       <td className={`${NAME_TD} pl-6`} style={{ backgroundColor: SECTION_TINT[section] }}>
         {r.label}
       </td>
