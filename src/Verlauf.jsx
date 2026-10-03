@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { collection, deleteDoc, doc, onSnapshot, setDoc, writeBatch } from 'firebase/firestore'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { AgGridReact } from 'ag-grid-react'
@@ -259,24 +259,36 @@ function CellCommentField({ cell, description, savedText, onSave, onDone, inputR
     timer.current = setTimeout(flush, 800)
   }
 
+  // A multi-line box (Oct 2026, Markus): Enter adds a line break, only Esc
+  // leaves the box — and saves. While focused it grows downward over the
+  // header and the cells below; the slot it occupies in the toolbar keeps its
+  // single-line height so nothing else moves.
+  const [focused, setFocused] = useState(false)
+  useLayoutEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = '2rem'
+    if (focused) el.style.height = `${Math.min(el.scrollHeight + 2, 240)}px`
+  }, [draft, focused, inputRef])
+
   return (
-    <div className="relative">
-      <input
+    <div className="relative h-8 w-[22rem] max-w-full">
+      <textarea
         ref={inputRef}
-        type="text"
+        rows={1}
         value={draft}
-        maxLength={200}
+        maxLength={500}
         disabled={!cell}
         onChange={(e) => change(e.target.value)}
-        onBlur={flush}
+        onFocus={() => setFocused(true)}
+        onBlur={() => {
+          setFocused(false)
+          flush()
+        }}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') {
+          if (e.key === 'Escape') {
+            e.preventDefault()
             flush()
-            if (cell) onDone(cell)
-          } else if (e.key === 'Escape') {
-            clearTimeout(timer.current)
-            pending.current = { cell, dirty: false, text: savedText }
-            setDraft(savedText)
             if (cell) onDone(cell)
           }
         }}
@@ -285,7 +297,9 @@ function CellCommentField({ cell, description, savedText, onSave, onDone, inputR
         aria-label="Kommentar zur markierten Zelle"
         // Tinted yellow while the selected cell has a comment (Oct 2026, Markus),
         // so it is obvious at a glance without reading the text.
-        className={`w-[22rem] max-w-full rounded-md border py-1 pl-2 pr-8 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] placeholder:opacity-50 disabled:opacity-50 ${
+        className={`absolute left-0 top-0 w-full resize-none rounded-md border py-1 pl-2 pr-8 text-sm leading-5 text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] placeholder:opacity-50 disabled:opacity-50 ${
+          focused ? 'z-30 overflow-y-auto shadow-lg' : 'overflow-hidden whitespace-nowrap'
+        } ${
           draft && cell
             ? 'border-[var(--color-needs-attention)] bg-[color-mix(in_srgb,var(--color-needs-attention)_28%,var(--color-surface))]'
             : 'border-[var(--color-border)] bg-[var(--color-surface)]'
@@ -296,12 +310,13 @@ function CellCommentField({ cell, description, savedText, onSave, onDone, inputR
           type="button"
           aria-label="Kommentar löschen"
           title="Kommentar löschen"
+          onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
             change('')
             flush()
             inputRef.current?.focus()
           }}
-          className="absolute right-1 top-1/2 -translate-y-1/2 px-1 text-xl leading-none text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+          className="absolute right-1 top-0.5 z-40 px-1 text-xl leading-none text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
         >
           ×
         </button>
@@ -1945,7 +1960,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
                   <b>Strg+P</b> — Plan0 anzeigen
                 </li>
                 <li>
-                  <b>Strg+K</b> — Kommentar zur markierten Zelle schreiben (Enter/Esc: zurück zur Zelle)
+                  <b>Strg+K</b> — Kommentar zur markierten Zelle schreiben (Enter = neue Zeile, Esc = speichern und zurück zur Zelle)
                 </li>
                 <li>
                   <b>Strg+Q</b> — Quickview für die Unterkategorie der aktuellen Zeile öffnen

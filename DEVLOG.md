@@ -1934,3 +1934,7 @@ When the selected number cell has a comment, the comment field now has a yellow 
 ## Session 37, continued a sixty-first time — 2026-10-03 — Verlauf: Strg+K jumps into the comment box
 
 Strg+K on a Verlauf cell focuses the comment field (via a ref passed into `CellCommentField`; handled in Verlauf's global key handler, only while the screen is active and a cell is selected); the field's existing Enter/Esc behaviour already hands the cursor back to the cell. Added to the (i). Harness-checked: m3 → Strg+K → type → Enter lands on m3; then → m4, Strg+K, Esc lands on m4. **Risk:** browsers may reserve Strg+K (address/search bar in some); the page asks them not to — please confirm on the device.
+
+## Session 37, continued a sixty-second time — 2026-10-03 — Verlauf comment box: multi-line
+
+Markus: line breaks in comments; Enter must add a line, only Esc leaves (and saves); the box expands downward over header and cells. **Done (`CellCommentField` in `Verlauf.jsx`):** `<input>` → auto-growing `<textarea>` (absolute overlay, z-30, shadow, max ~240 px then scrolls; the toolbar slot keeps its one-line height), Enter = newline, Esc = save + hand the cursor back (**the old Esc "discard unsaved" behaviour is gone**), blur still saves, limit 200 → 500 characters, × button follows the top-right. Harness-checked: three lines typed with Enter stay in the box, Esc returns to the cell and the stored text is `"Zeile eins\nZeile zwei\ndrei"`. Existing comments are unchanged. Wherever a comment is shown as plain text elsewhere it will show the line breaks as spaces.
