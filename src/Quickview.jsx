@@ -6,6 +6,7 @@ import { db } from './firebase'
 import { centsToWholeEuro } from './lib/format'
 import { occurredMonthCount, quickviewMonths } from './lib/quickview'
 import { registerScreenCursor } from './lib/screenCursor'
+import ui from './lib/uiState'
 import Listbox from './Listbox'
 
 // Quickview (spec.md §3e) — a pure past-transaction deep-dive: pick one
@@ -44,13 +45,20 @@ export default function Quickview({ year, onOpenInKonten, active = true, preset 
   const [categories, setCategories] = useState([])
   const [tags, setTags] = useState([])
   const [transactions, setTransactions] = useState([])
-  const [selected, setSelected] = useState('')
+  // Selection and cursor are remembered between sessions (lib/uiState.js); a
+  // selection that no longer exists is dropped once the lists have loaded.
+  const [selected, setSelected] = useState(() => ui.get('quickview', 'selected', '') || '')
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const listboxRef = useRef(null)
   // The cursor: which row of which month panel ({month, index}), or null.
   // Lives here (the screen stays mounted), so it is remembered for the next
   // visit; cleared whenever a different category/tag is selected.
-  const [cursor, setCursor] = useState(null)
+  const [cursor, setCursor] = useState(() => {
+    const c = ui.get('quickview', 'cursor')
+    return c && Number.isInteger(c.month) && Number.isInteger(c.index) ? c : null
+  })
+  useEffect(() => ui.set('quickview', 'selected', selected), [selected])
+  useEffect(() => ui.set('quickview', 'cursor', cursor), [cursor])
   const openMonthRef = useRef(null)
 
   const select = (id) => {
@@ -133,6 +141,16 @@ export default function Quickview({ year, onOpenInKonten, active = true, preset 
       .sort((a, b) => a.name.localeCompare(b.name, 'de'))
     return [...cats, ...tgs]
   }, [categories, tags])
+
+  // A remembered selection whose category/tag is gone (e.g. an unused tag that
+  // was cleaned up) is dropped as soon as the lists have loaded.
+  useEffect(() => {
+    const ready = selected.startsWith('c:') ? categories.length > 0 : selected.startsWith('t:') ? tags.length > 0 : false
+    if (selected && ready && !options.some((o) => o.id === selected)) {
+      setSelected('')
+      setCursor(null)
+    }
+  }, [selected, options, categories.length, tags.length])
 
   const selection = selected ? { kind: selected.startsWith('c:') ? 'category' : 'tag', id: selected.slice(2) } : null
   const option = options.find((o) => o.id === selected)

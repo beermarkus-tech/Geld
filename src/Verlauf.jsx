@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { collection, deleteDoc, doc, onSnapshot, setDoc, writeBatch } from 'firebase/firestore'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
+import ui from './lib/uiState'
 import { AgGridReact } from 'ag-grid-react'
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community'
 
@@ -495,7 +496,13 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // checkbox does afterward.
   const [showPlan0, setShowPlan0] = useState(() => readBoolSetting(SHOW_PLAN0_KEY))
   const [showBreakdowns, setShowBreakdowns] = useState(() => readBoolSetting(SHOW_BREAKDOWNS_KEY))
-  const [blockOverrides, setBlockOverrides] = useState(() => new Map())
+  // Remembered between sessions (lib/uiState.js): which breakdown blocks the
+  // user expanded/collapsed by hand.
+  const [blockOverrides, setBlockOverrides] = useState(() => {
+    const saved = ui.get('verlauf', 'blocks', [])
+    return new Map(Array.isArray(saved) ? saved.filter((e) => Array.isArray(e) && typeof e[0] === 'string' && typeof e[1] === 'boolean') : [])
+  })
+  useEffect(() => ui.set('verlauf', 'blocks', [...blockOverrides]), [blockOverrides])
   // "letztes Jahr" checkbox (Oct 2026, Markus): an extra pinned column
   // showing last year's Prog/Plan1/Plan0 yearly totals next to this year's.
   // Off by default — the month columns shrink a little while it's shown.
@@ -1370,6 +1377,24 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     // eslint-disable-next-line react-hooks/exhaustive-deps -- gridReadyTick is a second trigger alongside rowData (see onGridReady's own comment) — whichever of "data ready" and "grid ready" finishes last is what actually applies a pending claim
   }, [rowData, gridReadyTick])
 
+  // Scroll back to the remembered top row once, after the rows are in and the
+  // cursor restore has run (lib/uiState.js) — best effort.
+  const scrollRestoredRef = useRef(false)
+  useEffect(() => {
+    const api = gridApiRef.current
+    if (!api || scrollRestoredRef.current || rowData.length === 0) return
+    scrollRestoredRef.current = true
+    const top = ui.get('verlauf', 'topRow')
+    if (typeof top !== 'number' || top <= 0) return
+    setTimeout(() => {
+      try {
+        api.ensureIndexVisible(Math.min(top, api.getDisplayedRowCount() - 1), 'top')
+      } catch {
+        /* ignore */
+      }
+    }, 900)
+  }, [rowData, gridReadyTick])
+
   // Restores the cursor to wherever it was when this screen was last left
   // (Markus: "generally, save the cursor position both in konten and
   // verlauf, and place the cursor there again upon switching") — `App.jsx`
@@ -2004,6 +2029,9 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
           // updates `budgets` looked like an entirely new dataset and
           // reset scroll position.
           getRowId={(p) => p.data.rowId}
+          onBodyScroll={(e) => {
+            if (e.direction === 'vertical') ui.set('verlauf', 'topRow', e.api.getFirstDisplayedRowIndex())
+          }}
           onGridReady={(p) => {
             gridApiRef.current = p.api
             // A fresh mount's own settle effect can otherwise run before

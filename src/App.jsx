@@ -6,6 +6,7 @@ import ImportExportScreen from './ImportExportScreen'
 import Konten from './Konten'
 import { waitForInitialAuthState } from './lib/authReady'
 import { focusScreenCursor } from './lib/screenCursor'
+import ui from './lib/uiState'
 import { useValueWhileVisible } from './lib/useDeferWhileHidden'
 import NavShell, { ALL_ITEMS } from './NavShell'
 import PlaceholderScreen from './PlaceholderScreen'
@@ -23,12 +24,18 @@ export default function App() {
   // Datenimport/Sicherung toggle row — `view` is one of NavShell's own
   // item ids (`ALL_ITEMS`), not tied to a URL (§1b.1: one static page,
   // navigation handled entirely in React state).
-  const [view, setView] = useState('konten')
+  // Restored from the last session (lib/uiState.js; an unknown id falls back to Konten).
+  const [view, setView] = useState(() => {
+    const saved = ui.get('app', 'view')
+    return ALL_ITEMS.some((i) => i.id === saved) ? saved : 'konten'
+  })
   // The single global year selector (§1b.2a) — lives in the shell's own
   // header now, not inside Konten. `years` starts empty until Konten (the
   // one screen that currently loads transactions) reports up what it
   // actually has data for.
-  const [year, setYear] = useState(null)
+  // The saved year is checked against the years that really have data once
+  // Konten has loaded them (Konten falls back to the latest year otherwise).
+  const [year, setYear] = useState(() => ui.get('app', 'year'))
   const [years, setYears] = useState([])
   // Hidden screens keep their last year until shown (see useValueWhileVisible).
   const verlaufYear = useValueWhileVisible(year, view === 'verlauf')
@@ -42,8 +49,14 @@ export default function App() {
   // destroying any state/refs it held. Plain in-memory state (not
   // localStorage) is enough — this is about switching screens within one
   // session, not surviving a reload.
-  const [kontenFocus, setKontenFocus] = useState(null)
-  const [verlaufFocus, setVerlaufFocus] = useState(null)
+  const [kontenFocus, setKontenFocus] = useState(() => ui.get('konten', 'focus'))
+  const [verlaufFocus, setVerlaufFocus] = useState(() => ui.get('verlauf', 'focus'))
+  useEffect(() => ui.set('app', 'view', view), [view])
+  useEffect(() => {
+    if (year) ui.set('app', 'year', year)
+  }, [year])
+  useEffect(() => ui.set('konten', 'focus', kontenFocus), [kontenFocus])
+  useEffect(() => ui.set('verlauf', 'focus', verlaufFocus), [verlaufFocus])
   // Quickview's jump into Konten (spec.md §3e): a fresh id per click, so
   // Konten applies each one exactly once.
   const [kontenJump, setKontenJump] = useState(null)

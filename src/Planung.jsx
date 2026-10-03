@@ -16,6 +16,7 @@ import {
 import { ALLOCATION_TAG_ORDER, GROUP_ORDER, SUBCAT_ORDER, isBudgetPlannedTag, isKnownSubcat } from './lib/categoryOrder'
 import { centsToWholeEuro, parseWholeEuroInput } from './lib/format'
 import { registerScreenCursor } from './lib/screenCursor'
+import ui from './lib/uiState'
 
 // Planung (spec.md §3c) — an annotated, read-only report over Verlauf's
 // own Plan0/Plan1/Prog figures. Nothing here edits a budget amount; the
@@ -124,8 +125,14 @@ export default function Planung({ year, active = true }) {
   // and put back when the screen is shown again (a hidden element loses
   // both, same job Konten/Verlauf do for their own cursor).
   const scrollRef = useRef(null)
-  const scrollTopRef = useRef(0)
-  const lastCellRef = useRef(null)
+  // Both start from the last session (lib/uiState.js) and are written back as they change.
+  const scrollTopRef = useRef(Number(ui.get('planung', 'scrollTop', 0)) || 0)
+  const lastCellRef = useRef(
+    (() => {
+      const c = ui.get('planung', 'cell')
+      return c && typeof c.row === 'string' && typeof c.col === 'string' ? c : null
+    })(),
+  )
 
   const planYear = Number(year)
   const refYear = planYear - 1
@@ -355,9 +362,11 @@ export default function Planung({ year, active = true }) {
   placeCursorRef.current = placeCursorFromTab
   useEffect(() => registerScreenCursor('planung', () => placeCursorRef.current()), [])
 
-  // Coming back to the screen: scroll and cursor exactly where they were.
+  // Coming back to the screen: scroll and cursor exactly where they were —
+  // also right after a reload, as soon as the report exists.
+  const hasReport = report !== null
   useLayoutEffect(() => {
-    if (!active) return
+    if (!active || !hasReport) return
     const el = scrollRef.current
     if (!el) return
     el.scrollTop = scrollTopRef.current
@@ -365,7 +374,7 @@ export default function Planung({ year, active = true }) {
     if (cell) {
       el.querySelector(`[data-nav-row="${CSS.escape(cell.row)}"][data-nav-col="${cell.col}"]`)?.focus({ preventScroll: true })
     }
-  }, [active])
+  }, [active, hasReport])
 
   if (!report) return null
 
@@ -374,11 +383,17 @@ export default function Planung({ year, active = true }) {
       ref={scrollRef}
       onScroll={(e) => {
         // A hidden element reports 0; only remember real scrolling.
-        if (e.currentTarget.offsetParent !== null) scrollTopRef.current = e.currentTarget.scrollTop
+        if (e.currentTarget.offsetParent !== null) {
+          scrollTopRef.current = e.currentTarget.scrollTop
+          ui.set('planung', 'scrollTop', scrollTopRef.current)
+        }
       }}
       onFocus={(e) => {
         const t = e.target
-        if (t.dataset?.navRow !== undefined) lastCellRef.current = { row: t.dataset.navRow, col: t.dataset.navCol }
+        if (t.dataset?.navRow !== undefined) {
+          lastCellRef.current = { row: t.dataset.navRow, col: t.dataset.navCol }
+          ui.set('planung', 'cell', lastCellRef.current)
+        }
       }}
       className="min-h-0 flex-1 overflow-auto px-4 py-4 md:px-5"
     >

@@ -4,6 +4,7 @@ import { collection, onSnapshot } from 'firebase/firestore'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { db } from './firebase'
 import { balance } from './lib/balance'
+import ui from './lib/uiState'
 import { claimOverview, receivableAccountIds } from './lib/claims'
 import { centsToEuro } from './lib/format'
 
@@ -18,8 +19,11 @@ export default function Aussenstaende({ onOpenInKonten, active = true }) {
   const [accounts, setAccounts] = useState([])
   const [tags, setTags] = useState([])
   const [transactions, setTransactions] = useState([])
-  const [tab, setTab] = useState('open')
-  const [expanded, setExpanded] = useState(() => new Set())
+  // Both remembered between sessions (lib/uiState.js).
+  const [tab, setTab] = useState(() => (ui.get('aussenstaende', 'tab') === 'settled' ? 'settled' : 'open'))
+  const [expanded, setExpanded] = useState(() => new Set(ui.get('aussenstaende', 'expanded', [])))
+  useEffect(() => ui.set('aussenstaende', 'tab', tab), [tab])
+  useEffect(() => ui.set('aussenstaende', 'expanded', [...expanded]), [expanded])
 
   useEffect(() => {
     const unsubs = [

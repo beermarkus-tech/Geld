@@ -13,6 +13,7 @@ import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { withRemainder } from './lib/split'
 import { registerScreenCursor } from './lib/screenCursor'
 import { unusedTagIds } from './lib/unusedTags'
+import ui from './lib/uiState'
 import { visibleSum } from './lib/visibleSum'
 import { tagBalance, tagFilterMatchIds, tagFilterTotal, tagJahresende } from './lib/tagBalance'
 import { qualifiedTagName, tagColorVar, tagParent } from './lib/tagStyle'
@@ -342,6 +343,24 @@ function OpeningRow({ data, api }) {
   )
 }
 
+// Column filters / sort remembered from the last session (lib/uiState.js);
+// only known filterable columns are taken over, anything else is dropped.
+const FILTER_COLUMNS = ['date', 'empfaenger', 'betrag', 'kategorie', 'unterkategorie', 'details', 'tags']
+const SORT_COLUMNS = ['date', 'betrag', 'kategorie', 'unterkategorie', 'empfaenger', 'details', 'tags']
+function readSavedFilterModel() {
+  const saved = ui.get('konten', 'filterModel', {})
+  if (!saved || typeof saved !== 'object') return {}
+  return Object.fromEntries(Object.entries(saved).filter(([k]) => FILTER_COLUMNS.includes(k)))
+}
+function readSavedSort() {
+  const saved = ui.get('konten', 'sort')
+  if (!Array.isArray(saved)) return null
+  const ok = saved.filter((s) => s && SORT_COLUMNS.includes(s.colId) && (s.sort === 'asc' || s.sort === 'desc'))
+  return ok.length > 0 ? ok : null
+}
+const savedFilterModel = readSavedFilterModel()
+const savedSort = readSavedSort()
+
 export default function Konten({ year, onYearChange, onYearsChange, initialFocus, onFocusChange, active = true, jump = null }) {
   const [accounts, setAccounts] = useState([])
   const [categories, setCategories] = useState([])
@@ -357,20 +376,20 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // the same account can show up on either side depending on that
   // transaction's direction. Picking an account here instead re-displays
   // every matching row from *that* account's own perspective.
-  const [accountFilter, setAccountFilter] = useState(null)
+  const [accountFilter, setAccountFilter] = useState(() => ui.get('konten', 'accountFilter'))
   // Tracks AG Grid's own column filters (Datum/Empfänger/Kategorie/
   // Unterkategorie/Details/Betrag/Tags' header filters) — separate from
   // accountFilter, which is Konten's own account/tag mechanism, not an AG
   // Grid column filter at all. Drives the "Filter zurücksetzen" button
   // below (Markus): visible whenever *either* kind of filter is active.
-  const [anyColumnFilter, setAnyColumnFilter] = useState(false)
+  const [anyColumnFilter, setAnyColumnFilter] = useState(() => Object.keys(savedFilterModel).length > 0)
   // Whether a Kategorie/Unterkategorie header filter is set (Markus, Sept
   // 2026: filtering "Gehalt Markus" must show the matching split *lines*,
   // not their "(mehrere)" booking rows). While true, every split booking's
   // lines are included in the grid as if expanded (displayRows below), so
   // the filter can match them one by one; the booking rows themselves
   // still filter on their own "(mehrere)" text and drop out.
-  const [categoryFilterActive, setCategoryFilterActive] = useState(false)
+  const [categoryFilterActive, setCategoryFilterActive] = useState(() => Boolean(savedFilterModel.kategorie || savedFilterModel.unterkategorie))
   // The total of whatever rows the grid currently shows (visibleSum(),
   // src/lib/visibleSum.js) — recomputed on every grid model update (filter,
   // sort or data change); null when adding the rows up isn't meaningful.
@@ -385,7 +404,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // "Kürzlich gelöscht" toggle (spec.md §2.9a's layer 4), off by default —
   // switched on, soft-deleted-but-not-yet-purged rows reappear in `rows`
   // below, visually distinct, each with its own Wiederherstellen action.
-  const [showDeleted, setShowDeleted] = useState(false)
+  const [showDeleted, setShowDeleted] = useState(() => ui.get('konten', 'showDeleted', false) === true)
   // Manual "empty the trash" (Markus: "i need a function to permanently
   // delete all 'kürzlich gelöscht' rows... in case i have to delete a
   // large number of rows for any reason") — distinct from the automatic
@@ -581,7 +600,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // (§3a: "parent row with an expand chevron... plus its detail rows
   // revealed on expand"). Keyed by the real transaction id, not the
   // synthetic line-row ids — those only exist while expanded.
-  const [expandedIds, setExpandedIds] = useState(() => new Set())
+  const [expandedIds, setExpandedIds] = useState(() => new Set(ui.get('konten', 'expanded', [])))
   function toggleExpanded(id) {
     setExpandedIds((prev) => {
       const next = new Set(prev)
@@ -1385,7 +1404,8 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // Default to the most recent year once data has loaded; a manual pick
   // (below) always overrides this.
   useEffect(() => {
-    if (year === null && years.length > 0) onYearChange(years[years.length - 1])
+    // also when the remembered year has no data any more
+    if (years.length > 0 && (year === null || !years.includes(String(year)))) onYearChange(years[years.length - 1])
   }, [years, year, onYearChange])
 
   // AG Grid's own change detection is keyed on row-data identity, not on
@@ -2470,6 +2490,42 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     return () => clearTimeout(timer)
   }, [allLoaded, tags, transactions])
 
+  // Remembered between sessions (lib/uiState.js).
+  useEffect(() => ui.set('konten', 'accountFilter', accountFilter), [accountFilter])
+  useEffect(() => ui.set('konten', 'showDeleted', showDeleted), [showDeleted])
+  useEffect(() => ui.set('konten', 'expanded', [...expandedIds]), [expandedIds])
+  // A remembered account/tag filter that no longer exists (account archived, an
+  // unused tag cleaned up) is dropped once everything is loaded, instead of
+  // leaving an empty grid behind.
+  const filterCheckedRef = useRef(false)
+  useEffect(() => {
+    if (!allLoaded || filterCheckedRef.current) return
+    filterCheckedRef.current = true
+    if (!accountFilter) return
+    const known =
+      accountById[accountFilter] ||
+      tagById[accountFilter] ||
+      transactions.some((t) => (t.lines ?? []).some((l) => (l.tags ?? []).includes(accountFilter)))
+    if (!known) setAccountFilter(null)
+  }, [allLoaded, accountFilter, accountById, tagById, transactions])
+  // Scroll back to the remembered top row once, after the rows are in and the
+  // cursor restore (which scrolls to the cursor row) has run — best effort.
+  const scrollRestoredRef = useRef(false)
+  useEffect(() => {
+    const api = gridRef.current?.api
+    if (!api || scrollRestoredRef.current || rows.length === 0) return
+    scrollRestoredRef.current = true
+    const top = ui.get('konten', 'topRow')
+    if (typeof top !== 'number' || top <= 0) return
+    setTimeout(() => {
+      try {
+        api.ensureIndexVisible(Math.min(top, api.getDisplayedRowCount() - 1), 'top')
+      } catch {
+        /* ignore */
+      }
+    }, 900)
+  }, [rows.length, gridReadyTick])
+
   const stillLoading = !(loaded.accounts && loaded.categories && loaded.tags && loaded.transactions)
 
   if (stillLoading) {
@@ -2829,6 +2885,18 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
             setAnyColumnFilter(e.api.isAnyFilterPresent())
             const model = e.api.getFilterModel()
             setCategoryFilterActive(!!(model.kategorie || model.unterkategorie))
+            ui.set('konten', 'filterModel', model)
+          }}
+          onSortChanged={(e) => {
+            const sorted = e.api
+              .getColumnState()
+              .filter((c) => c.sort)
+              .sort((a, b) => (a.sortIndex ?? 0) - (b.sortIndex ?? 0))
+              .map((c) => ({ colId: c.colId, sort: c.sort }))
+            ui.set('konten', 'sort', sorted)
+          }}
+          onBodyScroll={(e) => {
+            if (e.direction === 'vertical') ui.set('konten', 'topRow', e.api.getFirstDisplayedRowIndex())
           }}
           // suppressMovable (not just per-column, so it also covers the
           // default column menu) keeps the spec'd column order fixed —
@@ -2966,7 +3034,10 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           // initialState applies once and then gets out of the way, so
           // clicking any column header now does a normal single-column
           // sort/replace.
-          initialState={{ sort: { sortModel: [{ colId: 'date', sort: 'asc' }] } }}
+          initialState={{
+            sort: { sortModel: savedSort ?? [{ colId: 'date', sort: 'asc' }] },
+            ...(Object.keys(savedFilterModel).length > 0 ? { filter: { filterModel: savedFilterModel } } : {}),
+          }}
         />
       </div>
       {/* Confirmation for purgeAllDeleted (Markus) — a real, irreversible
