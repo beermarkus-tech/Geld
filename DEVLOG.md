@@ -2008,3 +2008,7 @@ Markus decided against an automatic or button merge of the import's twin tags: h
 ## Session 37, continued a seventy-eighth time — 2026-10-03 — New parent tags take the child's type
 
 Markus: creating "2025 La Rochelle:Unterkünfte" as Reise/Projekt in Verlauf left the new parent untyped (not green). **Fixed** in Verlauf's `handleAddBreakdownSubmit` and Konten's `createTag`: a parent created through "Parent:Child" gets the chosen type; an existing parent keeps its own. Harness-checked in both screens. Already-created untyped parents (like 2025 La Rochelle) are not changed — no way to set a tag's type after creation exists yet (open: Settings › Tags could offer it).
+
+## Session 37, continued a seventy-ninth time — 2026-10-03 — Settings › Tags: where is a tag used
+
+Markus: "2025 Besuch Dirk: Auto / Ausgaben2 / Haustiere" are not visibly used anywhere but aren't deleted. Settings shows "1 Budget" for each — one budget document (one month) still points at them, so TagCleanup correctly keeps them. Likely a Plan0 line (the replace only acts on the row's own plan version) or a line in another category/year; could not check his data from here. **Done:** Settings › Tags usage figures are clickable and list every plan line (year · plan version · category, months, sum) and booking (soft-deleted ones marked, they count too); the count now also shows "+N gelöscht". Harness-checked. **Open for Markus:** should replacing a line in Plan1 also replace the same tag in that block's Plan0?

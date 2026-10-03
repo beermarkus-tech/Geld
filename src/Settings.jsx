@@ -13,9 +13,36 @@ import { TAG_RENAME_MESSAGES, validateTagRename } from './lib/tagRename'
 // everywhere (Konten, Quickview, Außenstände, Verlauf). Tags that exist only
 // as plain text on old booking lines have no record here yet (see the note at
 // the end) and the fixed allocation tags (Sparen Familie …) are locked.
+const EMPTY_USAGE = { lines: 0, deletedLines: 0, budgets: 0, plans: [], bookings: [] }
 const TYPE_LABELS = { project: 'Reise/Projekt', statement: 'Abrechnung', claim: 'Anspruch', 'claim-category': 'Anspruchsart' }
 
+const euro = (cents) => `${Math.round(cents / 100).toLocaleString('de-DE')} €`
+
+// Where a tag is used (Oct 2026, Markus: tags that looked unused in Verlauf
+// weren't deleted — a plan value in a hidden Plan0 line or another year, or a
+// deleted booking, still holds them; see TagCleanup.jsx).
+function UsageDetails({ usage, depth }) {
+  return (
+    <div className="space-y-0.5 px-3 pb-2 text-xs text-[var(--color-text-muted)]" style={{ paddingLeft: 12 + depth * 22 + 16 }}>
+      {usage.plans.map((pl) => (
+        <div key={pl.key}>
+          Plan: {pl.year} · {pl.planVersion === 'plan0' ? 'Plan0' : 'Plan1'} · {pl.target} — {pl.months} {pl.months === 1 ? 'Monat' : 'Monate'}, zusammen {euro(pl.sum)}
+        </div>
+      ))}
+      {usage.bookings.slice(0, 20).map((b, i) => (
+        <div key={i}>
+          Buchung: {b.date} · {b.label || '—'} · {euro(b.cents)}
+          {b.deleted && ' (gelöscht — zählt, bis sie endgültig entfernt ist)'}
+        </div>
+      ))}
+      {usage.bookings.length > 20 && <div>… {usage.bookings.length - 20} weitere Buchungen</div>}
+      {usage.plans.length === 0 && usage.bookings.length === 0 && <div>Nirgends verwendet — wird automatisch entfernt.</div>}
+    </div>
+  )
+}
+
 function TagRow({ tag, depth, usage, onRename }) {
+  const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(tag.name)
   const [error, setError] = useState('')
@@ -81,11 +108,18 @@ function TagRow({ tag, depth, usage, onRename }) {
         {tag.groupingType && TYPE_LABELS[tag.groupingType] && (
           <span className="shrink-0 rounded-full border border-[var(--color-border)] px-2 text-xs text-[var(--color-text-muted)]">{TYPE_LABELS[tag.groupingType]}</span>
         )}
-        <span className="w-36 shrink-0 text-right text-xs tabular-nums text-[var(--color-text-muted)]">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          title="Zeigen, wo dieser Tag verwendet wird"
+          className="w-40 shrink-0 text-right text-xs tabular-nums text-[var(--color-text-muted)] hover:underline"
+        >
           {usage.lines} {usage.lines === 1 ? 'Buchungszeile' : 'Buchungszeilen'}
-          {usage.budgets > 0 && ` · ${usage.budgets} Budget`}
-        </span>
+          {usage.deletedLines > 0 && ` (+${usage.deletedLines} gelöscht)`}
+          {usage.budgets > 0 && ` · ${usage.budgets} Budget`} {open ? '▴' : '▾'}
+        </button>
       </div>
+      {open && <UsageDetails usage={usage} depth={depth} />}
       {error && <div className="px-3 pb-1.5 text-xs text-[var(--color-alert)]" style={{ paddingLeft: 12 + depth * 22 }}>{error}</div>}
     </div>
   )
@@ -95,24 +129,52 @@ export default function Settings() {
   const [tags, setTags] = useState([])
   const [transactions, setTransactions] = useState([])
   const [budgets, setBudgets] = useState([])
+  const [categories, setCategories] = useState([])
   const [filter, setFilter] = useState('')
 
   useEffect(() => {
     const unsubs = [
       onSnapshot(collection(db, 'tags'), (snap) => setTags(snap.docs.map((d) => d.data()))),
-      onSnapshot(collection(db, 'transactions'), (snap) => setTransactions(snap.docs.map((d) => d.data()).filter((t) => !t.deletedAt))),
+      onSnapshot(collection(db, 'transactions'), (snap) => setTransactions(snap.docs.map((d) => d.data()))),
+      onSnapshot(collection(db, 'categories'), (snap) => setCategories(snap.docs.map((d) => d.data()))),
       onSnapshot(collection(db, 'budgets'), (snap) => setBudgets(snap.docs.map((d) => d.data()))),
     ]
     return () => unsubs.forEach((u) => u())
   }, [])
 
   const usage = useMemo(() => {
+    const names = new Map([...categories, ...tags].map((x) => [x.id, x.name]))
     const map = new Map()
-    const entry = (id) => map.get(id) ?? map.set(id, { lines: 0, budgets: 0 }).get(id)
-    for (const t of transactions) for (const l of t.lines ?? []) for (const id of l.tags ?? []) entry(id).lines += 1
-    for (const b of budgets) if (b.breakdownTagId) entry(b.breakdownTagId).budgets += 1
+    const entry = (id) => map.get(id) ?? map.set(id, { lines: 0, deletedLines: 0, budgets: 0, plans: [], bookings: [], planByKey: new Map() }).get(id)
+    for (const t of transactions)
+      for (const l of t.lines ?? [])
+        for (const id of l.tags ?? []) {
+          const e = entry(id)
+          if (t.deletedAt) e.deletedLines += 1
+          else e.lines += 1
+          e.bookings.push({ date: t.date, label: t.displayLabel, cents: l.amountCents ?? 0, deleted: Boolean(t.deletedAt) })
+        }
+    for (const b of budgets) {
+      if (!b.breakdownTagId) continue
+      const e = entry(b.breakdownTagId)
+      e.budgets += 1
+      const target = b.categoryId ?? b.allocationTagId
+      const key = `${b.year}|${b.planVersion}|${target}`
+      if (!e.planByKey.has(key)) {
+        const pl = { key, year: b.year, planVersion: b.planVersion, target: names.get(target) ?? target, months: 0, sum: 0 }
+        e.planByKey.set(key, pl)
+        e.plans.push(pl)
+      }
+      const pl = e.planByKey.get(key)
+      pl.months += 1
+      pl.sum += b.plannedAmountCents ?? 0
+    }
+    for (const e of map.values()) {
+      e.plans.sort((a, b) => a.year - b.year || a.planVersion.localeCompare(b.planVersion))
+      e.bookings.sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    }
     return map
-  }, [transactions, budgets])
+  }, [transactions, budgets, categories, tags])
 
   // Old tags that exist only as plain text on booking lines (no record in `tags`).
   const plainTextTags = useMemo(() => {
@@ -164,7 +226,7 @@ export default function Settings() {
         <div className="rounded-lg border border-[color-mix(in_srgb,var(--color-text)_30%,transparent)] bg-[var(--color-surface)]">
           {shown.length === 0 && <div className="px-3 py-3 text-sm text-[var(--color-text-muted)]">Keine Tags gefunden.</div>}
           {shown.map(({ tag, depth }) => (
-            <TagRow key={tag.id} tag={tag} depth={needle ? 0 : depth} usage={usage.get(tag.id) ?? { lines: 0, budgets: 0 }} onRename={rename} />
+            <TagRow key={tag.id} tag={tag} depth={needle ? 0 : depth} usage={usage.get(tag.id) ?? EMPTY_USAGE} onRename={rename} />
           ))}
         </div>
         {allocation.length > 0 && !needle && (
@@ -172,7 +234,7 @@ export default function Settings() {
             <h3 className="pt-2 text-sm font-medium text-[var(--color-text-muted)]">Feste Rücklagen-Tags</h3>
             <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]">
               {allocation.map((tag) => (
-                <TagRow key={tag.id} tag={tag} depth={0} usage={usage.get(tag.id) ?? { lines: 0, budgets: 0 }} onRename={rename} />
+                <TagRow key={tag.id} tag={tag} depth={0} usage={usage.get(tag.id) ?? EMPTY_USAGE} onRename={rename} />
               ))}
             </div>
           </>
