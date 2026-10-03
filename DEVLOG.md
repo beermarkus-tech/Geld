@@ -2024,3 +2024,7 @@ Markus: split lines sorted alphabetically by their tags. **Done** in `Verlauf.js
 ## Session 37, continued an eighty-second time — 2026-10-03 — Konten tag picker shows Verlauf-created tags
 
 Markus: tags created in Verlauf weren't available in Konten's tag modal. Cause: `TagEditor.jsx` only suggested grouping tags used on a booking line (or an exact name match) — Verlauf tags are used only by budgets. **Fixed:** every grouping tag is suggested; the gate is obsolete since unused tags delete themselves. Harness-checked: "Roch" finds "2025 La Rochelle" and "2025 La Rochelle: Unterkünfte" (budget-only).
+
+## Session 37, continued an eighty-third time — 2026-10-03 — Tag type changes show everywhere; child lines indented
+
+Markus: a type changed in Settings didn't show in Verlauf or Konten; and indent child split lines. **Cause:** neither grid redrew its tag cells when only a tag changed (Verlauf's columns no longer rebuild on tag changes since Build 186; Konten's rebuilt column definitions don't redraw cells either). **Fixed:** `refreshCells` on the tag column whenever `tagById` changes (Konten `tags`; Verlauf `rowTitle`, also when the screen becomes visible). Child lines carry `isChildLine` and their pill is indented (`ml-3`). Harness-checked: Settings → Abrechnung turns the pill in Verlauf and the chip in Konten blue at once; indent screenshot.

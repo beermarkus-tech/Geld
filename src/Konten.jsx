@@ -1446,6 +1446,10 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   useEffect(() => {
     gridRef.current?.api?.refreshCells({ columns: ['unterkategorie'], force: true })
   }, [openClaimIds])
+  // A tag renamed or retyped (e.g. in Settings, Oct 2026) redraws the chips.
+  useEffect(() => {
+    gridRef.current?.api?.refreshCells({ columns: ['tags'], force: true })
+  }, [tagById])
 
   // Keeps the Tags column's own native header filter in sync with
   // accountFilter whenever it's a tag (Markus: clicking a tag to filter

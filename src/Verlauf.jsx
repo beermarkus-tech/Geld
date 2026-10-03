@@ -1054,6 +1054,8 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         breakdownActionsSpanKey: blockKey,
         breakdownTagId: tagId,
         renameTagId: tagId,
+        // A line under an Übergruppe is drawn indented (Oct 2026, Markus).
+        isChildLine: Boolean(tagById.get(tagId)?.parentTag),
         breakdownLabel: tagName(tagId),
         months: line.months,
         yearTotal: line.yearTotal,
@@ -1579,6 +1581,11 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // rebuilding the columns whenever they change: a rebuild re-creates the
   // grid body and scrolled it back to the top on every new breakdown line
   // (Oct 2026, Markus: "adding a breakdown line makes the grid jump to the top").
+  // A tag renamed or retyped elsewhere (e.g. Settings, Oct 2026) redraws the
+  // title pills — the columns aren't rebuilt for tag changes (see `live`).
+  useEffect(() => {
+    if (active) gridApiRef.current?.refreshCells({ columns: ['rowTitle'], force: true })
+  }, [tagById, active])
   const live = useRef({})
   live.current = { persistBudgetMonth, renameTag, tagById, replaceOptionsFor, replaceBreakdownTag, usageHint }
   const columnDefs = useMemo(() => {
@@ -1932,7 +1939,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
             const colorVar = tagColorVar(live.current.tagById.get(p.data.renameTagId))
             return (
               <span
-                className={`max-w-full truncate rounded-full px-1.5 py-0.5 text-xs ${colorVar ? '' : 'border border-dashed border-[var(--color-text-muted)] text-[var(--color-text-muted)]'}`}
+                className={`max-w-full truncate rounded-full px-1.5 py-0.5 text-xs ${p.data.isChildLine ? 'ml-3' : ''} ${colorVar ? '' : 'border border-dashed border-[var(--color-text-muted)] text-[var(--color-text-muted)]'}`}
                 style={colorVar ? { color: `var(${colorVar})`, backgroundColor: `color-mix(in srgb, var(${colorVar}) 15%, transparent)` } : undefined}
               >
                 {p.value}
