@@ -2016,3 +2016,7 @@ Markus: "2025 Besuch Dirk: Auto / Ausgaben2 / Haustiere" are not visibly used an
 ## Session 37, continued an eightieth time — 2026-10-03 — Settings › Tags: change type, tags drawn as pills
 
 Markus confirmed the leftover tags were held by Plan0 lines. Then: change a tag's type in Settings › Tags, and draw tags in their type's design. **Done** (`Settings.jsx`): tag names are pills (`tagColorVar`, dashed when untyped), a type `<select>` (`CREATE_TYPES` from `TagEditor.jsx`) writes `groupingType`; allocation tags stay locked ("Rücklage"). Told Markus: a type change has effects (Anspruch ↔ Außenstände, Reise/Projekt ↔ Quickview). Harness-checked: pills/colours render, changing "Dirk Sept" saves `groupingType`. Children are not changed along with their parent — say if they should.
+
+## Session 37, continued an eighty-first time — 2026-10-03 — Breakdown lines sorted alphabetically
+
+Markus: split lines sorted alphabetically by their tags. **Done** in `Verlauf.jsx` `planVersionRows`: `byName` (localeCompare 'de', base sensitivity) replaces the creation-order `byOrder`; Übergruppen and standalone lines are sorted together, children within a group too. Harness-checked: Apfel, Öl, Schottland (Ausgaben, Bahn, Zimmer), Zebra. `createdAt` on tags is no longer used for ordering (still used by the unused-tag grace period).

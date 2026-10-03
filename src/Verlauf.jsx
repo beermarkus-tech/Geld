@@ -1032,14 +1032,11 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         standalone.push(tagId)
       }
     }
-    // Sorted by creation order, not alphabetically (Markus, Sept 2026: "new
-    // breakdown lines should be added to the bottom of the list... not the
-    // top") — see createPlainGroupingTag()'s own comment on why a tag
-    // without a `createdAt` (every pre-existing one) sorts as if it were 0,
-    // i.e. before every freshly created one, alphabetical only as a
-    // tie-break among those.
-    const byOrder = (a, b) => (tagById.get(a)?.createdAt ?? 0) - (tagById.get(b)?.createdAt ?? 0) || tagName(a).localeCompare(tagName(b))
-    const parentIds = [...byParent.keys()].sort(byOrder)
+    // Alphabetical by tag name (Oct 2026, Markus: "make sure the splitlines
+    // are alphabetically sorted by their tags" — replaces the Sept 2026
+    // creation order): Übergruppen and lines without one are sorted together,
+    // the lines inside an Übergruppe too.
+    const byName = (a, b) => tagName(a).localeCompare(tagName(b), 'de', { sensitivity: 'base' }) || a.localeCompare(b)
 
     function breakdownRow(tagId) {
       const line = budgetBreakdownLineMonths(common.targetKey, common.targetId, tagId, planVersion, yearNum, budgets)
@@ -1063,8 +1060,8 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
       }
     }
 
-    for (const parentId of parentIds) {
-      const childIds = byParent.get(parentId).sort(byOrder)
+    function pushGroup(parentId) {
+      const childIds = byParent.get(parentId).sort(byName)
       const plannedSum = (i) =>
         childIds.reduce(
           (sum, cid) => sum + budgetBreakdownLineMonths(common.targetKey, common.targetId, cid, planVersion, yearNum, budgets).months[i],
@@ -1131,8 +1128,12 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
       })
       childIds.forEach((tagId) => out.push(breakdownRow(tagId)))
     }
-    const standaloneSorted = [...standalone].sort(byOrder)
-    standaloneSorted.forEach((tagId) => out.push(breakdownRow(tagId)))
+    const entries = [...[...byParent.keys()].map((id) => ({ id, group: true })), ...standalone.map((id) => ({ id, group: false }))]
+    entries.sort((a, b) => byName(a.id, b.id) || Number(b.group) - Number(a.group))
+    for (const e of entries) {
+      if (e.group) pushGroup(e.id)
+      else out.push(breakdownRow(e.id))
+    }
     return out
   }
 
