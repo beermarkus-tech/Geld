@@ -2078,3 +2078,7 @@ Markus: a merge function in Settings; type chips showing parent → indented chi
 ## Session 37, continued a ninety-fifth time — 2026-10-03 — Settings › Tags: (i), Ctrl+K, no explainer
 
 Markus: remove the explanation text; Ctrl+K into the search; an (i) with shortcuts like Konten. **Done** (`Settings.jsx`): text removed; (i) popover (hover / Ctrl+I, Esc closes without opening the sidebar) listing Ctrl+K, Esc, rename, Übergruppe/Typ, ⇢ merge, usage links, chips; Ctrl+K focuses and selects the search; Esc on an empty search field blurs it so the next Esc opens the sidebar. Harness-checked all of it.
+
+## Session 37, continued a ninety-sixth time — 2026-10-03 — Settings › Tags: one font size
+
+Markus: dropdowns and the usage column in the same size as the tag pills. **Done:** Übergruppe/Typ selects, "Rücklage", "nur Text" and the usage column now `text-sm` (was `text-xs`), widths adjusted (selects w-48/w-40, usage w-72, still one line). Screenshot checked.

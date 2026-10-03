@@ -63,8 +63,8 @@ function PlainTagRow({ id, usage, targetNames, open, onToggle, onOpenBooking }) 
         <span className="min-w-0 flex-1">
           <TagPill size="md">{id}</TagPill>
         </span>
-        <span className="text-xs text-[var(--color-text-muted)]">nur Text</span>
-        <button type="button" onClick={onToggle} className="w-60 shrink-0 whitespace-nowrap text-right text-xs tabular-nums text-[var(--color-text-muted)] hover:underline">
+        <span className="text-sm text-[var(--color-text-muted)]">nur Text</span>
+        <button type="button" onClick={onToggle} className="w-72 shrink-0 whitespace-nowrap text-right text-sm tabular-nums text-[var(--color-text-muted)] hover:underline">
           {usage.lines} {usage.lines === 1 ? 'Buchungszeile' : 'Buchungszeilen'}
           {usage.deletedLines > 0 && ` (+${usage.deletedLines} gelöscht)`} {open ? '▴' : '▾'}
         </button>
@@ -159,7 +159,7 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
             }}
             aria-label="Übergruppe"
             title={hasChildren ? 'Hat selbst Untertags — bleibt oben' : 'Übergruppe'}
-            className="w-40 shrink-0 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-1 py-0.5 text-xs text-[var(--color-text)] disabled:opacity-50"
+            className="w-48 shrink-0 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-1 py-0.5 text-sm text-[var(--color-text)] disabled:opacity-50"
           >
             <option value="">— keine Übergruppe —</option>
             {parents
@@ -172,7 +172,7 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
           </select>
         )}
         {locked ? (
-          <span className="w-32 shrink-0 text-xs text-[var(--color-text-muted)]">Rücklage</span>
+          <span className="w-40 shrink-0 text-sm text-[var(--color-text-muted)]">Rücklage</span>
         ) : (
           // The type can be changed here (Oct 2026, Markus). It decides where the
           // tag shows up: Anspruch → Außenstände, Reise/Projekt → Quickview rows.
@@ -180,7 +180,7 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
             value={tag.groupingType ?? ''}
             onChange={(e) => onSetType(tag.id, e.target.value || null)}
             aria-label="Typ"
-            className="w-32 shrink-0 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-1 py-0.5 text-xs text-[var(--color-text)]"
+            className="w-40 shrink-0 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-1 py-0.5 text-sm text-[var(--color-text)]"
           >
             {CREATE_TYPES.map((o) => (
               <option key={o.groupingType ?? 'none'} value={o.groupingType ?? ''}>
@@ -206,7 +206,7 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
           type="button"
           onClick={onToggle}
           title="Zeigen, wo dieser Tag verwendet wird"
-          className="w-60 shrink-0 whitespace-nowrap text-right text-xs tabular-nums text-[var(--color-text-muted)] hover:underline"
+          className="w-72 shrink-0 whitespace-nowrap text-right text-sm tabular-nums text-[var(--color-text-muted)] hover:underline"
         >
           {usage.lines} {usage.lines === 1 ? 'Buchungszeile' : 'Buchungszeilen'}
           {usage.deletedLines > 0 && ` (+${usage.deletedLines} gelöscht)`}
