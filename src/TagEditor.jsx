@@ -83,17 +83,12 @@ export const CREATE_TYPES = [
 // typing a child's bare name or its full "Parent: Child" form both find
 // it.
 //
-// **Suggestions are usage-derived for grouping tags** (Markus, real-usage
-// feedback): browsing with an empty input only offers grouping tags
-// actually used on at least one line somewhere — a tag nobody's tagged
-// anything with in a while doesn't clutter the list — but typing searches
-// the full collection regardless of current usage, so a real but
-// currently-unused tag is still reachable by name rather than becoming a
-// dead end. Allocation tags are exempt from this filter entirely (fixed/
-// structural, always relevant regardless of whether they're used on the
-// row currently being edited). `usedTagValues` (a Set, computed once in
+// **Every grouping tag is suggested** (Oct 2026 — earlier only tags used on
+// a booking line were; unused tags now delete themselves instead), and the
+// allocation tags always.
+// `usedTagValues` (a Set, computed once in
 // Konten.jsx from every line's `tags[]` across all loaded transactions)
-// also drives the other half of this: a value used somewhere that *isn't*
+// drives the legacy half: a value used somewhere that *isn't*
 // a real tag id at all is a pre-existing free-text string (typed before
 // this mechanism existed) — surfaced here as a plain, colorless,
 // selectable suggestion too, not just as a dashed chip once it's already
@@ -140,15 +135,11 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
   // nothing recent to show).
   const { suggestions, recentCount } = useMemo(() => {
     const text = inputText.trim().toLowerCase()
-    // Usage always gates a grouping tag (Markus, real-usage feedback: an
-    // unused one still showed up while typing, since the original version
-    // only applied this filter to the empty-input browse case) — the one
-    // exception is an exact qualified-name match, so a real-but-currently-
-    // unused tag never becomes a true dead end (can't create a duplicate
-    // of it, but also couldn't otherwise reach it at all).
-    const groupingCandidates = tags.filter(
-      (t) => t.class === 'grouping' && (usedTagValues.has(t.id) || qName(t).toLowerCase() === text),
-    )
+    // Every grouping tag is offered (Oct 2026, Markus: tags created in Verlauf,
+    // used only by plan lines, were missing). The earlier "only tags used on a
+    // booking line" gate is gone: unused tags now delete themselves
+    // (TagCleanup.jsx), so every tag that still exists is in use somewhere.
+    const groupingCandidates = tags.filter((t) => t.class === 'grouping')
     const candidates = [...tags.filter((t) => t.class === 'allocation'), ...groupingCandidates, ...legacyCandidates]
     const eligible = candidates
       .filter((t) => !t.archived)

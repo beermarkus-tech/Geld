@@ -2020,3 +2020,7 @@ Markus confirmed the leftover tags were held by Plan0 lines. Then: change a tag'
 ## Session 37, continued an eighty-first time — 2026-10-03 — Breakdown lines sorted alphabetically
 
 Markus: split lines sorted alphabetically by their tags. **Done** in `Verlauf.jsx` `planVersionRows`: `byName` (localeCompare 'de', base sensitivity) replaces the creation-order `byOrder`; Übergruppen and standalone lines are sorted together, children within a group too. Harness-checked: Apfel, Öl, Schottland (Ausgaben, Bahn, Zimmer), Zebra. `createdAt` on tags is no longer used for ordering (still used by the unused-tag grace period).
+
+## Session 37, continued an eighty-second time — 2026-10-03 — Konten tag picker shows Verlauf-created tags
+
+Markus: tags created in Verlauf weren't available in Konten's tag modal. Cause: `TagEditor.jsx` only suggested grouping tags used on a booking line (or an exact name match) — Verlauf tags are used only by budgets. **Fixed:** every grouping tag is suggested; the gate is obsolete since unused tags delete themselves. Harness-checked: "Roch" finds "2025 La Rochelle" and "2025 La Rochelle: Unterkünfte" (budget-only).
