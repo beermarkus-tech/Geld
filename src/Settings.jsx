@@ -35,7 +35,7 @@ function UsageDetails({ usage, depth, targetNames, onOpenPlan, onOpenBooking }) 
   // (Oct 2026, Markus).
   const link = 'block text-left hover:text-[var(--color-text)] hover:underline'
   return (
-    <div className="space-y-0.5 px-3 pb-2 text-xs text-[var(--color-text-muted)]" style={{ paddingLeft: 12 + depth * 22 + 16 }}>
+    <div className="space-y-0.5 px-3 pb-2 text-xs text-[var(--color-text-muted)]" style={{ paddingLeft: 12 + depth * 44 + 16 }}>
       {usage.plans.map((pl) => (
         <button key={pl.key} type="button" className={link} onClick={() => onOpenPlan?.(pl)} title="In Verlauf zeigen">
           Plan: {pl.year} · {pl.planVersion === 'plan0' ? 'Plan0' : 'Plan1'} · {targetNames.get(pl.targetId) ?? pl.targetId} — {pl.months} {pl.months === 1 ? 'Monat' : 'Monate'}, zusammen {euro(pl.sum)}
@@ -97,7 +97,7 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
 
   return (
     <div className="flex flex-col border-b border-[var(--color-border)] last:border-b-0">
-      <div className={`flex items-center gap-3 px-3 py-1.5 text-sm ${dim ? 'opacity-50' : ''}`} style={{ paddingLeft: 12 + depth * 22 }}>
+      <div className={`flex items-center gap-3 px-3 py-1.5 text-sm ${dim ? 'opacity-50' : ''}`} style={{ paddingLeft: 12 + depth * 44 }}>
         {/* A family is one line, its children small behind the parent; ▸
             opens it (children as their own lines, as before) (Oct 2026). */}
         {depth === 0 && !locked &&
@@ -254,7 +254,7 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
         </button>
       </div>
       {open && <UsageDetails usage={usage} depth={depth} targetNames={targetNames} onOpenPlan={(pl) => onOpenPlan(pl, pl.tagId ?? tag.id)} onOpenBooking={(b) => onOpenBooking(b, tag.id)} />}
-      {error && <div className="px-3 pb-1.5 text-xs text-[var(--color-alert)]" style={{ paddingLeft: 12 + depth * 22 }}>{error}</div>}
+      {error && <div className="px-3 pb-1.5 text-xs text-[var(--color-alert)]" style={{ paddingLeft: 12 + depth * 44 }}>{error}</div>}
     </div>
   )
 }
@@ -515,6 +515,8 @@ export default function Settings({ year, onOpenInKonten, onOpenInVerlauf }) {
     if (!topShown && kidsShown.length === 0) continue
     families.push({ top, kids: kidsShown, dim: !matches(top), expanded: expandedFamilies.has(top.id) || (Boolean(needle) && kidsShown.length > 0) })
   }
+  const familyIds = families.filter((f) => f.kids.length > 0).map((f) => f.top.id)
+  const allOpen = familyIds.length > 0 && familyIds.every((id) => expandedFamilies.has(id))
   const shown = families.flatMap((f) => [
     { tag: f.top, depth: 0, dim: f.dim, kids: f.kids, expanded: f.expanded },
     ...(f.expanded ? f.kids.map((k) => ({ tag: k, depth: 1, dim: false })) : []),
@@ -658,11 +660,23 @@ export default function Settings({ year, onOpenInKonten, onOpenInVerlauf }) {
             </TagPill>
             ),
           )}
+          {/* Open or close every family at once (Oct 2026, Markus). */}
+          <div className="ml-auto flex items-center gap-3">
+          {familyIds.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setExpandedFamilies(allOpen ? new Set() : new Set(familyIds))}
+              className="rounded-md border border-[var(--color-border)] px-2 py-0.5 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg)] hover:text-[var(--color-text)]"
+            >
+              {allOpen ? '▾ Alle zuklappen' : '▸ Alle aufklappen'}
+            </button>
+          )}
           {/* The year at the top or all years (Oct 2026, Markus). */}
-          <label className="ml-auto flex items-center gap-1.5 text-sm text-[var(--color-text-muted)]" title="Ohne Haken: nur Tags, die im oben gewählten Jahr verwendet werden">
+          <label className="flex items-center gap-1.5 text-sm text-[var(--color-text-muted)]" title="Ohne Haken: nur Tags, die im oben gewählten Jahr verwendet werden">
             <input type="checkbox" checked={allYears} onChange={(e) => setAllYears(e.target.checked)} />
-            alle Jahre{!allYears && year ? ` (sonst nur ${year})` : ''}
+            alle Jahre
           </label>
+          </div>
         </div>
         {/* Change the type of every tag shown (Oct 2026, Markus) — narrow the list
             with the chips and/or the search field first. */}

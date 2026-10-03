@@ -2110,3 +2110,7 @@ Markus picked from my proposals: (1) follow the year selector, (2) collapsed fam
 ## Session 37, continued a hundred-and-third time — 2026-10-04 — Parent shows the family's usage
 
 Markus: a parent's count should be the whole family's. **Done** (`Settings.jsx` `familyUsage`): a top-level tag with children sums lines/deleted/plan rows of itself and all children, lists their bookings (deduplicated) and plan lines (each tagged with its own tag id, so the Verlauf jump opens the child's line). Harness: Schottland 0 → "3 Buchungszeilen · 12 Budget"; its plan entry opens `categoryId:food:plan1:sco-aus`.
+
+## Session 37, continued a hundred-and-fourth time — 2026-10-04 — Indent + expand/collapse all
+
+Markus: children indented; an expand-all / collapse-all button. **Done** (`Settings.jsx`): row indent per depth 22 → 44 px (the parent's ▸ had eaten the old indent), "▸ Alle aufklappen / ▾ Alle zuklappen" (all families with shown children) next to "alle Jahre", both right of the chips on one line. Screenshot checked.
