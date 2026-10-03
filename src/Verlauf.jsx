@@ -579,8 +579,12 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   }
   function restoreScrollTop(value) {
     if (value == null) return
-    const el = gridWrapperRef.current?.querySelector('.ag-body-vertical-scroll-viewport')
-    if (el) el.scrollTop = value
+    // Both the rows' own viewport and the scrollbar: in this AG Grid version
+    // setting only the scrollbar moved the bar but left the rows at the top.
+    for (const sel of ['.ag-grid-viewport', '.ag-body-vertical-scroll-viewport']) {
+      const el = gridWrapperRef.current?.querySelector(sel)
+      if (el) el.scrollTop = value
+    }
   }
   function focusRowNow(rowId, colId = focusedColIdRef.current) {
     const node = gridApiRef.current?.getRowNode(rowId)
@@ -1345,8 +1349,15 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     const { rowId, colId } = pendingFocusRef.current
     const node = gridApiRef.current.getRowNode(rowId)
     if (!node) return
-    gridApiRef.current.setFocusedCell(node.rowIndex, colId, node.rowPinned)
     pendingFocusRef.current = null
+    // Wait until the grid has drawn the new row: focusing a row AG Grid is
+    // still creating made it scroll the browser to the top before the row
+    // had its position (Oct 2026, the "grid jumps to the top" on a new line).
+    const api = gridApiRef.current
+    setTimeout(() => {
+      const n = api.getRowNode(rowId)
+      if (n) api.setFocusedCell(n.rowIndex, colId, n.rowPinned)
+    }, 50)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- gridReadyTick is a second trigger alongside rowData (see onGridReady's own comment) — whichever of "data ready" and "grid ready" finishes last is what actually applies a pending claim
   }, [rowData, gridReadyTick])
 
@@ -1383,6 +1394,12 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount only, deliberately ignoring subsequent initialFocus prop changes (this screen owns the position from here on, via onFocusChange)
   }, [])
 
+  // The column callbacks read budgets/tags through this ref instead of
+  // rebuilding the columns whenever they change: a rebuild re-creates the
+  // grid body and scrolled it back to the top on every new breakdown line
+  // (Oct 2026, Markus: "adding a breakdown line makes the grid jump to the top").
+  const live = useRef({})
+  live.current = { persistBudgetMonth, renameTag, tagById }
   const columnDefs = useMemo(() => {
     const monthCols = MONTH_LABELS.map((label, i) => ({
       headerName: label,
@@ -1476,7 +1493,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         if (cents === prevCents) return false
         p.data.months[i] = cents
         p.data.yearTotal = p.data.yearTotal - prevCents + cents
-        persistBudgetMonth(p.data, i + 1, cents)
+        live.current.persistBudgetMonth(p.data, i + 1, cents)
         return true
       },
     }))
@@ -1682,7 +1699,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         // cell (double-click, like everywhere else); Prog/Plan1/Plan0 are fixed labels.
         editable: (p) => Boolean(p.data.renameTagId),
         valueSetter: (p) => {
-          renameTag(p.data.renameTagId, p.newValue)
+          live.current.renameTag(p.data.renameTagId, p.newValue)
           return false // the new name arrives with the tag's own snapshot
         },
         cellClass: (p) => `truncate${p.data.rowLabel?.includes('breakdown') || p.data.rowLabel === 'Rollup' ? ' text-xs' : ''}`,
@@ -1719,7 +1736,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
           // every tag in Konten (Oct 2026, Markus) — coloured by the tag's type,
           // a dashed neutral outline when it has none yet.
           if (p.data.renameTagId) {
-            const colorVar = tagColorVar(tagById.get(p.data.renameTagId))
+            const colorVar = tagColorVar(live.current.tagById.get(p.data.renameTagId))
             return (
               <span
                 className={`max-w-full truncate rounded-full px-1.5 py-0.5 text-xs ${colorVar ? '' : 'border border-dashed border-[var(--color-text-muted)] text-[var(--color-text-muted)]'}`}
@@ -1878,8 +1895,8 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         },
       },
     ]
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- cellStyle/cellRenderer callbacks close over closedMonths; valueSetter's persistBudgetMonth closes over budgets/tags/yearNum — all already current each render
-  }, [closedMonths, budgets, tags, yearNum, showPlanung])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cellStyle/cellRenderer callbacks close over closedMonths; budgets/tags are read through `live` (above)
+  }, [closedMonths, yearNum, showPlanung])
 
   // The comment field only works on a cell that is currently displayed.
   const commentRow = commentCell ? rowData.find((r) => r.rowId === commentCell.rowId) : null
