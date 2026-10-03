@@ -343,6 +343,16 @@ function OpeningRow({ data, api }) {
   )
 }
 
+// Every column filter in Konten is one plain search field (Oct 2026, Markus):
+// "contains", filtering while you type, no operator dropdown, no second
+// condition. The other operators stay *allowed* in `filterOptions` only because
+// Quickview's jump into Konten sets a Details filter programmatically ("equals"
+// / "blank"); the operator dropdown itself is hidden in index.css.
+const SIMPLE_FILTER = {
+  filter: 'agTextColumnFilter',
+  filterParams: { filterOptions: ['contains', 'equals', 'blank'], defaultOption: 'contains', maxNumConditions: 1, debounceMs: 150, trimInput: true, buttons: [] },
+}
+
 // Column filters / sort remembered from the last session (lib/uiState.js);
 // only known filterable columns are taken over, anything else is dropped.
 const FILTER_COLUMNS = ['date', 'empfaenger', 'betrag', 'kategorie', 'unterkategorie', 'details', 'tags']
@@ -350,7 +360,7 @@ const SORT_COLUMNS = ['date', 'betrag', 'kategorie', 'unterkategorie', 'empfaeng
 function readSavedFilterModel() {
   const saved = ui.get('konten', 'filterModel', {})
   if (!saved || typeof saved !== 'object') return {}
-  return Object.fromEntries(Object.entries(saved).filter(([k]) => FILTER_COLUMNS.includes(k)))
+  return Object.fromEntries(Object.entries(saved).filter(([k, m]) => FILTER_COLUMNS.includes(k) && m && m.filterType === 'text' && !m.conditions))
 }
 function readSavedSort() {
   const saved = ui.get('konten', 'sort')
@@ -1780,7 +1790,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         // ("contains" etc.) works fine even here — Datum is stored as a
         // "YYYY-MM-DD" string, so it compares/sorts correctly as text
         // without needing a real date-typed filter.
-        filter: 'agTextColumnFilter',
+        ...SIMPLE_FILTER,
       },
       {
         headerName: filteredAccountId ? `Gegenkonto (${accountName(filteredAccountId)})` : 'Konto',
@@ -1897,7 +1907,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         // parent's displayLabel — matches what the cellRenderer's "↳"
         // prefix actually reads, so filtering a line row searches the same
         // text that's actually shown for it.
-        filter: 'agTextColumnFilter',
+        ...SIMPLE_FILTER,
         editable: (p) => !isRowDeleted(p.data),
         flex: 1.4,
       },
@@ -1918,9 +1928,14 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         // the column's own value is cents (10000 for 100,00€), and typing
         // "100" to mean "100 euros" is what Markus would actually expect
         // to type, matching what the cell itself displays.
-        filter: 'agNumberColumnFilter',
-        filterValueGetter: (p) =>
-          (p.data.__isLine ? (p.data.__parent.lines[p.data.__lineIndex]?.amountCents ?? 0) : betragValue(p.data)) / 100,
+        ...SIMPLE_FILTER,
+        // Searched as text against the amount as displayed ("1.000,00") and
+        // without the thousands dot ("1000,00"), so typing 1000, 1.000 or -45
+        // all find it.
+        filterValueGetter: (p) => {
+          const cents = p.data.__isLine ? (p.data.__parent.lines[p.data.__lineIndex]?.amountCents ?? 0) : betragValue(p.data)
+          return `${centsToEuro(cents)} ${(cents / 100).toFixed(2).replace('.', ',')}`
+        },
         // Sorting the whole grid by every individual split line's own
         // amount wouldn't be that meaningful anyway — glued to its
         // already-amount-sorted parent (like every other column) is the
@@ -1976,7 +1991,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           return kategorieValue(p.data)
         },
         comparator: glueToParent(kategorieValue),
-        filter: 'agTextColumnFilter',
+        ...SIMPLE_FILTER,
         // Same cascading Kategorie→Unterkategorie picker as the
         // Unterkategorie column below — Kategorie has no stored value of
         // its own, so editing it here writes the same categoryId. A
@@ -2041,7 +2056,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           return unterkategorieValue(p.data)
         },
         comparator: glueToParent(unterkategorieValue),
-        filter: 'agTextColumnFilter',
+        ...SIMPLE_FILTER,
         // Same fallback-path reasoning as Kategorie's valueSetter above.
         valueSetter: (p) => {
           if (p.data.__isLine) {
@@ -2112,7 +2127,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           p.data.detail = p.newValue ?? ''
           return true
         },
-        filter: 'agTextColumnFilter',
+        ...SIMPLE_FILTER,
         editable: (p) => !p.data.__isLine && !isRowDeleted(p.data),
         flex: 1.3,
       },
@@ -2139,7 +2154,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         // names, not a picker — simplest thing that works without a
         // custom filter component, and pairs naturally with "B" (clicking
         // a chip) as the precise/one-click alternative to typing a name.
-        filter: 'agTextColumnFilter',
+        ...SIMPLE_FILTER,
         filterValueGetter: (p) =>
           p.data.__isLine
             ? (p.data.__parent.lines[p.data.__lineIndex]?.tags ?? []).map((id) => qualifiedTagName(tagById[id], tagById) || id).join(', ')
