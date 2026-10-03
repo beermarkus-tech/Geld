@@ -7,7 +7,7 @@ import { MOVE_MESSAGES, twinIds } from './lib/tagActions'
 import { TAG_RENAME_MESSAGES } from './lib/tagRename'
 import { qualifiedName } from './lib/tags'
 import { CREATE_TYPES } from './lib/tagTypes'
-import TagPill from './TagPill'
+import TagPill, { typeLook } from './TagPill'
 import { usageOf, useTagActions, useTagUsage, useTags } from './TagsProvider'
 
 // Settings (spec.md §3i) — the first section, built Oct 2026 (Markus): Tags,
@@ -206,6 +206,9 @@ export default function Settings() {
   const usage = useTagUsage()
   const [categories, setCategories] = useState([])
   const [filter, setFilter] = useState('')
+  // Type chips above the list (Oct 2026, Markus): show only tags of one type.
+  // null = all; 'none' = untyped; 'allocation' = the fixed Rücklagen tags.
+  const [typeFilter, setTypeFilter] = useState(null)
 
   useEffect(() => onSnapshot(collection(db, 'categories'), (snap) => setCategories(snap.docs.map((d) => d.data()))), [])
   const [accounts, setAccounts] = useState([])
@@ -266,7 +269,22 @@ export default function Settings() {
   const allocation = useMemo(() => tags.filter((t) => t.class === 'allocation').sort((a, b) => a.name.localeCompare(b.name, 'de')), [tags])
 
   const needle = filter.trim().toLowerCase()
-  const shown = needle ? rows.filter((r) => qualifiedName(r.tag.id, tagById).toLowerCase().includes(needle)) : rows
+  const typeOf = (t) => (t.class === 'allocation' ? 'allocation' : (t.groupingType ?? 'none'))
+  const flat = Boolean(needle || typeFilter)
+  const shown = rows.filter(
+    (r) => (!needle || qualifiedName(r.tag.id, tagById).toLowerCase().includes(needle)) && (!typeFilter || typeOf(r.tag) === typeFilter),
+  )
+  const typeCounts = useMemo(() => {
+    const c = {}
+    for (const t of tags) c[typeOf(t)] = (c[typeOf(t)] ?? 0) + 1
+    return c
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- typeOf is pure
+  }, [tags])
+  const chips = [
+    { key: null, label: 'Alle', count: tags.length, look: null },
+    ...CREATE_TYPES.map((o) => ({ key: o.groupingType ?? 'none', label: o.label, count: typeCounts[o.groupingType ?? 'none'] ?? 0, look: typeLook(o.groupingType) })),
+    { key: 'allocation', label: 'Rücklage', count: typeCounts.allocation ?? 0, look: { class: 'allocation' } },
+  ]
   const shownPlain = needle ? plainTextTags.filter((id) => id.toLowerCase().includes(needle)) : plainTextTags
   const rowProps = (tag) => ({ usage: usageOf(usage, tag.id), targetNames, twin: twins.has(tag.id), parents, hasChildren: withChildren.has(tag.id), onRename: rename, onSetType: setType, onMove: move })
 
@@ -286,13 +304,42 @@ export default function Settings() {
         <p className="text-sm text-[var(--color-text-muted)]">
           Auf einen Namen klicken, neuen Namen eintippen, Enter. Das ändert nur den Namen — alle Buchungen und Budgets bleiben verbunden, und der neue Name gilt überall (Konten, Quickview, Außenstände, Verlauf). Rechts lassen sich Übergruppe und Typ ändern — er bestimmt Farbe und Verwendung: Anspruch erscheint in Außenstände, Reise/Projekt benennt Zeilen in Quickview.
         </p>
+        <div className="flex flex-wrap gap-2">
+          {chips.map((c) =>
+            c.key === null ? (
+              <button
+                key="all"
+                type="button"
+                aria-pressed={typeFilter === null}
+                onClick={() => setTypeFilter(null)}
+                className={`rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-sm ${typeFilter === null ? 'ring-2 ring-[var(--color-computed)] ring-offset-1 ring-offset-[var(--color-bg)]' : 'opacity-80 hover:opacity-100'}`}
+              >
+                {c.label} <span className="text-xs opacity-70">{c.count}</span>
+              </button>
+            ) : (
+            <TagPill
+              key={c.key ?? 'all'}
+              as="button"
+              tag={c.look}
+              size="md"
+              aria-pressed={typeFilter === c.key}
+              onClick={() => setTypeFilter(c.key)}
+              className={`cursor-pointer ${typeFilter === c.key ? 'ring-2 ring-[var(--color-computed)] ring-offset-1 ring-offset-[var(--color-bg)]' : 'opacity-80 hover:opacity-100'}`}
+            >
+              {c.label} <span className="text-xs opacity-70">{c.count}</span>
+            </TagPill>
+            ),
+          )}
+        </div>
+        {typeFilter !== 'allocation' && (
         <div className="rounded-lg border border-[color-mix(in_srgb,var(--color-text)_30%,transparent)] bg-[var(--color-surface)]">
           {shown.length === 0 && <div className="px-3 py-3 text-sm text-[var(--color-text-muted)]">Keine Tags gefunden.</div>}
           {shown.map(({ tag, depth }) => (
-            <TagRow key={tag.id} tag={tag} depth={needle ? 0 : depth} label={needle ? qualifiedName(tag.id, tagById) : undefined} {...rowProps(tag)} />
+            <TagRow key={tag.id} tag={tag} depth={flat ? 0 : depth} label={flat ? qualifiedName(tag.id, tagById) : undefined} {...rowProps(tag)} />
           ))}
         </div>
-        {allocation.length > 0 && !needle && (
+        )}
+        {allocation.length > 0 && !needle && (!typeFilter || typeFilter === 'allocation') && (
           <>
             <h3 className="pt-2 text-sm font-medium text-[var(--color-text-muted)]">Feste Rücklagen-Tags</h3>
             <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]">
@@ -302,7 +349,7 @@ export default function Settings() {
             </div>
           </>
         )}
-        {shownPlain.length > 0 && (
+        {shownPlain.length > 0 && !typeFilter && (
           <>
             <h3 className="pt-2 text-sm font-medium text-[var(--color-text-muted)]">Alte Text-Tags ({shownPlain.length})</h3>
             <div className="flex flex-wrap items-center justify-between gap-2">
