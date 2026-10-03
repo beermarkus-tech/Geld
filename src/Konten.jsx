@@ -20,6 +20,10 @@ import { tagBalance, tagFilterMatchIds, tagFilterTotal, tagJahresende } from './
 import { qualifiedTagName, tagColorVar, tagParent } from './lib/tagStyle'
 import TagEditor, { slugify } from './TagEditor'
 
+// Ctrl/Cmd+Delete deletes a row (Oct 2026, Markus); the grid's own "Delete clears
+// the cell" must not run on it too — onCellKeyDown still sees the key.
+const isCtrlDelete = (p) => !p.editing && p.event.key === 'Delete' && (p.event.ctrlKey || p.event.metaKey)
+
 ModuleRegistry.registerModules([AllCommunityModule])
 syncAgGridColorScheme()
 
@@ -2892,7 +2896,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           // Markus's request: no accidental drag-reordering or hiding.
           // Plain Delete does nothing outside an edit (Oct 2026): AG Grid would
           // otherwise empty the cell and save it — deleting a row is Ctrl+Delete.
-          defaultColDef={{ suppressMovable: true, suppressKeyboardEvent: (p) => !p.editing && p.event.key === 'Delete' && !p.event.ctrlKey && !p.event.metaKey }}
+          defaultColDef={{ suppressMovable: true, suppressKeyboardEvent: isCtrlDelete }}
           // Single-row selection just for "+ Neue Buchung"'s "insert below
           // the selected row" — not a bulk-actions feature.
           rowSelection={{ mode: 'singleRow', checkboxes: false, enableClickSelection: true }}

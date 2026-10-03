@@ -22,6 +22,10 @@ import { registerScreenCursor } from './lib/screenCursor'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { CREATE_TYPES, slugify } from './TagEditor'
 
+// Ctrl/Cmd+Delete deletes a row (Oct 2026, Markus); the grid's own "Delete clears
+// the cell" must not run on it too — onCellKeyDown still sees the key.
+const isCtrlDelete = (p) => !p.editing && p.event.key === 'Delete' && (p.event.ctrlKey || p.event.metaKey)
+
 ModuleRegistry.registerModules([AllCommunityModule])
 syncAgGridColorScheme()
 
@@ -1636,7 +1640,8 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
       cellEditor: 'agTextCellEditor',
       cellEditorParams: { useFormatter: true },
       valueSetter: (p) => {
-        const cents = parseWholeEuroInput(p.newValue)
+        // Delete on a month cell (Oct 2026, Markus) clears it: AG Grid passes null → 0.
+        const cents = p.newValue == null ? 0 : parseWholeEuroInput(p.newValue)
         if (cents === null) return false
         const prevCents = p.data.months[i]
         if (cents === prevCents) return false
@@ -1848,6 +1853,8 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         // cell (double-click, like everywhere else); Prog/Plan1/Plan0 are fixed labels.
         editable: (p) => Boolean(p.data.renameTagId),
         cellEditor: TagTitleEditor,
+        // Delete would empty the name (refused anyway) — names are changed in the editor.
+        suppressKeyboardEvent: (p) => !p.editing && p.event.key === 'Delete',
         cellEditorPopup: true,
         cellEditorPopupPosition: 'under',
         cellEditorParams: (p) => ({
@@ -2042,7 +2049,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
           return (
             <button
               type="button"
-              title="Aufschlüsselungszeile entfernen (Entf)"
+              title="Aufschlüsselungszeile entfernen (Strg+Entf)"
               className="flex h-full w-full items-center justify-center text-xs text-[var(--color-text-muted)] hover:text-[var(--color-alert)]"
               onClick={() => setConfirmRemoveRow(row)}
             >
@@ -2142,7 +2149,10 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
                   <b>Strg+D</b> — Aufschlüsselung ein-/ausklappen
                 </li>
                 <li>
-                  <b>Entf</b> — Aufschlüsselungszeile entfernen
+                  <b>Strg+Entf</b> — Aufschlüsselungszeile entfernen
+                </li>
+                <li>
+                  <b>Entf</b> — Zellwert löschen (Monat → 0)
                 </li>
                 <li>
                   <b>Strg+Umschalt+D</b> — Aufschlüsselung anzeigen
@@ -2270,7 +2280,9 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
             const key = p.event?.key
             const row = p.data
             if (!row) return
-            if (key === 'Delete') {
+            // Ctrl+Delete removes a breakdown line (Oct 2026, Markus — was plain
+            // Delete, which now clears the cell's value instead).
+            if (key === 'Delete' && (p.event.ctrlKey || p.event.metaKey)) {
               if (row.rowLabel === 'Plan1-breakdown' || row.rowLabel === 'Plan0-breakdown') {
                 p.event.preventDefault()
                 setConfirmRemoveRow(row)
@@ -2300,7 +2312,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
             }
           }}
           columnDefs={columnDefs}
-          defaultColDef={{ suppressMovable: true, sortable: false, filter: false, resizable: true }}
+          defaultColDef={{ suppressMovable: true, sortable: false, filter: false, resizable: true, suppressKeyboardEvent: isCtrlDelete }}
           // No row-add/remove/reorder animation on this screen (Markus,
           // Sept 2026: "is there a way to stop ag grid animations for this
           // screen") — a breakdown block expanding/collapsing or the
