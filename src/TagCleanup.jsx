@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { collection, doc, onSnapshot, writeBatch } from 'firebase/firestore'
+import { doc, writeBatch } from 'firebase/firestore'
 
 import { db } from './firebase'
 import { unusedTagIds } from './lib/unusedTags'
@@ -8,34 +8,14 @@ const GRACE_MS = 10 * 60 * 1000
 
 // Removes tags nothing refers to any more (Oct 2026, Markus; lib/unusedTags.js
 // has the rules). Runs in the background for the whole app (renders nothing),
-// with live bookings, tags, budgets and year settings — so a tag freed in
-// Verlauf (a breakdown line removed) goes too, not only one freed in Konten.
-// It acts 5 s after the last change, and again when a new tag's 10-minute
-// grace period runs out. The listeners are the same queries other screens
-// already hold, so Firestore serves them without extra reads.
-export default function TagCleanup() {
-  const [data, setData] = useState({})
+// with live bookings, tags, budgets and year settings from TagsProvider.jsx
+// (each null until the server has confirmed it — the offline cache can be
+// incomplete) — so a tag freed in Verlauf goes too, not only one freed in
+// Konten. It acts 5 s after the last change, and again when a new tag's
+// 10-minute grace period runs out.
+export default function TagCleanup({ tags, transactions, budgets, yearSettings }) {
   const [tick, setTick] = useState(0)
 
-  useEffect(() => {
-    // Only data confirmed by the server counts: the offline cache can be
-    // incomplete (e.g. budgets not cached yet), which would make used tags
-    // look unused.
-    const listen = (name, key) =>
-      onSnapshot(collection(db, name), { includeMetadataChanges: true }, (snap) => {
-        if (snap.metadata.fromCache) setData((d) => (d[key] ? { ...d, [key]: null } : d))
-        else setData((d) => ({ ...d, [key]: snap.docs.map((x) => x.data()) }))
-      })
-    const unsubs = [
-      listen('tags', 'tags'),
-      listen('transactions', 'transactions'),
-      listen('budgets', 'budgets'),
-      listen('categoryYearSettings', 'yearSettings'),
-    ]
-    return () => unsubs.forEach((u) => u())
-  }, [])
-
-  const { tags, transactions, budgets, yearSettings } = data
   useEffect(() => {
     // Only with everything loaded (and real bookings): otherwise every tag would look unused.
     if (!tags || !transactions || !budgets || !yearSettings || transactions.length === 0) return

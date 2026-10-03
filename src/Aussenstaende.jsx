@@ -6,6 +6,7 @@ import { db } from './firebase'
 import { balance } from './lib/balance'
 import ui from './lib/uiState'
 import { claimOverview, receivableAccountIds } from './lib/claims'
+import { useTags } from './TagsProvider'
 import { centsToEuro } from './lib/format'
 
 // Außenstände (spec.md §3g) — every claim/loan tag as one card, open ones
@@ -17,7 +18,7 @@ export default function Aussenstaende({ onOpenInKonten, active = true }) {
   // Hidden screens keep the newest data aside instead of recomputing on every save elsewhere.
   const syncWhenVisible = useDeferWhileHidden(active)
   const [accounts, setAccounts] = useState([])
-  const [tags, setTags] = useState([])
+  const { tags, tagById } = useTags() // the central tag list (TagsProvider.jsx)
   const [transactions, setTransactions] = useState([])
   // Both remembered between sessions (lib/uiState.js).
   const [tab, setTab] = useState(() => (ui.get('aussenstaende', 'tab') === 'settled' ? 'settled' : 'open'))
@@ -28,7 +29,6 @@ export default function Aussenstaende({ onOpenInKonten, active = true }) {
   useEffect(() => {
     const unsubs = [
       onSnapshot(collection(db, 'accounts'), (snap) => setAccounts(snap.docs.map((d) => d.data()))),
-      onSnapshot(collection(db, 'tags'), (snap) => setTags(snap.docs.map((d) => d.data()))),
       onSnapshot(collection(db, 'transactions'), (snap) => {
         const next = snap.docs.map((d) => d.data()).filter((t) => !t.deletedAt)
         syncWhenVisible(() => setTransactions(next))
@@ -37,7 +37,6 @@ export default function Aussenstaende({ onOpenInKonten, active = true }) {
     return () => unsubs.forEach((u) => u())
   }, [])
 
-  const tagById = useMemo(() => Object.fromEntries(tags.map((t) => [t.id, t])), [tags])
   const receivableIds = useMemo(() => receivableAccountIds(accounts), [accounts])
   const claims = useMemo(() => claimOverview(tags, transactions, receivableIds), [tags, transactions, receivableIds])
   // What the receivable accounts hold in total — the figure Konten's pinned

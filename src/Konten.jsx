@@ -18,6 +18,7 @@ import ui from './lib/uiState'
 import { visibleSum } from './lib/visibleSum'
 import { tagBalance, tagFilterMatchIds, tagFilterTotal, tagJahresende } from './lib/tagBalance'
 import { qualifiedTagName, tagColorVar, tagParent } from './lib/tagStyle'
+import { useTags } from './TagsProvider'
 import TagEditor, { slugify } from './TagEditor'
 
 // Ctrl/Cmd+Delete deletes a row (Oct 2026, Markus); the grid's own "Delete clears
@@ -375,13 +376,14 @@ const savedSort = readSavedSort()
 export default function Konten({ year, onYearChange, onYearsChange, initialFocus, onFocusChange, active = true, jump = null }) {
   const [accounts, setAccounts] = useState([])
   const [categories, setCategories] = useState([])
-  const [tags, setTags] = useState([])
+  // The central tag list (TagsProvider.jsx).
+  const { tags, tagById, loaded: tagsLoaded } = useTags()
   // All-time, never year-scoped: balance() needs the full history back to
   // the one Jahresabschluß anchor (spec.md §2.1/§2.3/§2.8). At real-world
   // volume — a few thousand transactions a year, one household — this
   // stays trivial to hold in memory even as more years accumulate.
   const [transactions, setTransactions] = useState([])
-  const [loaded, setLoaded] = useState({ accounts: false, categories: false, tags: false, transactions: false })
+  const [loaded, setLoaded] = useState({ accounts: false, categories: false, transactions: false })
   // Account filter: a distinct mechanism from a plain column filter (spec.md
   // §3a's filtering section) — Konto's own display is derived per row, so
   // the same account can show up on either side depending on that
@@ -631,10 +633,6 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         setCategories(snap.docs.map((d) => d.data()))
         setLoaded((l) => ({ ...l, categories: true }))
       }),
-      onSnapshot(collection(db, 'tags'), (snap) => {
-        setTags(snap.docs.map((d) => d.data()))
-        setLoaded((l) => ({ ...l, tags: true }))
-      }),
       onSnapshot(collection(db, 'transactions'), (snap) => {
         setTransactions(snap.docs.map((d) => d.data()))
         setLoaded((l) => ({ ...l, transactions: true }))
@@ -645,7 +643,6 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
 
   const accountById = useMemo(() => Object.fromEntries(accounts.map((a) => [a.id, a])), [accounts])
   const categoryById = useMemo(() => Object.fromEntries(categories.map((c) => [c.id, c])), [categories])
-  const tagById = useMemo(() => Object.fromEntries(tags.map((t) => [t.id, t])), [tags])
   // Every distinct value (real tag id or legacy free-text string alike —
   // indistinguishable at the data level) currently sitting in some line's
   // Every real aggregation/suggestion computation below reads this, not
@@ -2483,7 +2480,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   }, [accounts, activeTransactions, tags, tagById, year, claimStatus])
 
   // (Unused tags are removed by TagCleanup.jsx, app-wide.)
-  const allLoaded = loaded.accounts && loaded.categories && loaded.tags && loaded.transactions
+  const allLoaded = loaded.accounts && loaded.categories && tagsLoaded && loaded.transactions
 
   // Remembered between sessions (lib/uiState.js).
   useEffect(() => ui.set('konten', 'accountFilter', accountFilter), [accountFilter])
@@ -2521,7 +2518,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     }, 900)
   }, [rows.length, gridReadyTick])
 
-  const stillLoading = !(loaded.accounts && loaded.categories && loaded.tags && loaded.transactions)
+  const stillLoading = !(loaded.accounts && loaded.categories && tagsLoaded && loaded.transactions)
 
   if (stillLoading) {
     return <p className="px-6 py-4 text-[var(--color-text-muted)]">Lädt…</p>

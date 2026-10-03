@@ -20,6 +20,8 @@ import { ALLOCATION_TAG_ORDER, GROUP_ORDER, SUBCAT_ORDER, isBudgetPlannedTag, is
 import { centsToWholeEuro, parseWholeEuroInput } from './lib/format'
 import { registerScreenCursor } from './lib/screenCursor'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
+import { usageHint } from './lib/tags'
+import { usageOf, useTagUsage, useTags } from './TagsProvider'
 import { CREATE_TYPES, slugify } from './TagEditor'
 
 // Ctrl/Cmd+Delete deletes a row (Oct 2026, Markus); the grid's own "Delete clears
@@ -345,7 +347,8 @@ function CellCommentField({ cell, description, savedText, onSave, onDone, inputR
 // new name and press Enter to rename the tag, or pick an existing tag from the
 // list below (Down/Up, Enter or a click) to put it in this row's place. The
 // list holds only tags that fit where the cursor is (see replaceOptions()).
-const TagTitleEditor = forwardRef(function TagTitleEditor({ value, eventKey, api, options, usageHint, onRename, onReplace }, ref) {
+const TagTitleEditor = forwardRef(function TagTitleEditor({ value, eventKey, api, options, onRename, onReplace }, ref) {
+  const usage = useTagUsage()
   const original = String(value ?? '')
   const [text, setText] = useState(eventKey && eventKey.length === 1 ? eventKey : original)
   const [highlight, setHighlight] = useState(-1)
@@ -427,7 +430,7 @@ const TagTitleEditor = forwardRef(function TagTitleEditor({ value, eventKey, api
                 className={'flex w-full items-baseline gap-2 px-2 py-1 text-left ' + (i === highlight ? 'bg-[var(--color-computed)] text-white' : 'hover:bg-[var(--color-bg)]')}
               >
                 <span className="min-w-0 flex-1 truncate">{t.name}</span>
-                <span className="shrink-0 text-xs opacity-70">{usageHint(t.id)}</span>
+                <span className="shrink-0 text-xs opacity-70">{usageHint(usageOf(usage, t.id))}</span>
               </button>
             </li>
           ))}
@@ -442,7 +445,8 @@ const TagTitleEditor = forwardRef(function TagTitleEditor({ value, eventKey, api
 // tags (pick with Up/Down + Enter or a click), or create a new one: a plain
 // label makes a parent tag, "Schottland:Hotels" a child under "Schottland"
 // (reused when it exists), and the "Neu …" rows below pick the tag's type.
-function AddBreakdownModal({ tags, excludeIds, usageHint, onSubmit, onCancel }) {
+function AddBreakdownModal({ tags, excludeIds, onSubmit, onCancel }) {
+  const usage = useTagUsage()
   const [text, setText] = useState('')
   const [highlight, setHighlight] = useState(0)
   const inputRef = useRef(null)
@@ -528,7 +532,7 @@ function AddBreakdownModal({ tags, excludeIds, usageHint, onSubmit, onCancel }) 
                       style={colorVar ? { backgroundColor: `var(${colorVar})`, borderColor: `var(${colorVar})` } : undefined}
                     />
                     <span className="min-w-0 flex-1 truncate">{o.label}</span>
-                    <span className="shrink-0 text-xs opacity-70">{usageHint(o.tag.id)}</span>
+                    <span className="shrink-0 text-xs opacity-70">{usageHint(usageOf(usage, o.tag.id))}</span>
                   </button>
                 </li>
               )
@@ -571,7 +575,8 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // Hidden screens keep the newest data aside instead of recomputing on every save elsewhere.
   const syncWhenVisible = useDeferWhileHidden(active)
   const [categories, setCategories] = useState([])
-  const [tags, setTags] = useState([])
+  // The central tag list (TagsProvider.jsx); `tagById` here is its Map.
+  const { tags, tagMap: tagById } = useTags()
   const [transactions, setTransactions] = useState([])
   const [budgets, setBudgets] = useState([])
   const [closedMonths, setClosedMonths] = useState([])
@@ -888,7 +893,6 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   useEffect(() => {
     const unsubs = [
       onSnapshot(collection(db, 'categories'), (snap) => setCategories(snap.docs.map((d) => d.data()))),
-      onSnapshot(collection(db, 'tags'), (snap) => setTags(snap.docs.map((d) => d.data()))),
       // Soft-deleted transactions (spec.md §2.9a) never count toward any
       // actual — same rule as Konten's own activeTransactions (real bug
       // found Sept 2026 while building Planung: Verlauf never filtered them).
@@ -950,7 +954,6 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     else deleteDoc(doc(db, 'cellComments', id))
   }
 
-  const tagById = useMemo(() => new Map(tags.map((t) => [t.id, t])), [tags])
   const tagName = (id) => tagById.get(id)?.name ?? id
 
   // Prog (spec.md §3b) — shared with Planung via budget.js's own
@@ -1224,29 +1227,6 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     }
     setDoc(doc(db, 'tags', tagId), { ...tagById.get(tagId), name: result.name })
     return true
-  }
-
-  // How much each tag is used — shown next to every tag in the pick lists so
-  // two tags of the same name can be told apart (Oct 2026, Markus: the import
-  // left twins such as two "Mietwagen" under one parent; he replaces one with
-  // the other, and the unused one then disappears by itself).
-  const tagUsage = useMemo(() => {
-    const m = new Map()
-    const at = (id) => m.get(id) ?? (m.set(id, { lines: 0, budgets: 0 }), m.get(id))
-    for (const tx of transactions) for (const l of tx.lines ?? []) for (const id of l.tags ?? []) at(id).lines++
-    const seen = new Set()
-    for (const b of budgets) {
-      if (!b.breakdownTagId) continue
-      const k = `${b.breakdownTagId}|${b.year}|${b.planVersion}|${b.categoryId ?? b.allocationTagId}`
-      if (seen.has(k)) continue
-      seen.add(k)
-      at(b.breakdownTagId).budgets++
-    }
-    return m
-  }, [transactions, budgets])
-  function usageHint(id) {
-    const u = tagUsage.get(id) ?? { lines: 0, budgets: 0 }
-    return `${u.lines} ${u.lines === 1 ? 'Buchung' : 'Buchungen'}${u.budgets > 0 ? ` · ${u.budgets} Plan` : ''}`
   }
 
   // Which existing tags a row's title editor offers (replaceOptions()).
@@ -1587,7 +1567,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     if (active) gridApiRef.current?.refreshCells({ columns: ['rowTitle'], force: true })
   }, [tagById, active])
   const live = useRef({})
-  live.current = { persistBudgetMonth, renameTag, tagById, replaceOptionsFor, replaceBreakdownTag, usageHint }
+  live.current = { persistBudgetMonth, renameTag, tagById, replaceOptionsFor, replaceBreakdownTag }
   const columnDefs = useMemo(() => {
     const monthCols = MONTH_LABELS.map((label, i) => ({
       headerName: label,
@@ -1894,7 +1874,6 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         cellEditorPopupPosition: 'under',
         cellEditorParams: (p) => ({
           options: live.current.replaceOptionsFor(p.data),
-          usageHint: live.current.usageHint,
           onRename: (name) => live.current.renameTag(p.data.renameTagId, name),
           onReplace: (tagId) => live.current.replaceBreakdownTag(p.data, tagId),
         }),
@@ -2428,7 +2407,6 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
       {addModalTarget && (
         <AddBreakdownModal
           tags={tags}
-          usageHint={usageHint}
           excludeIds={new Set(breakdownTagIdsFor(addModalTarget.targetKey, addModalTarget.targetId, addModalTarget.planVersion))}
           onSubmit={handleAddBreakdownSubmit}
           onCancel={closeAddModal}

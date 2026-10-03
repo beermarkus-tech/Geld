@@ -90,6 +90,21 @@ See `CLAUDE.md` for how this fits alongside `spec.md` and `DEVLOG.md`.
 
 ---
 
+## Phase 5b — Tag cleanup: one central tag system (inserted Oct 2026)
+
+Markus (Oct 2026): "there should be only one central list that all sheets refer to." The database already holds one `tags` collection, but every screen kept its own copy, its own create/rename/count code, its own pill drawing and its own tag box — the source of several recent bugs (types not showing elsewhere, tags created without a type, tags looking unused while a Plan0 line held them). Agreed with Markus, step by step, one build each:
+
+1. **Foundation** — one app-wide tag list (one listener) with lookups, one way of naming ("Parent: Child" wherever a tag appears without its parent next to it; Verlauf keeps parent on the group row and the indented child below; Settings shows the tree) and usage counts computed once. Every screen switched to it. No visible change except Quickview writing "Parent: Child".
+2. **Actions** — one find-or-create ("Parent:Child" + type, reuse by name), rename, change type, replace in a plan line; screens stop writing tags themselves.
+3. **One pill component** everywhere.
+4. **One tag box** (search, list with pill + usage hint, "Neu … — Typ" rows; ↓/↑ move, Enter picks the highlighted entry, Esc clears then closes) in three variants: Konten multi-pick, Verlauf add line, Verlauf rename-or-replace (siblings only).
+5. **Settings as the complete list** — plain-text tags shown, twins marked "doppelt", move a child to another parent.
+6. **Data cleanup** (confirm button, after an Export backup) — every plain-text tag gets a record (id = its current text, no booking rewritten), current claim tags typed Anspruch; then Außenstände' special plain-text rule goes. The unused automatic-merge code (`lib/tagMerge.js`) is deleted.
+
+**Testable deliverable:** a tag created, renamed or retyped on any screen shows the same name, colour and usage on every other screen at once; the three tag boxes behave identically with the keyboard; Settings lists every tag in the app.
+
+---
+
 ## Phase 6 — Dashboard (Prognose + Status)
 
 - The card grid: alerts band, Prognose hero chart, Jahresbilanz, Geldanlage-Standort, Status (condensed), Quickview doorway.

@@ -16,6 +16,7 @@ import {
 import { ALLOCATION_TAG_ORDER, GROUP_ORDER, SUBCAT_ORDER, isBudgetPlannedTag, isKnownSubcat } from './lib/categoryOrder'
 import { centsToWholeEuro, parseWholeEuroInput } from './lib/format'
 import { registerScreenCursor } from './lib/screenCursor'
+import { useTags } from './TagsProvider'
 import ui from './lib/uiState'
 
 // Planung (spec.md §3c) — an annotated, read-only report over Verlauf's
@@ -113,7 +114,7 @@ export default function Planung({ year, active = true }) {
   const syncWhenVisible = useDeferWhileHidden(active)
   const [accounts, setAccounts] = useState([])
   const [categories, setCategories] = useState([])
-  const [tags, setTags] = useState([])
+  const { tags } = useTags() // the central tag list (TagsProvider.jsx)
   const [transactions, setTransactions] = useState([])
   const [budgets, setBudgets] = useState([])
   const [yearSettings, setYearSettings] = useState([])
@@ -141,7 +142,6 @@ export default function Planung({ year, active = true }) {
     const unsubs = [
       onSnapshot(collection(db, 'accounts'), (snap) => setAccounts(snap.docs.map((d) => d.data()))),
       onSnapshot(collection(db, 'categories'), (snap) => setCategories(snap.docs.map((d) => d.data()))),
-      onSnapshot(collection(db, 'tags'), (snap) => setTags(snap.docs.map((d) => d.data()))),
       // Soft-deleted transactions (§2.9a) never count toward anything here.
       onSnapshot(collection(db, 'transactions'), (snap) => {
         const next = snap.docs.map((d) => d.data()).filter((t) => !t.deletedAt)

@@ -7,6 +7,8 @@ import { centsToWholeEuro } from './lib/format'
 import { occurredMonthCount, quickviewMonths } from './lib/quickview'
 import { registerScreenCursor } from './lib/screenCursor'
 import ui from './lib/uiState'
+import { qualifiedName } from './lib/tags'
+import { useTags } from './TagsProvider'
 import Listbox from './Listbox'
 
 // Quickview (spec.md §3e) — a pure past-transaction deep-dive: pick one
@@ -43,7 +45,7 @@ export default function Quickview({ year, onOpenInKonten, active = true, preset 
   // Hidden screens keep the newest data aside instead of recomputing on every save elsewhere.
   const syncWhenVisible = useDeferWhileHidden(active)
   const [categories, setCategories] = useState([])
-  const [tags, setTags] = useState([])
+  const { tags, tagById } = useTags() // the central tag list (TagsProvider.jsx)
   const [transactions, setTransactions] = useState([])
   // Selection and cursor are remembered between sessions (lib/uiState.js); a
   // selection that no longer exists is dropped once the lists have loaded.
@@ -113,7 +115,6 @@ export default function Quickview({ year, onOpenInKonten, active = true, preset 
   useEffect(() => {
     const unsubs = [
       onSnapshot(collection(db, 'categories'), (snap) => setCategories(snap.docs.map((d) => d.data()))),
-      onSnapshot(collection(db, 'tags'), (snap) => setTags(snap.docs.map((d) => d.data()))),
       onSnapshot(collection(db, 'transactions'), (snap) => {
         const next = snap.docs.map((d) => d.data()).filter((t) => !t.deletedAt)
         syncWhenVisible(() => setTransactions(next))
@@ -130,17 +131,12 @@ export default function Quickview({ year, onOpenInKonten, active = true, preset 
       .filter((c) => c.parentCategoryId)
       .map((c) => ({ id: `c:${c.id}`, name: `${byId[c.parentCategoryId]?.name ?? ''} › ${c.name}`, filterText: c.name }))
       .sort((a, b) => a.name.localeCompare(b.name, 'de'))
-    const tagById = Object.fromEntries(tags.map((t) => [t.id, t]))
     const tgs = tags
       .filter((t) => !t.archived)
-      .map((t) => ({
-        id: `t:${t.id}`,
-        name: `Tag: ${t.parentTag ? `${tagById[t.parentTag]?.name ?? ''} › ` : ''}${t.name}`,
-        filterText: t.name,
-      }))
+      .map((t) => ({ id: `t:${t.id}`, name: `Tag: ${qualifiedName(t.id, tagById)}`, filterText: t.name }))
       .sort((a, b) => a.name.localeCompare(b.name, 'de'))
     return [...cats, ...tgs]
-  }, [categories, tags])
+  }, [categories, tags, tagById])
 
   // A remembered selection whose category/tag is gone (e.g. an unused tag that
   // was cleaned up) is dropped as soon as the lists have loaded.
