@@ -3,6 +3,8 @@ import { collection, doc, onSnapshot, setDoc } from 'firebase/firestore'
 
 import { db } from './firebase'
 import { TAG_RENAME_MESSAGES, validateTagRename } from './lib/tagRename'
+import { tagColorVar } from './lib/tagStyle'
+import { CREATE_TYPES } from './TagEditor'
 
 // Settings (spec.md §3i) — the first section, built Oct 2026 (Markus): Tags,
 // with in-place renaming. The other sections of §3i (Kategorien, Konten,
@@ -14,7 +16,6 @@ import { TAG_RENAME_MESSAGES, validateTagRename } from './lib/tagRename'
 // as plain text on old booking lines have no record here yet (see the note at
 // the end) and the fixed allocation tags (Sparen Familie …) are locked.
 const EMPTY_USAGE = { lines: 0, deletedLines: 0, budgets: 0, plans: [], bookings: [] }
-const TYPE_LABELS = { project: 'Reise/Projekt', statement: 'Abrechnung', claim: 'Anspruch', 'claim-category': 'Anspruchsart' }
 
 const euro = (cents) => `${Math.round(cents / 100).toLocaleString('de-DE')} €`
 
@@ -41,13 +42,14 @@ function UsageDetails({ usage, depth }) {
   )
 }
 
-function TagRow({ tag, depth, usage, onRename }) {
+function TagRow({ tag, depth, usage, onRename, onSetType }) {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(tag.name)
   const [error, setError] = useState('')
   const inputRef = useRef(null)
   const locked = tag.class === 'allocation'
+  const colorVar = tagColorVar(tag)
 
   useEffect(() => {
     if (editing) inputRef.current?.select()
@@ -99,14 +101,35 @@ function TagRow({ tag, depth, usage, onRename }) {
               setEditing(true)
             }}
             title={locked ? 'Festes Rücklagen-Tag — nicht umbenennbar' : 'Klicken zum Umbenennen'}
-            className={`min-w-0 flex-1 truncate text-left ${locked ? 'cursor-default text-[var(--color-text-muted)]' : 'hover:underline'}`}
+            className="min-w-0 flex-1 text-left"
           >
-            {tag.name}
+            {/* Drawn as the tag's pill, as in Konten and Verlauf (Oct 2026, Markus). */}
+            <span
+              className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 align-middle ${locked ? '' : 'hover:underline'} ${colorVar ? '' : 'border border-dashed border-[var(--color-text-muted)] text-[var(--color-text-muted)]'}`}
+              style={colorVar ? { color: `var(${colorVar})`, backgroundColor: `color-mix(in srgb, var(${colorVar}) 15%, transparent)` } : undefined}
+            >
+              {tag.name}
+            </span>
             {locked && <span className="ml-2" aria-label="gesperrt">🔒</span>}
           </button>
         )}
-        {tag.groupingType && TYPE_LABELS[tag.groupingType] && (
-          <span className="shrink-0 rounded-full border border-[var(--color-border)] px-2 text-xs text-[var(--color-text-muted)]">{TYPE_LABELS[tag.groupingType]}</span>
+        {locked ? (
+          <span className="w-32 shrink-0 text-xs text-[var(--color-text-muted)]">Rücklage</span>
+        ) : (
+          // The type can be changed here (Oct 2026, Markus). It decides where the
+          // tag shows up: Anspruch → Außenstände, Reise/Projekt → Quickview rows.
+          <select
+            value={tag.groupingType ?? ''}
+            onChange={(e) => onSetType(tag.id, e.target.value || null)}
+            aria-label="Typ"
+            className="w-32 shrink-0 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-1 py-0.5 text-xs text-[var(--color-text)]"
+          >
+            {CREATE_TYPES.map((o) => (
+              <option key={o.groupingType ?? 'none'} value={o.groupingType ?? ''}>
+                {o.label}
+              </option>
+            ))}
+          </select>
         )}
         <button
           type="button"
@@ -182,6 +205,12 @@ export default function Settings() {
     return [...usage.keys()].filter((id) => !known.has(id)).length
   }, [tags, usage])
 
+  function setType(tagId, groupingType) {
+    const tag = tags.find((t) => t.id === tagId)
+    if (!tag || tag.class === 'allocation' || (tag.groupingType ?? null) === groupingType) return
+    setDoc(doc(db, 'tags', tagId), { ...tag, groupingType })
+  }
+
   function rename(tagId, rawName) {
     const result = validateTagRename(tags, tagId, rawName)
     if (!result.ok) return result.reason === 'same' ? 'same' : (TAG_RENAME_MESSAGES[result.reason] ?? 'Nicht möglich.')
@@ -221,12 +250,12 @@ export default function Settings() {
           />
         </div>
         <p className="text-sm text-[var(--color-text-muted)]">
-          Auf einen Namen klicken, neuen Namen eintippen, Enter. Das ändert nur den Namen — alle Buchungen und Budgets bleiben verbunden, und der neue Name gilt überall (Konten, Quickview, Außenstände, Verlauf).
+          Auf einen Namen klicken, neuen Namen eintippen, Enter. Das ändert nur den Namen — alle Buchungen und Budgets bleiben verbunden, und der neue Name gilt überall (Konten, Quickview, Außenstände, Verlauf). Rechts lässt sich der Typ ändern — er bestimmt Farbe und Verwendung: Anspruch erscheint in Außenstände, Reise/Projekt benennt Zeilen in Quickview.
         </p>
         <div className="rounded-lg border border-[color-mix(in_srgb,var(--color-text)_30%,transparent)] bg-[var(--color-surface)]">
           {shown.length === 0 && <div className="px-3 py-3 text-sm text-[var(--color-text-muted)]">Keine Tags gefunden.</div>}
           {shown.map(({ tag, depth }) => (
-            <TagRow key={tag.id} tag={tag} depth={needle ? 0 : depth} usage={usage.get(tag.id) ?? EMPTY_USAGE} onRename={rename} />
+            <TagRow key={tag.id} tag={tag} depth={needle ? 0 : depth} usage={usage.get(tag.id) ?? EMPTY_USAGE} onRename={rename} onSetType={setType} />
           ))}
         </div>
         {allocation.length > 0 && !needle && (
@@ -234,7 +263,7 @@ export default function Settings() {
             <h3 className="pt-2 text-sm font-medium text-[var(--color-text-muted)]">Feste Rücklagen-Tags</h3>
             <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]">
               {allocation.map((tag) => (
-                <TagRow key={tag.id} tag={tag} depth={0} usage={usage.get(tag.id) ?? EMPTY_USAGE} onRename={rename} />
+                <TagRow key={tag.id} tag={tag} depth={0} usage={usage.get(tag.id) ?? EMPTY_USAGE} onRename={rename} onSetType={setType} />
               ))}
             </div>
           </>
