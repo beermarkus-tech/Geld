@@ -18,8 +18,8 @@ import ui from './lib/uiState'
 import { visibleSum } from './lib/visibleSum'
 import { tagBalance, tagFilterMatchIds, tagFilterTotal, tagJahresende } from './lib/tagBalance'
 import { qualifiedTagName, tagColorVar, tagParent } from './lib/tagStyle'
-import { useTags } from './TagsProvider'
-import TagEditor, { slugify } from './TagEditor'
+import { useTagActions, useTags } from './TagsProvider'
+import TagEditor from './TagEditor'
 
 // Ctrl/Cmd+Delete deletes a row (Oct 2026, Markus); the grid's own "Delete clears
 // the cell" must not run on it too — onCellKeyDown still sees the key.
@@ -378,6 +378,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   const [categories, setCategories] = useState([])
   // The central tag list (TagsProvider.jsx).
   const { tags, tagById, loaded: tagsLoaded } = useTags()
+  const tagActions = useTagActions()
   // All-time, never year-scoped: balance() needs the full history back to
   // the one Jahresabschluß anchor (spec.md §2.1/§2.3/§2.8). At real-world
   // volume — a few thousand transactions a year, one household — this
@@ -723,55 +724,11 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // already-split, now-deleted transaction is exactly as locked as its
   // parent, not a separate case.
   const isRowDeleted = (data) => Boolean((data.__isLine ? data.__parent : data)?.deletedAt)
-  // Grouping tags only, never allocation (spec.md §2.5: allocation tags
-  // are fixed/pre-seeded, "a deliberate Settings-area action," never
-  // created inline while entering a transaction). Fire-and-forget, same
-  // style as persistTx elsewhere — TagEditor needs the new id back
-  // synchronously to add it to the line's selection right away, not after
-  // a round trip. Collision-checked against currently-loaded tags (a
-  // brand new name colliding with an existing slug, e.g. two different
-  // "2026-08" style labels) rather than assumed unique.
-  function createPlainTag(name, parentTag, groupingType = null) {
-    let id = slugify(name)
-    if (tags.some((t) => t.id === id)) id = `${id}-${Math.random().toString(36).slice(2, 6)}`
-    setDoc(doc(db, 'tags', id), {
-      id,
-      name,
-      parentTag,
-      class: 'grouping',
-      reconciliationTargetAccountIds: [],
-      groupingType,
-      archived: false,
-      // lets the unused-tag cleanup leave a brand-new tag alone for a day
-      createdAt: Date.now(),
-    })
-    return id
-  }
-  // "Schottland:Fähre" (Markus) creates/reuses a parent tag and a real
-  // child under it (spec.md §2.5's parentTag hierarchy) — the id actually
-  // applied to the line is always the *child's*, never the parent's, per
-  // spec's own breakdown-rollup note ("Real Konten transactions must
-  // still be tagged with the specific child... an untagged child
-  // contributes nothing"). Reuses an existing top-level tag matching the
-  // parent name (case-insensitive) rather than creating a duplicate
-  // "Schottland" every time a new child is added under it. `groupingType`
-  // (TagEditor's own create-type picker, Markus) applies to whichever tag
-  // actually gets returned/selected — the child's, for a parent:child
-  // pair, since that's the one being categorized in context; a newly
-  // implied parent always starts unspecified.
-  function createTag(name, groupingType = null) {
-    const colon = name.indexOf(':')
-    if (colon === -1) return createPlainTag(name, null, groupingType)
-    const parentName = name.slice(0, colon).trim()
-    const childName = name.slice(colon + 1).trim()
-    if (!parentName || !childName) return createPlainTag(name, null, groupingType)
-    const existingParent = tags.find(
-      (t) => t.class === 'grouping' && !t.parentTag && t.name.toLowerCase() === parentName.toLowerCase(),
-    )
-    // A new parent takes the child's type (Oct 2026, Markus).
-    const parentId = existingParent ? existingParent.id : createPlainTag(parentName, null, groupingType)
-    return createPlainTag(childName, parentId, groupingType)
-  }
+  // New tags go through the shared tag actions (TagsProvider.jsx): grouping
+  // tags only (allocation tags are fixed, spec.md §2.5); "Schottland:Fähre"
+  // creates/reuses the parent and the child; an existing tag of that name is
+  // reused. The id comes back at once, so TagEditor can add it to the line.
+  const createTag = (name, groupingType = null) => tagActions.findOrCreate(name, groupingType)
   // Kategorie (the parent group, e.g. "Lebenshaltung") is derived/display
   // only — only the leaf Unterkategorie is ever stored (spec.md §2.6/§3a).
   const groupName = (id) => {

@@ -1,24 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 
+import { findTagByText, tagKey } from './lib/tagPicker'
 import { qualifiedTagName, tagColorVar } from './lib/tagStyle'
-
-// German umlauts/ß transliterated before stripping everything else
-// non-alphanumeric — most tag names here are German (Schottland, Käse-
-// style words are routine), and collapsing "ä" etc. straight to a dash
-// produced ugly, hard-to-read ids (caught: "Fähre" -> "f-hre").
-function slugify(name) {
-  return (
-    name
-      .trim()
-      .toLowerCase()
-      .replace(/ä/g, 'ae')
-      .replace(/ö/g, 'oe')
-      .replace(/ü/g, 'ue')
-      .replace(/ß/g, 'ss')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'tag'
-  )
-}
 
 // A tag chip, colored when its type is determined (allocation, or a
 // grouping tag with a real groupingType) and a plain neutral dashed
@@ -145,7 +128,8 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
       .filter((t) => !t.archived)
       .filter((t) => !selectedIds.includes(t.id))
       .filter((t) => t.groupingType !== 'claim-category' || hasClaimTag)
-      .filter((t) => text === '' || qName(t).toLowerCase().includes(text))
+      // Spaces around the colon don't matter: "schottland:aus" finds "Schottland: Ausgaben".
+      .filter((t) => text === '' || tagKey(qName(t)).includes(tagKey(text)))
     if (text !== '') return { suggestions: eligible.slice(0, 25), recentCount: 0 }
     // Empty input (pure browsing): the 5 most-recently-used tags first,
     // separated from the rest (Markus) — recentTagValues (Konten.jsx) is
@@ -170,7 +154,8 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
   // next to the real matching suggestion for that same string.
   const canCreate =
     inputText.trim() !== '' &&
-    !tags.some((t) => qName(t).toLowerCase() === inputText.trim().toLowerCase()) &&
+    !findTagByText(tags, inputText) &&
+    !tags.some((t) => t.class === 'allocation' && t.name.toLowerCase() === inputText.trim().toLowerCase()) &&
     !legacyCandidates.some((t) => t.name.toLowerCase() === inputText.trim().toLowerCase())
   const createTypeOptions = canCreate ? CREATE_TYPES.filter((o) => o.groupingType !== 'claim-category' || hasClaimTag) : []
   const optionCount = suggestions.length + createTypeOptions.length
@@ -375,4 +360,3 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
 })
 
 export default TagEditor
-export { slugify }

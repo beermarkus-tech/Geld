@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { collection, doc, onSnapshot, setDoc } from 'firebase/firestore'
+import { collection, onSnapshot } from 'firebase/firestore'
 
 import { db } from './firebase'
-import { TAG_RENAME_MESSAGES, validateTagRename } from './lib/tagRename'
+import { TAG_RENAME_MESSAGES } from './lib/tagRename'
 import { tagColorVar } from './lib/tagStyle'
 import { CREATE_TYPES } from './TagEditor'
-import { usageOf, useTagUsage, useTags } from './TagsProvider'
+import { usageOf, useTagActions, useTagUsage, useTags } from './TagsProvider'
 
 // Settings (spec.md §3i) — the first section, built Oct 2026 (Markus): Tags,
 // with in-place renaming. The other sections of §3i (Kategorien, Konten,
@@ -164,17 +164,13 @@ export default function Settings() {
     return [...usage.keys()].filter((id) => !known.has(id)).length
   }, [tags, usage])
 
-  function setType(tagId, groupingType) {
-    const tag = tags.find((t) => t.id === tagId)
-    if (!tag || tag.class === 'allocation' || (tag.groupingType ?? null) === groupingType) return
-    setDoc(doc(db, 'tags', tagId), { ...tag, groupingType })
-  }
-
+  // Through the shared tag actions (TagsProvider.jsx), like every screen.
+  const tagActions = useTagActions()
+  const setType = (tagId, groupingType) => tagActions.setType(tagId, groupingType)
   function rename(tagId, rawName) {
-    const result = validateTagRename(tags, tagId, rawName)
-    if (!result.ok) return result.reason === 'same' ? 'same' : (TAG_RENAME_MESSAGES[result.reason] ?? 'Nicht möglich.')
-    setDoc(doc(db, 'tags', tagId), { ...tags.find((t) => t.id === tagId), name: result.name })
-    return true
+    const result = tagActions.rename(tagId, rawName)
+    if (result.ok) return true
+    return result.reason === 'same' ? 'same' : (TAG_RENAME_MESSAGES[result.reason] ?? 'Nicht möglich.')
   }
 
   // Parents (and standalone tags) alphabetically, each followed by its children;

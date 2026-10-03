@@ -1,9 +1,9 @@
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { collection, deleteDoc, doc, onSnapshot, setDoc, writeBatch } from 'firebase/firestore'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
-import { TAG_RENAME_MESSAGES, validateTagRename } from './lib/tagRename'
+import { TAG_RENAME_MESSAGES } from './lib/tagRename'
 import { qualifiedTagName, tagColorVar } from './lib/tagStyle'
-import { findTagByText, headerChildMapping, replaceOptions, splitTagText, tagKey } from './lib/tagPicker'
+import { findTagByText, replaceOptions, tagKey } from './lib/tagPicker'
 import ui from './lib/uiState'
 import { AgGridReact } from 'ag-grid-react'
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community'
@@ -21,8 +21,9 @@ import { centsToWholeEuro, parseWholeEuroInput } from './lib/format'
 import { registerScreenCursor } from './lib/screenCursor'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { usageHint } from './lib/tags'
-import { usageOf, useTagUsage, useTags } from './TagsProvider'
-import { CREATE_TYPES, slugify } from './TagEditor'
+import { usageOf, useTagActions, useTagUsage, useTags } from './TagsProvider'
+import { budgetDoc, budgetDocId } from './lib/budgetDocs'
+import { CREATE_TYPES } from './TagEditor'
 
 // Ctrl/Cmd+Delete deletes a row (Oct 2026, Markus); the grid's own "Delete clears
 // the cell" must not run on it too — onCellKeyDown still sees the key.
@@ -155,18 +156,6 @@ function blockBorderStyle(rowData) {
   }
 }
 
-// Deterministic budget-document id, exactly matching
-// migration/transform-budgets.py's own `emit()` convention
-// (`f"b-{YEAR}-{plan}-{target_id}-{breakdown or 'top'}-{month:02d}"`) — an
-// edit must land on the *same* document a migrated month already occupies,
-// or budgetTopLineMonths()/budgetBreakdownLineMonths() would silently
-// double-count by summing both the old and a stray new document for that
-// month. `breakdownTagId` defaults to the flat top-line's own 'top'
-// placeholder.
-function budgetDocId(year, planVersion, targetId, month, breakdownTagId) {
-  return `b-${year}-${planVersion}-${targetId}-${breakdownTagId ?? 'top'}-${String(month).padStart(2, '0')}`
-}
-
 const SHOW_PLAN0_KEY = 'geld-verlauf-show-plan0'
 const SHOW_BREAKDOWNS_KEY = 'geld-verlauf-show-breakdowns'
 const SHOW_PLANUNG_KEY = 'geld-verlauf-show-planung'
@@ -190,25 +179,6 @@ function readBoolSetting(key, fallback = true) {
   }
 }
 
-// A budget row's per-month document, keyed however this particular flat
-// top-line/breakdown line is targeted — every write path (a plain month
-// edit, converting a category to breakdown mode, adding/removing a line)
-// goes through this one shape so they can't quietly drift apart.
-function budgetDoc(yearNum, targetKey, targetId, planVersion, month, breakdownTagId, cents, note) {
-  const id = budgetDocId(yearNum, planVersion, targetId, month, breakdownTagId)
-  return {
-    id,
-    year: yearNum,
-    month,
-    planVersion,
-    type: targetKey === 'allocationTagId' ? 'savings-transfer' : 'expense',
-    categoryId: targetKey === 'categoryId' ? targetId : null,
-    allocationTagId: targetKey === 'allocationTagId' ? targetId : null,
-    breakdownTagId: breakdownTagId ?? null,
-    plannedAmountCents: cents,
-    note,
-  }
-}
 
 // Replaces the old window.prompt()'s colon-syntax ("Schottland:Hotels")
 // with two real fields (Markus, Sept 2026): **Name** (required — the
@@ -577,6 +547,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   const [categories, setCategories] = useState([])
   // The central tag list (TagsProvider.jsx); `tagById` here is its Map.
   const { tags, tagMap: tagById } = useTags()
+  const tagActions = useTagActions()
   const [transactions, setTransactions] = useState([])
   const [budgets, setBudgets] = useState([])
   const [closedMonths, setClosedMonths] = useState([])
@@ -1220,13 +1191,9 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // that use the same tag). Refused when empty or when a sibling under the
   // same parent already has that name (it would look like a duplicate).
   function renameTag(tagId, rawName) {
-    const result = validateTagRename(tags, tagId, rawName)
-    if (!result.ok) {
-      if (TAG_RENAME_MESSAGES[result.reason]) window.alert(TAG_RENAME_MESSAGES[result.reason])
-      return false
-    }
-    setDoc(doc(db, 'tags', tagId), { ...tagById.get(tagId), name: result.name })
-    return true
+    const result = tagActions.rename(tagId, rawName)
+    if (!result.ok && TAG_RENAME_MESSAGES[result.reason]) window.alert(TAG_RENAME_MESSAGES[result.reason])
+    return result.ok
   }
 
   // Which existing tags a row's title editor offers (replaceOptions()).
@@ -1248,62 +1215,21 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // itself once nothing uses it any more (TagCleanup.jsx).
   async function replaceBreakdownTag(row, newTagId) {
     const { targetKey, targetId, planVersion } = row
-    const rowBase = `${targetKey}:${targetId}:${planVersion}`
-    let mapping
-    const commentRows = new Map()
-    if (row.rowLabel === 'Rollup') {
-      const oldParent = row.renameTagId
-      const childIds = breakdownTagIdsFor(targetKey, targetId, planVersion).filter((id) => tagById.get(id)?.parentTag === oldParent)
-      const plan = headerChildMapping(tags, childIds, newTagId)
-      mapping = plan.mapping
-      for (const c of plan.create) mapping.set(c.fromId, createPlainGroupingTag(c.name, newTagId, c.groupingType))
-      commentRows.set(`${rowBase}:rollup:${oldParent}`, `${rowBase}:rollup:${newTagId}`)
-    } else {
-      mapping = new Map([[row.renameTagId, newTagId]])
-    }
-    for (const [from, to] of mapping) commentRows.set(`${rowBase}:${from}`, `${rowBase}:${to}`)
-
-    const batch = writeBatch(db)
-    for (const b of budgets) {
-      if (b.year !== yearNum || b.planVersion !== planVersion || b[targetKey] !== targetId || !mapping.has(b.breakdownTagId)) continue
-      batch.delete(doc(db, 'budgets', b.id))
-      const next = budgetDoc(yearNum, targetKey, targetId, planVersion, b.month, mapping.get(b.breakdownTagId), b.plannedAmountCents, b.note ?? '')
-      batch.set(doc(db, 'budgets', next.id), next)
-    }
-    for (const c of cellComments) {
-      if (c.year !== yearNum || !commentRows.has(c.rowId)) continue
-      const rowId = commentRows.get(c.rowId)
-      const id = `${yearNum}__${rowId}__${c.colId}`
-      batch.delete(doc(db, 'cellComments', c.id))
-      batch.set(doc(db, 'cellComments', id), { ...c, id, rowId })
-    }
-    const focusTo = row.rowLabel === 'Rollup' ? `${rowBase}:rollup:${newTagId}` : `${rowBase}:${newTagId}`
-    claimPendingFocus(focusTo)
-    await batch.commit()
-  }
-
-  function createPlainGroupingTag(name, parentTag, groupingType = null) {
-    let id = slugify(name)
-    if (tags.some((t) => t.id === id)) id = `${id}-${Math.random().toString(36).slice(2, 6)}`
-    setDoc(doc(db, 'tags', id), {
-      id,
-      name,
-      parentTag,
-      class: 'grouping',
-      reconciliationTargetAccountIds: [],
-      groupingType,
-      archived: false,
-      // New this round (Markus: "new breakdown lines should be added to
-      // the bottom of the list... not the top") — breakdown/rollup
-      // ordering below sorts by this instead of alphabetically. A tag
-      // without one (every pre-existing tag, migrated or created before
-      // this round) sorts as if `createdAt: 0`, i.e. before every newly
-      // created one — exactly "existing lines keep their old relative
-      // order, new ones land at the bottom" with no migration needed.
-      createdAt: Date.now(),
+    const { focusRowId, done } = tagActions.replaceInBlock({
+      year: yearNum,
+      targetKey,
+      targetId,
+      planVersion,
+      oldTagId: row.renameTagId,
+      isHeader: row.rowLabel === 'Rollup',
+      lineTagIds: breakdownTagIdsFor(targetKey, targetId, planVersion),
+      newTagId,
     })
-    return id
+    claimPendingFocus(focusRowId)
+    await done
   }
+
+
 
   // Adding a breakdown line (Sept 2026, Markus, reworked the same round —
   // see AddBreakdownModal for the tag picker UI this
@@ -1362,21 +1288,10 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     const target = addModalTarget
     setAddModalTarget(null)
     if (!target) return
-    let tagId = pickedId
-    if (!tagId) {
-      // "Parent:Child" reuses the parent by name (or creates it with the chosen
-      // type) and creates the child with that type; a plain label is a parent tag.
-      const { parent, child } = splitTagText(text)
-      const found = findTagByText(tags, text)
-      if (found) tagId = found.id
-      else if (parent) {
-        const parentTag = findTagByText(tags, parent)
-        // A parent created here takes the child's type (Oct 2026, Markus: "2025 La
-        // Rochelle:Unterkünfte" as Reise/Projekt left the new parent untyped).
-        const parentId = parentTag ? parentTag.id : createPlainGroupingTag(parent, null, groupingType)
-        tagId = createPlainGroupingTag(child, parentId, groupingType)
-      } else tagId = createPlainGroupingTag(child, null, groupingType)
-    }
+    // An existing tag picked, or "Parent:Child" / a label created through the
+    // shared tag actions (an existing tag of that name is reused; a new parent
+    // takes the chosen type too).
+    const tagId = pickedId ?? tagActions.findOrCreate(text, groupingType)
     // Focus follows the newly created/reused line once it renders, in the
     // *same column* it was already in (Markus: "after creating a
     // breakdown row, prevent the screen from jumping somewhere else, stay

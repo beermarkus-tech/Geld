@@ -1,7 +1,8 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { collection, onSnapshot } from 'firebase/firestore'
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { collection, doc, onSnapshot, writeBatch } from 'firebase/firestore'
 
 import { db } from './firebase'
+import { planFindOrCreate, planRename, planReplaceInBlock, planSetType } from './lib/tagActions'
 import { EMPTY_USAGE, tagIndex, tagUsage } from './lib/tags'
 import TagCleanup from './TagCleanup'
 
@@ -17,12 +18,24 @@ import TagCleanup from './TagCleanup'
 
 const TagsContext = createContext({ tags: [], tagById: {}, tagMap: new Map(), loaded: false })
 const UsageContext = createContext(new Map())
+const ActionsContext = createContext(null)
 
 export function useTags() {
   return useContext(TagsContext)
 }
 export function useTagUsage() {
   return useContext(UsageContext)
+}
+// The one set of tag actions (lib/tagActions.js has the rules):
+//   findOrCreate(text, groupingType) → tag id, at once ("Parent:Child" works;
+//                                      an existing tag is reused)
+//   rename(id, name)                 → { ok } or { ok: false, reason }
+//   setType(id, groupingType)
+//   replaceInBlock({ year, targetKey, targetId, planVersion, oldTagId,
+//                    isHeader, lineTagIds, newTagId })
+//                                    → { focusRowId, done: Promise }
+export function useTagActions() {
+  return useContext(ActionsContext)
 }
 export function usageOf(usage, id) {
   return usage.get(id) ?? EMPTY_USAGE
@@ -51,6 +64,7 @@ export default function TagsProvider({ children }) {
       listen('transactions', 'transactions'),
       listen('budgets', 'budgets'),
       listen('categoryYearSettings', 'yearSettings'),
+      listen('cellComments', 'cellComments'),
     ]
     return () => unsubs.forEach((u) => u())
   }, [])
@@ -62,17 +76,72 @@ export default function TagsProvider({ children }) {
   )
   const all = (...keys) => keys.every((k) => confirmed[k] && data[k])
 
+  // Latest data for the actions (kept stable, so screens' callbacks don't
+  // change), plus tags written a moment ago whose snapshot hasn't arrived yet —
+  // so two quick creates can't pick the same id.
+  const latest = useRef({ data, pending: new Map() })
+  latest.current.data = data
+  for (const t of data.tags ?? []) latest.current.pending.delete(t.id)
+  const actions = useMemo(() => {
+    const currentTags = () => {
+      const { data: d, pending } = latest.current
+      const list = d.tags ?? []
+      return pending.size ? [...list, ...[...pending.values()].filter((p) => !list.some((t) => t.id === p.id))] : list
+    }
+    const write = (sets, deletes = []) => {
+      const ops = [...sets.map((w) => ['set', w]), ...deletes.map((w) => ['delete', w])]
+      const commits = []
+      for (let i = 0; i < ops.length; i += 400) {
+        const batch = writeBatch(db)
+        for (const [kind, w] of ops.slice(i, i + 400)) {
+          if (kind === 'set') batch.set(doc(db, w.col, w.id), w.data)
+          else batch.delete(doc(db, w.col, w.id))
+        }
+        commits.push(batch.commit())
+      }
+      return Promise.all(commits)
+    }
+    const remember = (docs) => docs.forEach((d) => latest.current.pending.set(d.id, d))
+    return {
+      findOrCreate(text, groupingType = null) {
+        const { tagId, creates } = planFindOrCreate(currentTags(), text, groupingType)
+        if (creates.length) {
+          remember(creates)
+          write(creates.map((d) => ({ col: 'tags', id: d.id, data: d })))
+        }
+        return tagId
+      },
+      rename(tagId, name) {
+        const r = planRename(currentTags(), tagId, name)
+        if (r.ok) write([{ col: 'tags', id: tagId, data: r.doc }])
+        return r
+      },
+      setType(tagId, groupingType) {
+        const next = planSetType(currentTags(), tagId, groupingType)
+        if (next) write([{ col: 'tags', id: tagId, data: next }])
+      },
+      replaceInBlock(params) {
+        const d = latest.current.data
+        const plan = planReplaceInBlock({ ...params, tags: currentTags(), budgets: d.budgets ?? [], cellComments: d.cellComments ?? [] })
+        remember(plan.creates)
+        return { focusRowId: plan.focusRowId, done: write(plan.sets, plan.deletes) }
+      },
+    }
+  }, [])
+
   return (
     <TagsContext.Provider value={tagsValue}>
-      <UsageContext.Provider value={usage}>
-        <TagCleanup
-          tags={all('tags') ? data.tags : null}
-          transactions={all('transactions') ? data.transactions : null}
-          budgets={all('budgets') ? data.budgets : null}
-          yearSettings={all('yearSettings') ? data.yearSettings : null}
-        />
-        {children}
-      </UsageContext.Provider>
+      <ActionsContext.Provider value={actions}>
+        <UsageContext.Provider value={usage}>
+          <TagCleanup
+            tags={all('tags') ? data.tags : null}
+            transactions={all('transactions') ? data.transactions : null}
+            budgets={all('budgets') ? data.budgets : null}
+            yearSettings={all('yearSettings') ? data.yearSettings : null}
+          />
+          {children}
+        </UsageContext.Provider>
+      </ActionsContext.Provider>
     </TagsContext.Provider>
   )
 }
