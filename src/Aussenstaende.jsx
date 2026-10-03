@@ -61,13 +61,14 @@ export default function Aussenstaende({ onOpenInKonten, active = true }) {
   // the opposite sign is a correcting booking (repayment, refund, settlement).
   const openingSign = (claim) => Math.sign(claim.lines.find((l) => l.cents !== 0)?.cents ?? 0)
 
-  // Lines grouped by the claim-category tag they also carry (Meal/Taxi/…),
+  // Lines grouped by the claim's child tag they carry (a Dienstreise's
+  // "2024-05 HAM: Hotel" → "Hotel"; Oct 2026),
   // in order of first appearance; lines without one come first, flat. Lines
   // are never summed within a group (spec §3g).
   function grouped(claim) {
     const groups = new Map()
     for (const line of claim.lines) {
-      const cat = line.tagIds.find((id) => tagById[id]?.groupingType === 'claim-category')
+      const cat = line.tagIds.find((id) => tagById[id]?.parentTag === claim.id)
       const key = cat ? tagById[cat].name : ''
       if (!groups.has(key)) groups.set(key, [])
       groups.get(key).push(line)

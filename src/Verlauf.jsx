@@ -379,7 +379,7 @@ function AddBreakdownModal({ tags, excludeIds, onSubmit, onCancel }) {
               .slice(0, 25)
               .map(({ t, label }) => ({ key: t.id, id: t.id, tag: t, label, hint: usageHint(usageOf(usage, t.id)) }))
           }}
-          getCreateTypes={(text) => (text.trim() !== '' && !findTagByText(tags, text) ? CREATE_TYPES.filter((o) => o.groupingType !== 'claim-category') : [])}
+          getCreateTypes={(text) => (text.trim() !== '' && !findTagByText(tags, text) ? CREATE_TYPES : [])}
           onPick={(o) => onSubmit({ tagId: o.id })}
           onCreate={(text, groupingType) => onSubmit({ text, groupingType })}
           onClose={onCancel}

@@ -88,3 +88,20 @@ describe('single-sided bookings on a receivable account (write-offs)', () => {
     expect(claimOverview(tags, txs, REC)[0].net).toBe(0)
   })
 })
+
+describe('Dienstreise', () => {
+  it('is a claim; its children count into it and are no claims of their own', () => {
+    const t = [
+      { id: 'ham', name: '2024-05 HAM', parentTag: null, class: 'grouping', groupingType: 'business-trip' },
+      { id: 'ham-hotel', name: 'Hotel', parentTag: 'ham', class: 'grouping', groupingType: 'business-trip' },
+      { id: 'ham-taxi', name: 'Taxi', parentTag: 'ham', class: 'grouping', groupingType: null },
+    ]
+    const txs = [
+      tx('a', '2024-05-10', 'visa', 'airbus', 30000, ['ham-hotel']),
+      tx('b', '2024-05-11', 'visa', 'airbus', 5000, ['ham-taxi']),
+      tx('c', '2024-06-20', 'airbus', 'bnp', 30000, ['ham']),
+    ]
+    expect(claimTagIds(t, txs, REC)).toEqual(['ham'])
+    expect(claimOverview(t, txs, REC).map((c) => [c.id, c.net, c.lines.length])).toEqual([['ham', 5000, 3]])
+  })
+})

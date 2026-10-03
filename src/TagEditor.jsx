@@ -39,8 +39,8 @@ function Chip({ tag, label, onRemove, title }) {
 // then closes. Backspace on an empty field removes the last chip. Tab keeps
 // what's there, closes and adds a new booking row below (Markus).
 //
-// Reisekostenart (claim-category) tags are only offered once a claim tag is on
-// the line (spec.md §2.5's sequencing rule).
+// (The old rule offering Reisekostenart only next to a claim tag is gone with
+// that type — Dienstreise children are ordinary "Trip: Kind" tags.)
 const TagEditor = forwardRef(function TagEditor(props, ref) {
   const { data, tags, recentTagValues = [], initialTagIds = [], onApply, onCreateTag, onTabAddRow, api } = props
   const [selectedIds, setSelectedIds] = useState(initialTagIds)
@@ -53,14 +53,12 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
 
   const tagById = useMemo(() => Object.fromEntries(tags.map((t) => [t.id, t])), [tags])
   const qName = (t) => qualifiedTagName(t, tagById)
-  const hasClaimTag = selectedIds.some((id) => tagById[id]?.groupingType === 'claim')
 
   function getOptions(rawText) {
     const text = rawText.trim().toLowerCase()
     const candidates = [...tags.filter((t) => t.class === 'allocation'), ...tags.filter((t) => t.class === 'grouping')]
     const eligible = candidates
       .filter((t) => !t.archived && !selectedIds.includes(t.id))
-      .filter((t) => t.groupingType !== 'claim-category' || hasClaimTag)
       // Spaces around the colon don't matter: "schottland:aus" finds "Schottland: Ausgaben".
       .filter((t) => text === '' || tagKey(qName(t)).includes(tagKey(text)))
     let list = eligible.slice(0, 25)
@@ -93,7 +91,7 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
     const text = rawText.trim().toLowerCase()
     if (!text || findTagByText(tags, rawText)) return []
     if (tags.some((t) => t.class === 'allocation' && t.name.toLowerCase() === text)) return []
-    return CREATE_TYPES.filter((o) => o.groupingType !== 'claim-category' || hasClaimTag)
+    return CREATE_TYPES
   }
 
   // Adding applies and closes at once; removing a chip doesn't close, so

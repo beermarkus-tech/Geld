@@ -106,3 +106,10 @@ describe('planMove / twinIds', () => {
     expect(twinIds(t).size).toBe(0)
   })
 })
+
+describe('Dienstreise children', () => {
+  it('a new child of a Dienstreise is a Dienstreise too', () => {
+    const t = [{ id: 'ham', name: '2024-05 HAM', parentTag: null, class: 'grouping', groupingType: 'business-trip' }]
+    expect(planFindOrCreate(t, '2024-05 HAM:Hotel', null, 1).creates[0]).toMatchObject({ name: 'Hotel', parentTag: 'ham', groupingType: 'business-trip' })
+  })
+})

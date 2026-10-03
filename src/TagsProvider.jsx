@@ -157,6 +157,18 @@ export default function TagsProvider({ children }) {
     }
   }, [])
 
+  // The old flat "Reisekostenart" type (claim-category) was replaced by
+  // Dienstreise (Oct 2026, Markus: "leave them, I'll redo"): tags still typed
+  // with it lose that type — once, as soon as the server has confirmed the tags.
+  useEffect(() => {
+    if (!confirmed.tags || !data.tags) return
+    const old = data.tags.filter((t) => t.groupingType === 'claim-category')
+    if (old.length === 0) return
+    const batch = writeBatch(db)
+    old.forEach((t) => batch.set(doc(db, 'tags', t.id), { ...t, groupingType: null }))
+    batch.commit().catch(() => {})
+  }, [confirmed.tags, data.tags])
+
   return (
     <TagsContext.Provider value={tagsValue}>
       <ActionsContext.Provider value={actions}>

@@ -11,19 +11,28 @@ export const AUSSENSTAENDE_ACCOUNT_ID = 'aussenstaende'
 // and CPAM claims were missing because only Außenstände itself was looked at).
 export const receivableAccountIds = (accounts) => new Set(accounts.filter((a) => a.group === 'receivable').map((a) => a.id))
 
-// Every claim/loan tag: tags declared `groupingType: 'claim'`, plus any
+// Every claim/loan tag: top-level tags typed Anspruch or Dienstreise, plus any
 // *untyped* tag used on a line of a booking that touches a receivable account
 // (a loan tag like "Dirk Sept" may never have been given a type). A tag with
-// another type is never a claim, even on such a booking: Reisekostenart
-// (Meal/Taxi/…) labels a claim's lines, Reise/Projekt and Abrechnung tags just
-// travel along (Oct 2026, Markus: "2026 Schottland: Mietwagen" showed up as an
+// another type is never a claim, even on such a booking (Reise/Projekt and
+// Abrechnung tags just travel along), nor is a child of a claim — a
+// Dienstreise's "Hotel" counts into its trip (Oct 2026, Markus: "2026 Schottland: Mietwagen" showed up as an
 // open claim in the panel and put red dots on its bookings).
 //
 // @returns {string[]} tag ids
 export function claimTagIds(tags, transactions, receivableIds) {
   const byId = Object.fromEntries(tags.map((t) => [t.id, t]))
-  const excluded = (id) => byId[id]?.class === 'allocation' || Boolean(byId[id]?.groupingType && byId[id].groupingType !== 'claim')
-  const ids = new Set(tags.filter((t) => t.groupingType === 'claim').map((t) => t.id))
+  const isClaimType = (t) => t?.groupingType === 'claim' || t?.groupingType === 'business-trip'
+  // A child of a claim (e.g. "2024-05 HAM: Hotel") is part of its parent's
+  // claim, never a claim of its own.
+  const excluded = (id) => {
+    const t = byId[id]
+    if (!t) return false
+    if (t.class === 'allocation') return true
+    if (t.parentTag && (isClaimType(byId[t.parentTag]) || ids.has(t.parentTag))) return true
+    return Boolean(t.groupingType && !isClaimType(t))
+  }
+  const ids = new Set(tags.filter((t) => (t.groupingType === 'claim' || t.groupingType === 'business-trip') && !t.parentTag).map((t) => t.id))
   for (const tx of transactions) {
     if (!receivableIds.has(tx.fromAccountId) && !receivableIds.has(tx.toAccountId)) continue
     for (const line of tx.lines ?? []) {

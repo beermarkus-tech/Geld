@@ -58,7 +58,9 @@ export function planFindOrCreate(tags, text, groupingType = null, now = Date.now
       parentId = d.id
     }
   }
-  const d = newTagDoc(taken, { name: child, parentTag: parentId, groupingType, now })
+  // A child of a Dienstreise is always a Dienstreise too ("2024-05 HAM: Hotel").
+  const parentType = parentId ? (tags.find((t) => t.id === parentId)?.groupingType ?? creates.find((c) => c.id === parentId)?.groupingType) : null
+  const d = newTagDoc(taken, { name: child, parentTag: parentId, groupingType: parentType === 'business-trip' ? 'business-trip' : groupingType, now })
   creates.push(d)
   return { tagId: d.id, creates }
 }
