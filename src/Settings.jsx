@@ -253,7 +253,7 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
           {usage.planRows > 0 && ` · ${usage.planRows} Budget`} {open ? '▴' : '▾'}
         </button>
       </div>
-      {open && <UsageDetails usage={usage} depth={depth} targetNames={targetNames} onOpenPlan={(pl) => onOpenPlan(pl, tag.id)} onOpenBooking={(b) => onOpenBooking(b, tag.id)} />}
+      {open && <UsageDetails usage={usage} depth={depth} targetNames={targetNames} onOpenPlan={(pl) => onOpenPlan(pl, pl.tagId ?? tag.id)} onOpenBooking={(b) => onOpenBooking(b, tag.id)} />}
       {error && <div className="px-3 pb-1.5 text-xs text-[var(--color-alert)]" style={{ paddingLeft: 12 + depth * 22 }}>{error}</div>}
     </div>
   )
@@ -537,8 +537,35 @@ export default function Settings({ year, onOpenInKonten, onOpenInVerlauf }) {
     { key: 'archive', label: 'Archiv', count: typeCounts.archive ?? 0, look: null },
   ]
   const shownPlain = needle ? plainTextTags.filter((id) => id.toLowerCase().includes(needle)) : plainTextTags
+  // A parent's figures cover its whole family (Oct 2026, Markus): its own use
+  // plus every child's; each plan line remembers which tag it belongs to, so
+  // clicking it opens the right line in Verlauf. A booking opens the parent's
+  // tag filter, which includes its children.
+  const familyUsage = (tag) => {
+    const own = usageOf(usage, tag.id)
+    const kids = tag.parentTag ? [] : tags.filter((t) => t.parentTag === tag.id)
+    if (kids.length === 0) return own
+    const all = [tag, ...kids].map((t) => ({ id: t.id, u: usageOf(usage, t.id) }))
+    const seen = new Set()
+    return {
+      lines: all.reduce((n, x) => n + x.u.lines, 0),
+      deletedLines: all.reduce((n, x) => n + x.u.deletedLines, 0),
+      planRows: all.reduce((n, x) => n + x.u.planRows, 0),
+      yearSettings: all.reduce((n, x) => n + x.u.yearSettings, 0),
+      plans: all.flatMap((x) => x.u.plans.map((pl) => ({ ...pl, key: `${x.id}|${pl.key}`, tagId: x.id }))).sort((a, b) => a.year - b.year || a.planVersion.localeCompare(b.planVersion)),
+      bookings: all
+        .flatMap((x) => x.u.bookings)
+        .filter((b) => {
+          const k = `${b.txId}|${b.cents}|${b.date}`
+          if (seen.has(k)) return false
+          seen.add(k)
+          return true
+        })
+        .sort((a, b) => String(b.date).localeCompare(String(a.date))),
+    }
+  }
   const rowProps = (tag) => ({
-    usage: usageOf(usage, tag.id),
+    usage: familyUsage(tag),
     targetNames,
     twin: twins.has(tag.id),
     parents,
