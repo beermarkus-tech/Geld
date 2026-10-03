@@ -124,3 +124,45 @@ export function planReplaceInBlock({ tags, budgets, cellComments, year, targetKe
   }
   return { creates, sets, deletes, focusRowId: isHeader ? `${rowBase}:rollup:${newTagId}` : `${rowBase}:${newTagId}` }
 }
+
+// Move a tag under another parent (or to the top level with `null`) — Settings
+// › Tags (Oct 2026, Markus). Only the `parentTag` changes; bookings and plan
+// lines keep pointing at the same tag, so in Verlauf the line then sits under
+// its new Übergruppe (and that Übergruppe's sum includes its bookings).
+// Refused: allocation tags; a tag that has children itself (tags are one level
+// deep); a parent that is itself a child; a sibling of the same name there.
+// @returns {{ ok: true, doc } | { ok: false, reason: 'missing'|'locked'|'has-children'|'bad-parent'|'same'|'clash' }}
+export function planMove(tags, tagId, newParentId) {
+  const tag = tags.find((t) => t.id === tagId)
+  if (!tag) return { ok: false, reason: 'missing' }
+  if (tag.class === 'allocation') return { ok: false, reason: 'locked' }
+  const target = newParentId ?? null
+  if ((tag.parentTag ?? null) === target) return { ok: false, reason: 'same' }
+  if (target !== null && tags.some((t) => t.parentTag === tagId)) return { ok: false, reason: 'has-children' }
+  if (target !== null) {
+    const parent = tags.find((t) => t.id === target)
+    if (!parent || parent.id === tagId || parent.class !== 'grouping' || parent.parentTag) return { ok: false, reason: 'bad-parent' }
+  }
+  const name = tag.name.trim().toLowerCase()
+  if (tags.some((t) => t.id !== tagId && (t.parentTag ?? null) === target && t.name.trim().toLowerCase() === name)) return { ok: false, reason: 'clash' }
+  return { ok: true, doc: { ...tag, parentTag: target } }
+}
+
+export const MOVE_MESSAGES = {
+  'has-children': 'Dieser Tag hat selbst Untertags — er kann nicht unter einen anderen geschoben werden.',
+  'bad-parent': 'Dorthin geht es nicht (nur unter einen Tag ohne eigene Übergruppe).',
+  clash: 'Unter dieser Übergruppe gibt es den Namen schon.',
+  locked: 'Feste Rücklagen-Tags lassen sich nicht verschieben.',
+}
+
+// Same-name siblings ("doppelt" in Settings): ids of every tag that shares its
+// parent and its name (case and outer spaces ignored) with another grouping tag.
+export function twinIds(tags) {
+  const groups = new Map()
+  for (const t of tags) {
+    if (t.class !== 'grouping') continue
+    const k = `${t.parentTag ?? ''}|${String(t.name ?? '').trim().toLowerCase()}`
+    groups.set(k, [...(groups.get(k) ?? []), t.id])
+  }
+  return new Set([...groups.values()].filter((ids) => ids.length > 1).flat())
+}

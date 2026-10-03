@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { newTagDoc, planFindOrCreate, planRename, planReplaceInBlock, planSetType, slugify } from './tagActions'
+import { newTagDoc, planFindOrCreate, planMove, planRename, planReplaceInBlock, planSetType, slugify, twinIds } from './tagActions'
 
 const tags = [
   { id: 'schottland', name: 'Schottland', parentTag: null, class: 'grouping', groupingType: 'project' },
@@ -78,5 +78,31 @@ describe('planReplaceInBlock', () => {
     expect(r.creates).toEqual([expect.objectContaining({ id: 'auto-2', name: 'Auto', parentTag: 'fehmarn', groupingType: 'project' })])
     expect(r.sets.filter((s) => s.col === 'budgets').map((s) => s.data.breakdownTagId)).toEqual(['fehmarn-hotels', 'auto-2'])
     expect(r.focusRowId).toBe('categoryId:food:plan1:rollup:fehmarn')
+  })
+})
+
+describe('planMove / twinIds', () => {
+  const t = [
+    { id: 'sco', name: 'Schottland', parentTag: null, class: 'grouping' },
+    { id: 'feh', name: 'Fehmarn', parentTag: null, class: 'grouping' },
+    { id: 'hot', name: 'Hotels', parentTag: 'sco', class: 'grouping' },
+    { id: 'feh-hot', name: 'hotels ', parentTag: 'feh', class: 'grouping' },
+    { id: 'auto', name: 'Auto', parentTag: null, class: 'grouping' },
+    { id: 'spar', name: 'Sparen', parentTag: null, class: 'allocation' },
+  ]
+  it('moves a tag under a parent or to the top level', () => {
+    expect(planMove(t, 'auto', 'sco')).toMatchObject({ ok: true, doc: { id: 'auto', parentTag: 'sco' } })
+    expect(planMove(t, 'hot', null)).toMatchObject({ ok: true, doc: { parentTag: null } })
+  })
+  it('refuses what would break the one-level tree or clash', () => {
+    expect(planMove(t, 'sco', 'feh').reason).toBe('has-children')
+    expect(planMove(t, 'auto', 'hot').reason).toBe('bad-parent')
+    expect(planMove(t, 'hot', 'feh').reason).toBe('clash')
+    expect(planMove(t, 'hot', 'sco').reason).toBe('same')
+    expect(planMove(t, 'spar', 'sco').reason).toBe('locked')
+  })
+  it('finds same-name siblings', () => {
+    expect([...twinIds([...t, { id: 'hot2', name: 'HOTELS', parentTag: 'sco', class: 'grouping' }])].sort()).toEqual(['hot', 'hot2'])
+    expect(twinIds(t).size).toBe(0)
   })
 })

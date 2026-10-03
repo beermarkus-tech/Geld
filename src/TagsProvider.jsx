@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { collection, doc, onSnapshot, writeBatch } from 'firebase/firestore'
 
 import { db } from './firebase'
-import { planFindOrCreate, planRename, planReplaceInBlock, planSetType } from './lib/tagActions'
+import { planFindOrCreate, planMove, planRename, planReplaceInBlock, planSetType } from './lib/tagActions'
 import { EMPTY_USAGE, tagIndex, tagUsage } from './lib/tags'
 import TagCleanup from './TagCleanup'
 
@@ -31,6 +31,7 @@ export function useTagUsage() {
 //                                      an existing tag is reused)
 //   rename(id, name)                 → { ok } or { ok: false, reason }
 //   setType(id, groupingType)
+//   move(id, newParentId | null)     → { ok } or { ok: false, reason }
 //   replaceInBlock({ year, targetKey, targetId, planVersion, oldTagId,
 //                    isHeader, lineTagIds, newTagId })
 //                                    → { focusRowId, done: Promise }
@@ -113,6 +114,11 @@ export default function TagsProvider({ children }) {
       },
       rename(tagId, name) {
         const r = planRename(currentTags(), tagId, name)
+        if (r.ok) write([{ col: 'tags', id: tagId, data: r.doc }])
+        return r
+      },
+      move(tagId, newParentId) {
+        const r = planMove(currentTags(), tagId, newParentId)
         if (r.ok) write([{ col: 'tags', id: tagId, data: r.doc }])
         return r
       },
