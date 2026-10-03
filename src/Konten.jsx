@@ -2710,6 +2710,9 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
                     <b>Strg++</b> — Neue Buchung
                   </li>
                   <li>
+                    <b>Strg+Entf</b> — Buchung löschen (zweimal zum Bestätigen)
+                  </li>
+                  <li>
                     <b>Strg+T</b> — Aufteilen / weiter aufteilen
                   </li>
                   <li>
@@ -2887,7 +2890,9 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           // suppressMovable (not just per-column, so it also covers the
           // default column menu) keeps the spec'd column order fixed —
           // Markus's request: no accidental drag-reordering or hiding.
-          defaultColDef={{ suppressMovable: true }}
+          // Plain Delete does nothing outside an edit (Oct 2026): AG Grid would
+          // otherwise empty the cell and save it — deleting a row is Ctrl+Delete.
+          defaultColDef={{ suppressMovable: true, suppressKeyboardEvent: (p) => !p.editing && p.event.key === 'Delete' && !p.event.ctrlKey && !p.event.metaKey }}
           // Single-row selection just for "+ Neue Buchung"'s "insert below
           // the selected row" — not a bulk-actions feature.
           rowSelection={{ mode: 'singleRow', checkboxes: false, enableClickSelection: true }}
@@ -2979,16 +2984,17 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
               focusClaimRef.current += 1
             }
           }}
-          // The keyboard Delete key does the same thing as clicking the
-          // trashcan (Markus's request) — same two-click-style arm/confirm
+          // Ctrl+Delete (Strg+Entf; was plain Delete until Oct 2026, Markus) does
+          // the same thing as clicking the trashcan — same two-click-style arm/confirm
           // via handleDeleteClick, not an instant delete. Ignored while a
           // cell is actively being edited, so Delete still just edits text
           // like normal (clearing a character/selection) rather than also
           // arming row deletion underneath it.
           onCellKeyDown={(p) => {
             const key = p.event?.key
-            if (key === 'Delete') {
+            if (key === 'Delete' && (p.event.ctrlKey || p.event.metaKey)) {
               if (p.api.getEditingCells().length > 0) return
+              p.event.preventDefault()
               handleDeleteClick(p.data)
               return
             }
