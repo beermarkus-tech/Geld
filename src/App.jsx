@@ -310,7 +310,7 @@ export default function App() {
         <div className={view === 'aussenstaende' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
           <Aussenstaende onOpenInKonten={openInKonten} active={view === 'aussenstaende'} />
         </div>
-        {view === 'settings' && <Settings onOpenInKonten={openInKonten} onOpenInVerlauf={openInVerlauf} />}
+        {view === 'settings' && <Settings year={year} onOpenInKonten={openInKonten} onOpenInVerlauf={openInVerlauf} />}
         {view === 'importexport' && <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} />}
         {/* Every other nav item (Dashboard, Quickview, Fortschritt,
             Monatsabschluss, Außenstände, Settings) isn't built yet —

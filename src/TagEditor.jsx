@@ -72,7 +72,7 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
     const text = rawText.trim().toLowerCase()
     const candidates = [...tags.filter((t) => t.class === 'allocation'), ...tags.filter((t) => t.class === 'grouping')]
     const eligible = candidates
-      .filter((t) => !t.archived && !selectedIds.includes(t.id))
+      .filter((t) => !selectedIds.includes(t.id))
       // Spaces around the colon don't matter: "schottland:aus" finds "Schottland: Ausgaben".
       .filter((t) => text === '' || tagKey(qName(t)).includes(tagKey(text)))
     let list = eligible.slice(0, 25)
@@ -107,7 +107,7 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
     const raw = rawText.trim()
     if (raw && !raw.includes(':')) {
       for (const p of familyParents) {
-        const kids = tags.filter((t) => t.parentTag === p.id && !t.archived && !selectedIds.includes(t.id))
+        const kids = tags.filter((t) => t.parentTag === p.id && !selectedIds.includes(t.id))
         kids.filter((k) => k.name.toLowerCase().includes(text)).forEach((k) => family.push(k))
         if (!tags.some((t) => t.parentTag === p.id && t.name.trim().toLowerCase() === text))
           family.push({ newUnder: p, name: raw })

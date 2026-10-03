@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { collection, doc, onSnapshot, writeBatch } from 'firebase/firestore'
 
 import { db } from './firebase'
-import { planFindOrCreate, planMove, planRename, planReplaceInBlock, planSetType } from './lib/tagActions'
+import { planArchive, planFindOrCreate, planMove, planRename, planReplaceInBlock, planSetType } from './lib/tagActions'
 import { planPlainTagConversion } from './lib/tagConvert'
 import { planMerge } from './lib/tagMerge'
 import { EMPTY_USAGE, tagIndex, tagUsage } from './lib/tags'
@@ -34,6 +34,7 @@ export function useTagUsage() {
 //   rename(id, name)                 → { ok } or { ok: false, reason }
 //   setType(id, groupingType)
 //   move(id, newParentId | null)     → { ok } or { ok: false, reason }
+//   setArchived(id, bool)           — the whole family
 //   merge(fromId, intoId)            → { ok, done } or { ok: false, reason }
 //   previewPlainTags(receivableIds) / convertPlainTags(receivableIds) → old plain-text tags → records
 //   replaceInBlock({ year, targetKey, targetId, planVersion, oldTagId,
@@ -132,6 +133,10 @@ export default function TagsProvider({ children }) {
         const r = planMerge(currentTags(), fromId, intoId, { transactions: d.transactions ?? [], budgets: d.budgets ?? [], cellComments: d.cellComments ?? [] })
         if (!r.ok) return r
         return { ok: true, done: write(r.sets, r.deletes) }
+      },
+      setArchived(tagId, archived) {
+        const docs = planArchive(currentTags(), tagId, archived)
+        if (docs.length) write(docs.map((d) => ({ col: 'tags', id: d.id, data: d })))
       },
       setType(tagId, groupingType) {
         const docs = planSetType(currentTags(), tagId, groupingType)

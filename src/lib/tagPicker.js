@@ -26,7 +26,7 @@ export function findTagByText(tags, text) {
   const key = tagKey(text)
   const byId = new Map(tags.map((t) => [t.id, t]))
   return tags.find((t) => {
-    if (t.class !== 'grouping' || t.archived) return false
+    if (t.class !== 'grouping') return false
     const parent = t.parentTag ? byId.get(t.parentTag) : null
     return tagKey(parent ? `${parent.name}:${t.name}` : t.name) === key
   })
@@ -38,10 +38,11 @@ export function findTagByText(tags, text) {
 //   kind 'standalone' a line without parent         → top-level tags
 //   kind 'header'     the Übergruppe row `parentId`  → other top-level tags
 // Never offered: the tag itself, tags already a line or Übergruppe in this
-// block (`blockTagIds`), archived and allocation tags.
+// block (`blockTagIds`), allocation tags. (Archived tags are offered: archiving
+// only tidies Settings' list.)
 export function replaceOptions(tags, { kind, tagId, parentId = null, blockTagIds = new Set() }) {
   return tags
-    .filter((t) => t.class === 'grouping' && !t.archived && t.id !== tagId && !blockTagIds.has(t.id))
+    .filter((t) => t.class === 'grouping' && t.id !== tagId && !blockTagIds.has(t.id))
     .filter((t) => (kind === 'child' ? t.parentTag === parentId : !t.parentTag))
     .sort((a, b) => a.name.localeCompare(b.name))
 }
@@ -57,7 +58,7 @@ export function headerChildMapping(tags, childIds, newParentId) {
   for (const id of childIds) {
     const child = byId.get(id)
     const name = child?.name ?? id
-    const match = tags.find((t) => t.parentTag === newParentId && !t.archived && t.name.toLowerCase() === name.toLowerCase())
+    const match = tags.find((t) => t.parentTag === newParentId && t.name.toLowerCase() === name.toLowerCase())
     if (match) mapping.set(id, match.id)
     else create.push({ fromId: id, name, groupingType: child?.groupingType ?? null })
   }

@@ -179,3 +179,16 @@ export function twinIds(tags) {
   }
   return new Set([...groups.values()].filter((ids) => ids.length > 1).flat())
 }
+
+// Archive / bring back a tag family (Oct 2026, Markus): the top-level tag and
+// all its children get `archived`. Archived tags only leave Settings' list (an
+// "Archiv" chip shows them); bookings, plans and the tag boxes are unaffected.
+// Returns the documents that change.
+export function planArchive(tags, tagId, archived) {
+  const tag = tags.find((t) => t.id === tagId)
+  if (!tag || tag.class === 'allocation') return []
+  const rootId = tag.parentTag && tags.some((t) => t.id === tag.parentTag) ? tag.parentTag : tag.id
+  return tags
+    .filter((t) => t.class === 'grouping' && (t.id === rootId || t.parentTag === rootId) && Boolean(t.archived) !== Boolean(archived))
+    .map((t) => ({ ...t, archived: Boolean(archived) }))
+}

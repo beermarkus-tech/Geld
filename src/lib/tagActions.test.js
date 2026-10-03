@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { newTagDoc, planFindOrCreate, planMove, planRename, planReplaceInBlock, planSetType, slugify, twinIds } from './tagActions'
+import { newTagDoc, planArchive, planFindOrCreate, planMove, planRename, planReplaceInBlock, planSetType, slugify, twinIds } from './tagActions'
 
 const tags = [
   { id: 'schottland', name: 'Schottland', parentTag: null, class: 'grouping', groupingType: 'project' },
@@ -115,5 +115,20 @@ describe('Dienstreise children', () => {
   it('a new child of a Dienstreise is a Dienstreise too', () => {
     const t = [{ id: 'ham', name: '2024-05 HAM', parentTag: null, class: 'grouping', groupingType: 'business-trip' }]
     expect(planFindOrCreate(t, '2024-05 HAM:Hotel', null, 1).creates[0]).toMatchObject({ name: 'Hotel', parentTag: 'ham', groupingType: 'business-trip' })
+  })
+})
+
+describe('planArchive', () => {
+  const t = [
+    { id: 'ham', name: '2024-05 HAM', parentTag: null, class: 'grouping' },
+    { id: 'ham-h', name: 'Hotel', parentTag: 'ham', class: 'grouping' },
+    { id: 'x', name: 'X', parentTag: null, class: 'grouping', archived: true },
+    { id: 'spar', name: 'Sparen', parentTag: null, class: 'allocation' },
+  ]
+  it('archives and restores a whole family', () => {
+    expect(planArchive(t, 'ham-h', true).map((d) => [d.id, d.archived])).toEqual([['ham', true], ['ham-h', true]])
+    expect(planArchive(t, 'x', false).map((d) => [d.id, d.archived])).toEqual([['x', false]])
+    expect(planArchive(t, 'x', true)).toEqual([])
+    expect(planArchive(t, 'spar', true)).toEqual([])
   })
 })

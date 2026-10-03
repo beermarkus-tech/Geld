@@ -132,7 +132,6 @@ export default function Quickview({ year, onOpenInKonten, active = true, preset 
       .map((c) => ({ id: `c:${c.id}`, name: `${byId[c.parentCategoryId]?.name ?? ''} › ${c.name}`, filterText: c.name }))
       .sort((a, b) => a.name.localeCompare(b.name, 'de'))
     const tgs = tags
-      .filter((t) => !t.archived)
       .map((t) => ({ id: `t:${t.id}`, name: `Tag: ${qualifiedName(t.id, tagById)}`, filterText: t.name }))
       .sort((a, b) => a.name.localeCompare(b.name, 'de'))
     return [...cats, ...tgs]

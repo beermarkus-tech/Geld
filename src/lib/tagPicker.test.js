@@ -23,7 +23,7 @@ describe('tagPicker', () => {
     expect(findTagByText(tags, 'schottland')?.id).toBe('schottland')
     expect(findTagByText(tags, 'Schottland: Hotels')?.id).toBe('hotels')
     expect(findTagByText(tags, 'Hotels')).toBeUndefined()
-    expect(findTagByText(tags, 'Alt')).toBeUndefined()
+    expect(findTagByText(tags, 'Alt')?.id).toBe('alt') // archived tags stay findable
     expect(findTagByText(tags, 'Anlage')).toBeUndefined()
   })
 })
@@ -39,8 +39,7 @@ describe('replaceOptions / headerChildMapping', () => {
     { id: 'sch-a', name: 'Auto', parentTag: 'sch', class: 'grouping' },
     { id: 'feh-h', name: 'hotels', parentTag: 'feh', class: 'grouping' },
     { id: 'alloc', name: 'Sparen', parentTag: null, class: 'allocation' },
-    { id: 'old', name: 'Alt', parentTag: null, class: 'grouping', archived: true },
-  ]
+    ]
   const ids = (list) => list.map((x) => x.id)
   it('a child line is offered its siblings only', () => {
     expect(ids(replaceOptions(t, { kind: 'child', tagId: 'sch-h', parentId: 'sch', blockTagIds: new Set(['sch', 'sch-h', 'sch-f']) }))).toEqual(['sch-a'])

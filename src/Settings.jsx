@@ -74,7 +74,7 @@ function PlainTagRow({ id, usage, targetNames, open, onToggle, onOpenBooking }) 
   )
 }
 
-function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, hasChildren, open, onToggle, onRename, onSetType, onMove, onMerge, onOpenPlan, onOpenBooking }) {
+function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, hasChildren, open, onToggle, onRename, onSetType, onMove, onMerge, onOpenPlan, onOpenBooking, kids = [], expanded = false, onToggleFamily, onArchive, archivedView = false }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(tag.name)
   const [error, setError] = useState('')
@@ -98,6 +98,22 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
   return (
     <div className="flex flex-col border-b border-[var(--color-border)] last:border-b-0">
       <div className={`flex items-center gap-3 px-3 py-1.5 text-sm ${dim ? 'opacity-50' : ''}`} style={{ paddingLeft: 12 + depth * 22 }}>
+        {/* A family is one line, its children small behind the parent; ▸
+            opens it (children as their own lines, as before) (Oct 2026). */}
+        {depth === 0 && !locked &&
+          (hasChildren ? (
+            <button
+              type="button"
+              onClick={onToggleFamily}
+              aria-label={expanded ? 'Untertags einklappen' : 'Untertags aufklappen'}
+              className="-mr-2 w-4 shrink-0 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            >
+              {expanded ? '▾' : '▸'}
+            </button>
+          ) : (
+            <span className="-mr-2 w-4 shrink-0" />
+          ))}
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden whitespace-nowrap">
         {editing ? (
           <input
             ref={inputRef}
@@ -131,7 +147,7 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
               setEditing(true)
             }}
             title={locked ? 'Festes Rücklagen-Tag — nicht umbenennbar' : 'Klicken zum Umbenennen'}
-            className="min-w-0 flex-1 text-left"
+            className={`min-w-0 text-left ${hasChildren && !expanded ? 'shrink-0' : 'flex-1'}`}
           >
             {/* Drawn as the tag's pill (TagPill.jsx), as everywhere else. */}
             <TagPill tag={tag} size="md" className={locked ? '' : 'hover:underline'}>
@@ -148,7 +164,17 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
             )}
           </button>
         )}
-        {!locked && (
+        {hasChildren && !expanded && !editing && (
+          <button type="button" onClick={onToggleFamily} title="Untertags aufklappen" className="flex min-w-0 items-center gap-1 overflow-hidden opacity-80">
+            {kids.map((k) => (
+              <TagPill key={k.id} tag={k} className="!text-[11px] !px-1.5 !py-0">
+                {k.name}
+              </TagPill>
+            ))}
+          </button>
+        )}
+        </div>
+        {!locked && !(depth === 0 && hasChildren) && (
           // Move under another parent, or to the top level (Oct 2026, Markus).
           <select
             value={tag.parentTag ?? ''}
@@ -198,6 +224,20 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
             className="w-6 shrink-0 rounded text-[var(--color-text-muted)] hover:bg-[var(--color-bg)] hover:text-[var(--color-text)]"
           >
             ⇢
+          </button>
+        ) : (
+          <span className="w-6 shrink-0" />
+        )}
+        {/* Archive the whole family (or bring it back in the Archiv view). */}
+        {!locked && depth === 0 ? (
+          <button
+            type="button"
+            onClick={onArchive}
+            title={archivedView ? 'Aus dem Archiv zurückholen (ganze Familie)' : 'Archivieren (ganze Familie) — nur aus dieser Liste, Buchungen bleiben'}
+            aria-label={archivedView ? 'Zurückholen' : 'Archivieren'}
+            className="w-6 shrink-0 rounded text-[var(--color-text-muted)] hover:bg-[var(--color-bg)] hover:text-[var(--color-text)]"
+          >
+            {archivedView ? '↩' : '🗄'}
           </button>
         ) : (
           <span className="w-6 shrink-0" />
@@ -314,7 +354,7 @@ function MergeModal({ from, tags, tagById, twins, onClose }) {
   )
 }
 
-export default function Settings({ onOpenInKonten, onOpenInVerlauf }) {
+export default function Settings({ year, onOpenInKonten, onOpenInVerlauf }) {
   // The central tag list and usage counts (TagsProvider.jsx).
   const { tags } = useTags()
   const usage = useTagUsage()
@@ -360,6 +400,17 @@ export default function Settings({ onOpenInKonten, onOpenInVerlauf }) {
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [shortcutsOpen])
   const [openIds, setOpenIds] = useState(() => new Set(ui.get('settings', 'open', [])))
+  const [allYears, setAllYears] = useState(() => Boolean(ui.get('settings', 'allYears', false)))
+  const [expandedFamilies, setExpandedFamilies] = useState(() => new Set(ui.get('settings', 'families', [])))
+  useEffect(() => ui.set('settings', 'allYears', allYears), [allYears])
+  useEffect(() => ui.set('settings', 'families', [...expandedFamilies]), [expandedFamilies])
+  const toggleFamily = (id) =>
+    setExpandedFamilies((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   useEffect(() => ui.set('settings', 'filter', filter), [filter])
   useEffect(() => ui.set('settings', 'typeFilter', typeFilter), [typeFilter])
   useEffect(() => ui.set('settings', 'open', [...openIds]), [openIds])
@@ -437,27 +488,53 @@ export default function Settings({ onOpenInKonten, onOpenInVerlauf }) {
 
   const needle = filter.trim().toLowerCase()
   const typeOf = (t) => (t.class === 'allocation' ? 'allocation' : (t.groupingType ?? 'none'))
+  const inArchive = typeFilter === 'archive'
+  // Only tags used in the year chosen at the top (bookings or plan lines that
+  // year; a tag without any use counts for its creation year), unless "alle
+  // Jahre" — and searching always looks at all years (Oct 2026, Markus).
+  const usedInYear = (t) => {
+    const u = usageOf(usage, t.id)
+    if (u.bookings.some((b) => String(b.date).startsWith(String(year))) || u.plans.some((pl) => String(pl.year) === String(year))) return true
+    if (u.bookings.length === 0 && u.plans.length === 0) return !t.createdAt || new Date(t.createdAt).getFullYear() === Number(year)
+    return false
+  }
+  const yearScoped = !allYears && !needle && !inArchive && Boolean(year)
+  const visible = (t) => (inArchive ? Boolean(t.archived) : !t.archived)
+  const matches = (t) =>
+    visible(t) && (!needle || qualifiedName(t.id, tagById).toLowerCase().includes(needle)) && (!typeFilter || inArchive || typeOf(t) === typeFilter)
+  // One entry per family: the parent (dimmed when only a child matches), the
+  // children that pass, shown small behind the parent or — opened — as their
+  // own lines. A search opens the families it finds children in.
+  const families = []
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].depth !== 0) continue
+    const top = rows[i].tag
+    const kids = tags.filter((t) => t.parentTag === top.id).sort((x, y) => x.name.localeCompare(y.name, 'de'))
+    const kidsShown = kids.filter((k) => matches(k) && (!yearScoped || usedInYear(k)))
+    const topShown = matches(top) && (!yearScoped || usedInYear(top) || kidsShown.length > 0)
+    if (!topShown && kidsShown.length === 0) continue
+    families.push({ top, kids: kidsShown, dim: !matches(top), expanded: expandedFamilies.has(top.id) || (Boolean(needle) && kidsShown.length > 0) })
+  }
+  const shown = families.flatMap((f) => [
+    { tag: f.top, depth: 0, dim: f.dim, kids: f.kids, expanded: f.expanded },
+    ...(f.expanded ? f.kids.map((k) => ({ tag: k, depth: 1, dim: false })) : []),
+  ])
+  const matched = families.flatMap((f) => [...(f.dim ? [] : [f.top]), ...f.kids]).map((tag) => ({ tag }))
   const filtering = Boolean(needle || typeFilter)
-  const matches = (t) => (!needle || qualifiedName(t.id, tagById).toLowerCase().includes(needle)) && (!typeFilter || typeOf(t) === typeFilter)
-  // Filtered, the tree stays a tree (Oct 2026, Markus): a matching child is
-  // shown indented under its parent; a parent that doesn't match itself is
-  // shown dimmed, for context.
-  const matched = rows.filter((r) => matches(r.tag))
-  const shown = filtering
-    ? rows
-        .filter((r) => matches(r.tag) || (r.depth === 0 && tags.some((c) => c.parentTag === r.tag.id && matches(c))))
-        .map((r) => ({ ...r, dim: !matches(r.tag) }))
-    : rows
   const typeCounts = useMemo(() => {
     const c = {}
-    for (const t of tags) c[typeOf(t)] = (c[typeOf(t)] ?? 0) + 1
+    for (const t of tags) {
+      const k = t.archived ? 'archive' : typeOf(t)
+      c[k] = (c[k] ?? 0) + 1
+    }
     return c
     // eslint-disable-next-line react-hooks/exhaustive-deps -- typeOf is pure
   }, [tags])
   const chips = [
-    { key: null, label: 'Alle', count: tags.length, look: null },
+    { key: null, label: 'Alle', count: tags.length - (typeCounts.archive ?? 0), look: null },
     ...CREATE_TYPES.map((o) => ({ key: o.groupingType ?? 'none', label: o.label, count: typeCounts[o.groupingType ?? 'none'] ?? 0, look: typeLook(o.groupingType) })),
     { key: 'allocation', label: 'Rücklage', count: typeCounts.allocation ?? 0, look: { class: 'allocation' } },
+    { key: 'archive', label: 'Archiv', count: typeCounts.archive ?? 0, look: null },
   ]
   const shownPlain = needle ? plainTextTags.filter((id) => id.toLowerCase().includes(needle)) : plainTextTags
   const rowProps = (tag) => ({
@@ -474,13 +551,16 @@ export default function Settings({ onOpenInKonten, onOpenInVerlauf }) {
     onMerge: () => setMergeFrom(tag),
     onOpenPlan: openPlan,
     onOpenBooking: openBooking,
+    onToggleFamily: () => toggleFamily(tag.id),
+    onArchive: () => tagActions.setArchived(tag.id, !inArchive),
+    archivedView: inArchive,
   })
 
   return (
     <div
       ref={scrollRef}
       onScroll={(e) => ui.set('settings', 'scrollTop', e.currentTarget.scrollTop)}
-      className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 overflow-y-auto px-4 py-4"
+      className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 overflow-y-auto px-4 py-4"
     >
       <section className="flex flex-col gap-3">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -551,6 +631,11 @@ export default function Settings({ onOpenInKonten, onOpenInVerlauf }) {
             </TagPill>
             ),
           )}
+          {/* The year at the top or all years (Oct 2026, Markus). */}
+          <label className="ml-auto flex items-center gap-1.5 text-sm text-[var(--color-text-muted)]" title="Ohne Haken: nur Tags, die im oben gewählten Jahr verwendet werden">
+            <input type="checkbox" checked={allYears} onChange={(e) => setAllYears(e.target.checked)} />
+            alle Jahre{!allYears && year ? ` (sonst nur ${year})` : ''}
+          </label>
         </div>
         {/* Change the type of every tag shown (Oct 2026, Markus) — narrow the list
             with the chips and/or the search field first. */}
@@ -591,8 +676,8 @@ export default function Settings({ onOpenInKonten, onOpenInVerlauf }) {
         {typeFilter !== 'allocation' && (
         <div className="rounded-lg border border-[color-mix(in_srgb,var(--color-text)_30%,transparent)] bg-[var(--color-surface)]">
           {shown.length === 0 && <div className="px-3 py-3 text-sm text-[var(--color-text-muted)]">Keine Tags gefunden.</div>}
-          {shown.map(({ tag, depth, dim }) => (
-            <TagRow key={tag.id} tag={tag} depth={depth} dim={dim} {...rowProps(tag)} />
+          {shown.map(({ tag, depth, dim, kids, expanded }) => (
+            <TagRow key={tag.id} tag={tag} depth={depth} dim={dim} kids={kids} expanded={expanded} {...rowProps(tag)} />
           ))}
         </div>
         )}

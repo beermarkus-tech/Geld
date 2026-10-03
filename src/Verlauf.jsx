@@ -372,7 +372,7 @@ function AddBreakdownModal({ tags, excludeIds, onSubmit, onCancel }) {
           getOptions={(text) => {
             const key = tagKey(text.trim())
             return tags
-              .filter((t) => t.class === 'grouping' && !t.archived && !excludeIds.has(t.id))
+              .filter((t) => t.class === 'grouping' && !excludeIds.has(t.id))
               .map((t) => ({ t, label: qualifiedTagName(t, tagById) }))
               .filter((o) => key === '' || tagKey(o.label).includes(key))
               .sort((a, b) => a.label.localeCompare(b.label, 'de'))
