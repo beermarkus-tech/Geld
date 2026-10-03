@@ -191,9 +191,3 @@ body {
   border-color: transparent var(--color-computed) transparent transparent;
   pointer-events: none;
 }
-
-/* Konten's column filters are one plain search field: hide the operator dropdown
-   (Oct 2026, Markus). The only grid with column filters is Konten's. */
-.ag-filter .ag-filter-select {
-  display: none;
-}

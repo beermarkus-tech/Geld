@@ -13,6 +13,8 @@ import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { withRemainder } from './lib/split'
 import { registerScreenCursor } from './lib/screenCursor'
 import { unusedTagIds } from './lib/unusedTags'
+import QuickFilter from './QuickFilter'
+import { isKnownQuickModel } from './lib/quickFilter'
 import ui from './lib/uiState'
 import { visibleSum } from './lib/visibleSum'
 import { tagBalance, tagFilterMatchIds, tagFilterTotal, tagJahresende } from './lib/tagBalance'
@@ -343,15 +345,11 @@ function OpeningRow({ data, api }) {
   )
 }
 
-// Every column filter in Konten is one plain search field (Oct 2026, Markus):
-// "contains", filtering while you type, no operator dropdown, no second
-// condition. The other operators stay *allowed* in `filterOptions` only because
-// Quickview's jump into Konten sets a Details filter programmatically ("equals"
-// / "blank"); the operator dropdown itself is hidden in index.css.
-const SIMPLE_FILTER = {
-  filter: 'agTextColumnFilter',
-  filterParams: { filterOptions: ['contains', 'equals', 'blank'], defaultOption: 'contains', maxNumConditions: 1, debounceMs: 150, trimInput: true, buttons: [] },
-}
+// Every column filter in Konten is the same search field with a list of quick
+// results to tick (Oct 2026, Markus) — see QuickFilter.jsx / lib/quickFilter.js.
+// Its model also understands the "contains" / "equals" / "blank" text models
+// that Quickview's jump into Konten and the remembered state set directly.
+const QUICK_FILTER = { filter: QuickFilter }
 
 // Column filters / sort remembered from the last session (lib/uiState.js);
 // only known filterable columns are taken over, anything else is dropped.
@@ -360,7 +358,7 @@ const SORT_COLUMNS = ['date', 'betrag', 'kategorie', 'unterkategorie', 'empfaeng
 function readSavedFilterModel() {
   const saved = ui.get('konten', 'filterModel', {})
   if (!saved || typeof saved !== 'object') return {}
-  return Object.fromEntries(Object.entries(saved).filter(([k, m]) => FILTER_COLUMNS.includes(k) && m && m.filterType === 'text' && !m.conditions))
+  return Object.fromEntries(Object.entries(saved).filter(([k, m]) => FILTER_COLUMNS.includes(k) && isKnownQuickModel(m)))
 }
 function readSavedSort() {
   const saved = ui.get('konten', 'sort')
@@ -1232,6 +1230,12 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         return
       }
       if (!session) return
+      // The quick-results filter handles its own Enter/Escape (it only applies on
+      // Enter, so there is nothing to revert); the old session is just over.
+      if (e.target?.closest?.('[data-quick-filter]')) {
+        if (e.key === 'Enter' || e.key === 'Escape') session = null
+        return
+      }
       if (e.key === 'Enter') {
         e.preventDefault()
         e.stopPropagation()
@@ -1790,7 +1794,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         // ("contains" etc.) works fine even here — Datum is stored as a
         // "YYYY-MM-DD" string, so it compares/sorts correctly as text
         // without needing a real date-typed filter.
-        ...SIMPLE_FILTER,
+        ...QUICK_FILTER,
       },
       {
         headerName: filteredAccountId ? `Gegenkonto (${accountName(filteredAccountId)})` : 'Konto',
@@ -1907,7 +1911,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         // parent's displayLabel — matches what the cellRenderer's "↳"
         // prefix actually reads, so filtering a line row searches the same
         // text that's actually shown for it.
-        ...SIMPLE_FILTER,
+        ...QUICK_FILTER,
         editable: (p) => !isRowDeleted(p.data),
         flex: 1.4,
       },
@@ -1928,7 +1932,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         // the column's own value is cents (10000 for 100,00€), and typing
         // "100" to mean "100 euros" is what Markus would actually expect
         // to type, matching what the cell itself displays.
-        ...SIMPLE_FILTER,
+        ...QUICK_FILTER,
         // Searched as text against the amount as displayed ("1.000,00") and
         // without the thousands dot ("1000,00"), so typing 1000, 1.000 or -45
         // all find it.
@@ -1991,7 +1995,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           return kategorieValue(p.data)
         },
         comparator: glueToParent(kategorieValue),
-        ...SIMPLE_FILTER,
+        ...QUICK_FILTER,
         // Same cascading Kategorie→Unterkategorie picker as the
         // Unterkategorie column below — Kategorie has no stored value of
         // its own, so editing it here writes the same categoryId. A
@@ -2056,7 +2060,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           return unterkategorieValue(p.data)
         },
         comparator: glueToParent(unterkategorieValue),
-        ...SIMPLE_FILTER,
+        ...QUICK_FILTER,
         // Same fallback-path reasoning as Kategorie's valueSetter above.
         valueSetter: (p) => {
           if (p.data.__isLine) {
@@ -2127,7 +2131,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           p.data.detail = p.newValue ?? ''
           return true
         },
-        ...SIMPLE_FILTER,
+        ...QUICK_FILTER,
         editable: (p) => !p.data.__isLine && !isRowDeleted(p.data),
         flex: 1.3,
       },
@@ -2154,7 +2158,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         // names, not a picker — simplest thing that works without a
         // custom filter component, and pairs naturally with "B" (clicking
         // a chip) as the precise/one-click alternative to typing a name.
-        ...SIMPLE_FILTER,
+        ...QUICK_FILTER,
         filterValueGetter: (p) =>
           p.data.__isLine
             ? (p.data.__parent.lines[p.data.__lineIndex]?.tags ?? []).map((id) => qualifiedTagName(tagById[id], tagById) || id).join(', ')
