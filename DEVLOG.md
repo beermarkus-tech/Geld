@@ -1938,3 +1938,7 @@ Strg+K on a Verlauf cell focuses the comment field (via a ref passed into `CellC
 ## Session 37, continued a sixty-second time — 2026-10-03 — Verlauf comment box: multi-line
 
 Markus: line breaks in comments; Enter must add a line, only Esc leaves (and saves); the box expands downward over header and cells. **Done (`CellCommentField` in `Verlauf.jsx`):** `<input>` → auto-growing `<textarea>` (absolute overlay, z-30, shadow, max ~240 px then scrolls; the toolbar slot keeps its one-line height), Enter = newline, Esc = save + hand the cursor back (**the old Esc "discard unsaved" behaviour is gone**), blur still saves, limit 200 → 500 characters, × button follows the top-right. Harness-checked: three lines typed with Enter stay in the box, Esc returns to the cell and the stored text is `"Zeile eins\nZeile zwei\ndrei"`. Existing comments are unchanged. Wherever a comment is shown as plain text elsewhere it will show the line breaks as spaces.
+
+## Session 37, continued a sixty-third time — 2026-10-03 — Comment box stays expanded
+
+Markus: the Verlauf comment box should stay as tall as its text even when the cursor is not in it. `CellCommentField`: height now follows the text always (cap 240 px), overlay/shadow whenever taller than one line. Harness-checked (70 px after Esc, with the cursor back on the cell). Same session: Markus approved the list of UI state to remember (screen, year, filters, sort, cursor, scroll, expanded blocks, Quickview selection, …); risk assessment answered in chat, coding awaits his go.

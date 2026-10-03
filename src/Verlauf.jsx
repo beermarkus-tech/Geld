@@ -264,11 +264,15 @@ function CellCommentField({ cell, description, savedText, onSave, onDone, inputR
   // header and the cells below; the slot it occupies in the toolbar keeps its
   // single-line height so nothing else moves.
   const [focused, setFocused] = useState(false)
+  const [tall, setTall] = useState(false)
   useLayoutEffect(() => {
     const el = inputRef.current
     if (!el) return
     el.style.height = '2rem'
-    if (focused) el.style.height = `${Math.min(el.scrollHeight + 2, 240)}px`
+    // Stays as tall as its text even without the cursor in it (Oct 2026, Markus).
+    const grown = Math.min(el.scrollHeight + 2, 240)
+    el.style.height = `${grown}px`
+    setTall(grown > 34)
   }, [draft, focused, inputRef])
 
   return (
@@ -298,7 +302,7 @@ function CellCommentField({ cell, description, savedText, onSave, onDone, inputR
         // Tinted yellow while the selected cell has a comment (Oct 2026, Markus),
         // so it is obvious at a glance without reading the text.
         className={`absolute left-0 top-0 w-full resize-none rounded-md border py-1 pl-2 pr-8 text-sm leading-5 text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] placeholder:opacity-50 disabled:opacity-50 ${
-          focused ? 'z-30 overflow-y-auto shadow-lg' : 'overflow-hidden whitespace-nowrap'
+          focused || tall ? 'z-30 overflow-y-auto shadow-lg' : 'overflow-hidden'
         } ${
           draft && cell
             ? 'border-[var(--color-needs-attention)] bg-[color-mix(in_srgb,var(--color-needs-attention)_28%,var(--color-surface))]'
