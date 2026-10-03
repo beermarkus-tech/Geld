@@ -41,8 +41,8 @@ describe('tagUsage', () => {
   })
   it('groups plan rows per year · plan version · target', () => {
     expect(usage.get('hot').plans).toEqual([
-      { key: '2025|plan0|food', year: 2025, planVersion: 'plan0', targetId: 'food', months: 1, sum: -5 },
-      { key: '2025|plan1|food', year: 2025, planVersion: 'plan1', targetId: 'food', months: 2, sum: -300 },
+      { key: '2025|plan0|food', year: 2025, planVersion: 'plan0', targetKey: 'categoryId', targetId: 'food', months: 1, sum: -5 },
+      { key: '2025|plan1|food', year: 2025, planVersion: 'plan1', targetKey: 'categoryId', targetId: 'food', months: 2, sum: -300 },
     ])
     expect(usage.get('sco').yearSettings).toBe(1)
   })

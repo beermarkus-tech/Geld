@@ -396,7 +396,7 @@ function AddBreakdownModal({ tags, excludeIds, onSubmit, onCancel }) {
   )
 }
 
-export default function Verlauf({ year, initialFocus, onFocusChange, active = true, onOpenQuickview }) {
+export default function Verlauf({ year, initialFocus, onFocusChange, active = true, onOpenQuickview, jump = null }) {
   // Hidden screens keep the newest data aside instead of recomputing on every save elsewhere.
   const syncWhenVisible = useDeferWhileHidden(active)
   const [categories, setCategories] = useState([])
@@ -1328,6 +1328,29 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     if (initialFocus?.rowId) claimPendingFocus(initialFocus.rowId, initialFocus.colId)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount only, deliberately ignoring subsequent initialFocus prop changes (this screen owns the position from here on, via onFocusChange)
   }, [])
+
+  // Opened on one breakdown line from Settings › Tags (a plan line, Oct 2026,
+  // Markus): its block is expanded (Plan0 shown if needed) and the cursor goes
+  // on the line, scrolled into view. Applied once per jump, for its year.
+  const appliedJumpRef = useRef(null)
+  useEffect(() => {
+    if (!jump || !active || appliedJumpRef.current === jump.id || String(yearNum) !== String(jump.year)) return
+    appliedJumpRef.current = jump.id
+    if (jump.planVersion === 'plan0') setShowPlan0(true)
+    setBlockExpanded(`${jump.targetKey}:${jump.targetId}:${jump.planVersion}`, true)
+    const rowId = `${jump.targetKey}:${jump.targetId}:${jump.planVersion}:${jump.tagId}`
+    let tries = 0
+    const tick = () => {
+      const api = gridApiRef.current
+      const node = api?.getRowNode(rowId)
+      if (node) {
+        api.ensureNodeVisible(node, 'middle')
+        api.setFocusedCell(node.rowIndex, 'm1')
+      } else if (tries++ < 30) setTimeout(tick, 100)
+    }
+    setTimeout(tick, 50)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per jump
+  }, [jump, active, yearNum])
 
   // The column callbacks read budgets/tags through this ref instead of
   // rebuilding the columns whenever they change: a rebuild re-creates the

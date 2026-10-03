@@ -2082,3 +2082,7 @@ Markus: remove the explanation text; Ctrl+K into the search; an (i) with shortcu
 ## Session 37, continued a ninety-sixth time — 2026-10-03 — Settings › Tags: one font size
 
 Markus: dropdowns and the usage column in the same size as the tag pills. **Done:** Übergruppe/Typ selects, "Rücklage", "nur Text" and the usage column now `text-sm` (was `text-xs`), widths adjusted (selects w-48/w-40, usage w-72, still one line). Screenshot checked.
+
+## Session 37, continued a ninety-seventh time — 2026-10-03 — Settings scroll kept; plan line → Verlauf; shorter (i)
+
+Markus: returning to Settings › Tags jumped to the top; a plan line should open **Verlauf** (he had misspoken, not Planung); the (i) should list only Ctrl+K / Ctrl+I. **Done:** Settings saves its scroll position (uiState 'settings' scrollTop) and restores it once the tags are there; `lib/tags.js` plan entries carry `targetKey`; App `openInVerlauf`/`verlaufFrom` replace the Planung jump (removed from Planung again), Verlauf's new `jump` prop expands the block (and Plan0) and focuses the line; (i) trimmed. Harness: scroll 1195 px kept across booking → Konten → Esc; plan line → Verlauf with the cursor on `categoryId:food:plan1:sco-aus` → Esc → Settings.

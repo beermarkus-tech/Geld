@@ -82,18 +82,18 @@ export default function App() {
     setKontenJump({ ...j, id: Date.now() })
     setView('konten')
   }
-  // Settings › Tags → a plan line's category in Planung (Oct 2026, Markus); Esc
-  // in Planung then goes back to Settings (see the Esc handler below).
-  const [planungJump, setPlanungJump] = useState(null)
-  const [planungFrom, setPlanungFrom] = useState(null)
-  const openInPlanung = (j) => {
-    setPlanungFrom('settings')
+  // Settings › Tags → a plan line in Verlauf (Oct 2026, Markus); Esc in
+  // Verlauf then goes back to Settings (see the Esc handler below).
+  const [verlaufJump, setVerlaufJump] = useState(null)
+  const [verlaufFrom, setVerlaufFrom] = useState(null)
+  const openInVerlauf = (j) => {
+    setVerlaufFrom('settings')
     if (j.year) setYear(String(j.year))
-    setPlanungJump({ ...j, id: Date.now() })
-    setView('planung')
+    setVerlaufJump({ ...j, id: Date.now() })
+    setView('verlauf')
   }
   const backRef = useRef(null)
-  backRef.current = view === 'planung' && planungFrom ? planungFrom : null
+  backRef.current = view === 'verlauf' && verlaufFrom ? verlaufFrom : null
 
   // Tab with nothing focused (right after switching screens or reloading)
   // puts the cursor on the active screen's remembered cell, or its first
@@ -152,10 +152,10 @@ export default function App() {
       const wasBusy = busy
       setTimeout(() => {
         if (wasBusy || e.defaultPrevented) return
-        // A "back" step first (Planung opened from Settings › Tags).
+        // A "back" step first (Verlauf opened from Settings › Tags).
         if (backRef.current) {
           const to = backRef.current
-          setPlanungFrom(null)
+          setVerlaufFrom(null)
           setView(to)
           return
         }
@@ -233,7 +233,7 @@ export default function App() {
         onNavigate={(v) => {
           setQuickviewFrom(null)
           setKontenFrom(null)
-          setPlanungFrom(null)
+          setVerlaufFrom(null)
           setView(v)
         }}
         year={year}
@@ -290,14 +290,14 @@ export default function App() {
           />
         </div>
         <div className={view === 'verlauf' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
-          <Verlauf year={verlaufYear} initialFocus={verlaufFocus} onFocusChange={setVerlaufFocus} active={view === 'verlauf'} onOpenQuickview={openQuickview} />
+          <Verlauf year={verlaufYear} initialFocus={verlaufFocus} onFocusChange={setVerlaufFocus} active={view === 'verlauf'} onOpenQuickview={openQuickview} jump={verlaufJump} />
         </div>
         {/* Planung (spec.md §3c) mounts once and is only hidden, like Konten and
             Verlauf above (Oct 2026, Markus: "planung is being recalculated
             every time i switch screens") — it keeps its state, scroll position
             and cursor cell, and never rebuilds its report on a screen switch. */}
         <div className={view === 'planung' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
-          <Planung year={planungYear} active={view === 'planung'} jump={planungJump} />
+          <Planung year={planungYear} active={view === 'planung'} />
         </div>
         {/* Quickview mounts once and is only hidden, like the screens above
             (Oct 2026, Markus), so its selection and scroll position stay. */}
@@ -310,7 +310,7 @@ export default function App() {
         <div className={view === 'aussenstaende' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
           <Aussenstaende onOpenInKonten={openInKonten} active={view === 'aussenstaende'} />
         </div>
-        {view === 'settings' && <Settings onOpenInKonten={openInKonten} onOpenInPlanung={openInPlanung} />}
+        {view === 'settings' && <Settings onOpenInKonten={openInKonten} onOpenInVerlauf={openInVerlauf} />}
         {view === 'importexport' && <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} />}
         {/* Every other nav item (Dashboard, Quickview, Fortschritt,
             Monatsabschluss, Außenstände, Settings) isn't built yet —

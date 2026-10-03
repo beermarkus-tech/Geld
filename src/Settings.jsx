@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { collection, onSnapshot } from 'firebase/firestore'
 
 import { db } from './firebase'
@@ -30,14 +30,14 @@ const euro = (cents) => `${Math.round(cents / 100).toLocaleString('de-DE')} €`
 // weren't deleted — a plan value in a hidden Plan0 line or another year, or a
 // deleted booking, still holds them; see TagCleanup.jsx).
 function UsageDetails({ usage, depth, targetNames, onOpenPlan, onOpenBooking }) {
-  // Clicking a plan line opens that category in Planung, a booking opens Konten
+  // Clicking a plan line opens that line in Verlauf, a booking opens Konten
   // filtered to this tag with the cursor on it; Esc there comes back here
   // (Oct 2026, Markus).
   const link = 'block text-left hover:text-[var(--color-text)] hover:underline'
   return (
     <div className="space-y-0.5 px-3 pb-2 text-xs text-[var(--color-text-muted)]" style={{ paddingLeft: 12 + depth * 22 + 16 }}>
       {usage.plans.map((pl) => (
-        <button key={pl.key} type="button" className={link} onClick={() => onOpenPlan?.(pl)} title="In Planung zeigen">
+        <button key={pl.key} type="button" className={link} onClick={() => onOpenPlan?.(pl)} title="In Verlauf zeigen">
           Plan: {pl.year} · {pl.planVersion === 'plan0' ? 'Plan0' : 'Plan1'} · {targetNames.get(pl.targetId) ?? pl.targetId} — {pl.months} {pl.months === 1 ? 'Monat' : 'Monate'}, zusammen {euro(pl.sum)}
         </button>
       ))}
@@ -213,7 +213,7 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
           {usage.planRows > 0 && ` · ${usage.planRows} Budget`} {open ? '▴' : '▾'}
         </button>
       </div>
-      {open && <UsageDetails usage={usage} depth={depth} targetNames={targetNames} onOpenPlan={onOpenPlan} onOpenBooking={(b) => onOpenBooking(b, tag.id)} />}
+      {open && <UsageDetails usage={usage} depth={depth} targetNames={targetNames} onOpenPlan={(pl) => onOpenPlan(pl, tag.id)} onOpenBooking={(b) => onOpenBooking(b, tag.id)} />}
       {error && <div className="px-3 pb-1.5 text-xs text-[var(--color-alert)]" style={{ paddingLeft: 12 + depth * 22 }}>{error}</div>}
     </div>
   )
@@ -314,7 +314,7 @@ function MergeModal({ from, tags, tagById, twins, onClose }) {
   )
 }
 
-export default function Settings({ onOpenInKonten, onOpenInPlanung }) {
+export default function Settings({ onOpenInKonten, onOpenInVerlauf }) {
   // The central tag list and usage counts (TagsProvider.jsx).
   const { tags } = useTags()
   const usage = useTagUsage()
@@ -325,6 +325,15 @@ export default function Settings({ onOpenInKonten, onOpenInPlanung }) {
   // Type chips above the list (Oct 2026, Markus): show only tags of one type.
   // null = all; 'none' = untyped; 'allocation' = the fixed Rücklagen tags.
   const [typeFilter, setTypeFilter] = useState(() => ui.get('settings', 'typeFilter', null))
+  // Coming back (Esc from Konten/Verlauf, or any revisit): the list scrolled
+  // where it was left, once the tags are there (Oct 2026, Markus).
+  const scrollRef = useRef(null)
+  const scrollRestoredRef = useRef(false)
+  useLayoutEffect(() => {
+    if (scrollRestoredRef.current || tags.length === 0 || !scrollRef.current) return
+    scrollRestoredRef.current = true
+    scrollRef.current.scrollTop = Number(ui.get('settings', 'scrollTop', 0)) || 0
+  })
   // Ctrl+K → search field, Ctrl+I → shortcuts (Oct 2026, Markus).
   const searchRef = useRef(null)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
@@ -362,7 +371,8 @@ export default function Settings({ onOpenInKonten, onOpenInPlanung }) {
       return next
     })
   const openBooking = (b, tagId) => onOpenInKonten?.({ tagId, focusTxId: b.txId, year: String(b.date).slice(0, 4), from: 'settings' })
-  const openPlan = (pl) => onOpenInPlanung?.({ targetId: pl.targetId, year: String(pl.year) })
+  const openPlan = (pl, tagId) =>
+    onOpenInVerlauf?.({ targetKey: pl.targetKey, targetId: pl.targetId, planVersion: pl.planVersion, tagId, year: String(pl.year) })
   // Merging (lib/tagMerge.js): the tag being merged away, then the one to keep.
   const [mergeFrom, setMergeFrom] = useState(null)
   const [bulkType, setBulkType] = useState('')
@@ -467,7 +477,11 @@ export default function Settings({ onOpenInKonten, onOpenInPlanung }) {
   })
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
+    <div
+      ref={scrollRef}
+      onScroll={(e) => ui.set('settings', 'scrollTop', e.currentTarget.scrollTop)}
+      className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 overflow-y-auto px-4 py-4"
+    >
       <section className="flex flex-col gap-3">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h2 className="text-lg font-semibold">Tags</h2>
@@ -496,29 +510,11 @@ export default function Settings({ onOpenInKonten, onOpenInPlanung }) {
                 i
               </button>
               {shortcutsOpen && (
-                <div className="absolute right-0 top-full z-10 mt-1 w-80 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-xs text-[var(--color-text)] shadow-lg">
-                  <div className="mb-1.5 font-medium">Tastenkürzel &amp; Bedienung</div>
+                <div className="absolute right-0 top-full z-10 mt-1 w-64 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-xs text-[var(--color-text)] shadow-lg">
+                  <div className="mb-1.5 font-medium">Tastenkürzel</div>
                   <ul className="space-y-1">
                     <li>
                       <b>Strg+K</b> — ins Suchfeld
-                    </li>
-                    <li>
-                      <b>Esc</b> — im Suchfeld: leeren, dann verlassen; sonst Seitenleiste öffnen
-                    </li>
-                    <li>
-                      <b>Name anklicken</b> — umbenennen (Enter speichert, Esc bricht ab)
-                    </li>
-                    <li>
-                      <b>Übergruppe / Typ</b> — rechts in der Zeile ändern
-                    </li>
-                    <li>
-                      <b>⇢</b> — in einen anderen Tag übernehmen (zusammenführen)
-                    </li>
-                    <li>
-                      <b>Buchungszeilen ▾</b> — wo der Tag verwendet wird; Buchung/Planzeile anklicken öffnet Konten/Planung, Esc kommt hierher zurück
-                    </li>
-                    <li>
-                      <b>Chips oben</b> — nur Tags eines Typs zeigen
                     </li>
                     <li>
                       <b>Strg+I</b> — diese Übersicht ein-/ausblenden

@@ -58,7 +58,7 @@ export function tagUsage({ transactions = [], budgets = [], yearSettings = [] })
     const key = `${b.year}|${b.planVersion}|${targetId}`
     let pl = e.planByKey.get(key)
     if (!pl) {
-      pl = { key, year: b.year, planVersion: b.planVersion, targetId, months: 0, sum: 0 }
+      pl = { key, year: b.year, planVersion: b.planVersion, targetKey: b.categoryId ? 'categoryId' : 'allocationTagId', targetId, months: 0, sum: 0 }
       e.planByKey.set(key, pl)
       e.plans.push(pl)
     }
