@@ -13,6 +13,7 @@ import PlaceholderScreen from './PlaceholderScreen'
 import Aussenstaende from './Aussenstaende'
 import Planung from './Planung'
 import Quickview from './Quickview'
+import Settings from './Settings'
 import Verlauf from './Verlauf'
 
 export default function App() {
@@ -252,13 +253,14 @@ export default function App() {
       <div className={view === 'aussenstaende' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
         <Aussenstaende onOpenInKonten={openInKonten} active={view === 'aussenstaende'} />
       </div>
+      {view === 'settings' && <Settings />}
       {view === 'importexport' && <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} />}
       {/* Every other nav item (Dashboard, Quickview, Fortschritt,
           Monatsabschluss, Außenstände, Settings) isn't built yet —
           resolved Sept 2026 (Markus): a real nav entry exists for each
           from the start anyway, landing on a plain placeholder rather than
           being left out until its own phase ships. */}
-      {!['konten', 'verlauf', 'planung', 'quickview', 'aussenstaende', 'importexport'].includes(view) && (
+      {!['konten', 'verlauf', 'planung', 'quickview', 'aussenstaende', 'importexport', 'settings'].includes(view) && (
         <PlaceholderScreen title={ALL_ITEMS.find((i) => i.id === view)?.label ?? view} />
       )}
     </NavShell>

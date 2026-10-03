@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { collection, deleteDoc, doc, onSnapshot, setDoc, writeBatch } from 'firebase/firestore'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
+import { TAG_RENAME_MESSAGES, validateTagRename } from './lib/tagRename'
 import ui from './lib/uiState'
 import { AgGridReact } from 'ag-grid-react'
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community'
@@ -224,7 +225,7 @@ function budgetDoc(yearNum, targetKey, targetId, planVersion, month, breakdownTa
 // remembers the cell it was typed under, so a quick click on the next cell
 // can never write the text onto the wrong one. The × empties the field,
 // which deletes the comment.
-function CellCommentField({ cell, description, savedText, onSave, onDone, inputRef: externalRef }) {
+function CellCommentField({ cell, description, savedText, onSave, onDone, inputRef: externalRef, active = true }) {
   const [draft, setDraft] = useState(savedText)
   const pending = useRef({ cell, dirty: false, text: savedText })
   const timer = useRef(null)
@@ -271,10 +272,14 @@ function CellCommentField({ cell, description, savedText, onSave, onDone, inputR
     if (!el) return
     el.style.height = '2rem'
     // Stays as tall as its text even without the cursor in it (Oct 2026, Markus).
-    const grown = Math.min(el.scrollHeight + 2, 240)
+    // Measured only while the screen is shown: a hidden element reports a
+    // scrollHeight of 0, which used to squash the box below one line after
+    // switching back to Verlauf — so there is also a one-line floor, and it is
+    // measured again when the screen becomes visible.
+    const grown = Math.max(32, Math.min(el.scrollHeight + 2, 240))
     el.style.height = `${grown}px`
     setTall(grown > 34)
-  }, [draft, focused, inputRef])
+  }, [draft, focused, inputRef, active])
 
   return (
     <div className="relative h-8 w-[22rem] max-w-full">
@@ -1115,15 +1120,12 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // that use the same tag). Refused when empty or when a sibling under the
   // same parent already has that name (it would look like a duplicate).
   function renameTag(tagId, rawName) {
-    const name = String(rawName ?? '').trim()
-    const tag = tagById.get(tagId)
-    if (!tag || !name || name === tag.name) return false
-    const clash = tags.some((t) => t.id !== tagId && (t.parentTag ?? null) === (tag.parentTag ?? null) && t.name.trim().toLowerCase() === name.toLowerCase())
-    if (clash) {
-      window.alert(`„${name}“ gibt es an dieser Stelle schon — bitte einen anderen Namen wählen.`)
+    const result = validateTagRename(tags, tagId, rawName)
+    if (!result.ok) {
+      if (TAG_RENAME_MESSAGES[result.reason]) window.alert(TAG_RENAME_MESSAGES[result.reason])
       return false
     }
-    setDoc(doc(db, 'tags', tagId), { ...tag, name })
+    setDoc(doc(db, 'tags', tagId), { ...tagById.get(tagId), name: result.name })
     return true
   }
 
@@ -1954,6 +1956,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         <CellCommentField
           cell={activeCommentCell}
           inputRef={commentInputRef}
+          active={active}
           description={commentDescription}
           savedText={activeCommentCell ? (commentsByKey.get(`${activeCommentCell.rowId}|${activeCommentCell.colId}`) ?? '') : ''}
           onSave={saveCellComment}
