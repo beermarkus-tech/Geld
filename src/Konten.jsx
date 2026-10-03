@@ -771,7 +771,8 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     const existingParent = tags.find(
       (t) => t.class === 'grouping' && !t.parentTag && t.name.toLowerCase() === parentName.toLowerCase(),
     )
-    const parentId = existingParent ? existingParent.id : createPlainTag(parentName, null)
+    // A new parent takes the child's type (Oct 2026, Markus).
+    const parentId = existingParent ? existingParent.id : createPlainTag(parentName, null, groupingType)
     return createPlainTag(childName, parentId, groupingType)
   }
   // Kategorie (the parent group, e.g. "Lebenshaltung") is derived/display

@@ -1381,14 +1381,16 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     if (!target) return
     let tagId = pickedId
     if (!tagId) {
-      // "Parent:Child" reuses the parent by name (or creates it, untyped) and
-      // creates the child with the chosen type; a plain label is a parent tag.
+      // "Parent:Child" reuses the parent by name (or creates it with the chosen
+      // type) and creates the child with that type; a plain label is a parent tag.
       const { parent, child } = splitTagText(text)
       const found = findTagByText(tags, text)
       if (found) tagId = found.id
       else if (parent) {
         const parentTag = findTagByText(tags, parent)
-        const parentId = parentTag ? parentTag.id : createPlainGroupingTag(parent, null)
+        // A parent created here takes the child's type (Oct 2026, Markus: "2025 La
+        // Rochelle:Unterkünfte" as Reise/Projekt left the new parent untyped).
+        const parentId = parentTag ? parentTag.id : createPlainGroupingTag(parent, null, groupingType)
         tagId = createPlainGroupingTag(child, parentId, groupingType)
       } else tagId = createPlainGroupingTag(child, null, groupingType)
     }

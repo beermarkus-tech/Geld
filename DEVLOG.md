@@ -2004,3 +2004,7 @@ Markus: in Konten, Delete should clear the current cell; in Verlauf, Ctrl+Delete
 ## Session 37, continued a seventy-seventh time — 2026-10-03 — Twin tags: consolidated by hand
 
 Markus decided against an automatic or button merge of the import's twin tags: he replaces e.g. the plan-line "Mietwagen" with the bookings' "Mietwagen" in Verlauf himself, and the unused twin deletes itself. **Done:** the Verlauf pick lists (title editor's replace list, add-line modal) show each tag's usage ("2 Buchungen · 1 Plan") so twins are distinguishable; editor widened. `lib/tagMerge.js` (Build 190) stays unused — delete it if no automatic merge is ever wanted. Harness-checked: twin offered with "2 Buchungen", replacing keeps the plan values on the bookings' tag, the plan-only twin is removed by TagCleanup. Konten's tag picker is unchanged (it lists booking-used tags, which are the ones to keep).
+
+## Session 37, continued a seventy-eighth time — 2026-10-03 — New parent tags take the child's type
+
+Markus: creating "2025 La Rochelle:Unterkünfte" as Reise/Projekt in Verlauf left the new parent untyped (not green). **Fixed** in Verlauf's `handleAddBreakdownSubmit` and Konten's `createTag`: a parent created through "Parent:Child" gets the chosen type; an existing parent keeps its own. Harness-checked in both screens. Already-created untyped parents (like 2025 La Rochelle) are not changed — no way to set a tag's type after creation exists yet (open: Settings › Tags could offer it).
