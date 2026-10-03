@@ -223,11 +223,12 @@ function budgetDoc(yearNum, targetKey, targetId, planVersion, month, breakdownTa
 // remembers the cell it was typed under, so a quick click on the next cell
 // can never write the text onto the wrong one. The × empties the field,
 // which deletes the comment.
-function CellCommentField({ cell, description, savedText, onSave, onDone }) {
+function CellCommentField({ cell, description, savedText, onSave, onDone, inputRef: externalRef }) {
   const [draft, setDraft] = useState(savedText)
   const pending = useRef({ cell, dirty: false, text: savedText })
   const timer = useRef(null)
-  const inputRef = useRef(null)
+  const ownRef = useRef(null)
+  const inputRef = externalRef ?? ownRef
   const onSaveRef = useRef(onSave)
   onSaveRef.current = onSave
 
@@ -488,6 +489,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // the cursor is on drives the comment field in the header row.
   const [cellComments, setCellComments] = useState([])
   const [commentCell, setCommentCell] = useState(null)
+  const commentInputRef = useRef(null)
   // Keyboard-shortcuts help popover (Markus, same design as Konten's own
   // (i) icon) — hover shows the list, Ctrl+I toggles it without the mouse,
   // Escape closes it.
@@ -660,6 +662,16 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'p') {
         e.preventDefault()
         setShowPlan0((v) => !v)
+        return
+      }
+      // Ctrl+K (Markus, Oct 2026): into the comment box for the cell the
+      // cursor is on; Enter/Esc there hand the cursor back to that cell.
+      if (active && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
+        const field = commentInputRef.current
+        if (!field || field.disabled) return
+        e.preventDefault()
+        field.focus()
+        field.setSelectionRange(field.value.length, field.value.length)
         return
       }
       // Ctrl+Q (Markus, Oct 2026): same as clicking the Unterkategorie name
@@ -1897,6 +1909,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         <div className="ml-auto flex items-center gap-3">
         <CellCommentField
           cell={activeCommentCell}
+          inputRef={commentInputRef}
           description={commentDescription}
           savedText={activeCommentCell ? (commentsByKey.get(`${activeCommentCell.rowId}|${activeCommentCell.colId}`) ?? '') : ''}
           onSave={saveCellComment}
@@ -1930,6 +1943,9 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
                 </li>
                 <li>
                   <b>Strg+P</b> — Plan0 anzeigen
+                </li>
+                <li>
+                  <b>Strg+K</b> — Kommentar zur markierten Zelle schreiben (Enter/Esc: zurück zur Zelle)
                 </li>
                 <li>
                   <b>Strg+Q</b> — Quickview für die Unterkategorie der aktuellen Zeile öffnen

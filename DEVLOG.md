@@ -1930,3 +1930,7 @@ Markus: let the arrow keys reach the breakdown-line titles (the cursor was confi
 ## Session 37, continued a sixtieth time — 2026-10-03 — Verlauf: comment box tinted yellow
 
 When the selected number cell has a comment, the comment field now has a yellow tint and border (`--color-needs-attention` mixed into the surface colour, so it works in light and dark). `CellCommentField` in `Verlauf.jsx` only; harness-checked (white when empty, tinted once text is present). Also answered in chat what Fortschritt (§3j) needs before building; awaiting Markus's five design choices.
+
+## Session 37, continued a sixty-first time — 2026-10-03 — Verlauf: Strg+K jumps into the comment box
+
+Strg+K on a Verlauf cell focuses the comment field (via a ref passed into `CellCommentField`; handled in Verlauf's global key handler, only while the screen is active and a cell is selected); the field's existing Enter/Esc behaviour already hands the cursor back to the cell. Added to the (i). Harness-checked: m3 → Strg+K → type → Enter lands on m3; then → m4, Strg+K, Esc lands on m4. **Risk:** browsers may reserve Strg+K (address/search bar in some); the page asks them not to — please confirm on the device.
