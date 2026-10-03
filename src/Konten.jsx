@@ -1845,29 +1845,22 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         // editable, has no prefix — the prefix is cellRenderer-only so
         // editing doesn't start from "↳ " as literal text).
         colId: 'empfaenger',
-        // Filters search a line row's own Vermerk *and* its booking's
-        // Empfänger, so a name filter (e.g. Quickview's jump) also finds the
-        // lines of a split booking while a category filter shows lines.
-        filterValueGetter: (p) =>
-          p.data.__isLine ? `${p.data.__parent.lines[p.data.__lineIndex]?.note ?? ''} ${p.data.__parent.displayLabel}`.trim() : p.data.displayLabel,
-        valueGetter: (p) => (p.data.__isLine ? (p.data.__parent.lines[p.data.__lineIndex]?.note ?? '') : p.data.displayLabel),
-        cellRenderer: (p) => (p.data.__isLine ? `↳ ${p.value || '(kein Vermerk)'}` : p.value),
+        // A line row filters by its booking's Empfänger, so a name filter
+        // (e.g. Quickview's jump) also finds the lines of a split booking.
+        filterValueGetter: (p) => (p.data.__isLine ? p.data.__parent.displayLabel : p.data.displayLabel),
+        // A line row has no Empfänger of its own — just the "↳" marker; its
+        // free text is in Details (Oct 2026, Markus: lines get a detail like
+        // their booking, not a separate "Vermerk").
+        valueGetter: (p) => (p.data.__isLine ? '' : p.data.displayLabel),
+        cellRenderer: (p) => (p.data.__isLine ? <span className="text-[var(--color-text-muted)]">↳</span> : p.value),
         comparator: glueToParent((t) => t.displayLabel),
         valueSetter: (p) => {
-          if (p.data.__isLine) {
-            const { __parent: parent, __lineIndex: idx } = p.data
-            parent.lines = parent.lines.map((l, i) => (i === idx ? { ...l, note: p.newValue ?? '' } : l))
-            return true
-          }
+          if (p.data.__isLine) return false
           p.data.displayLabel = p.newValue ?? ''
           return true
         },
-        // A line row's own valueGetter returns its `note`, not the
-        // parent's displayLabel — matches what the cellRenderer's "↳"
-        // prefix actually reads, so filtering a line row searches the same
-        // text that's actually shown for it.
         ...QUICK_FILTER,
-        editable: (p) => !isRowDeleted(p.data),
+        editable: (p) => !p.data.__isLine && !isRowDeleted(p.data),
         flex: 1.4,
       },
       {
@@ -2078,16 +2071,24 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         // `note`, shown in Empfänger) — blank and non-editable on a line
         // row rather than repeating/splitting the same field.
         colId: 'details',
-        filterValueGetter: (p) => (p.data.__isLine ? p.data.__parent.detail : p.data.detail),
-        valueGetter: (p) => (p.data.__isLine ? '' : p.data.detail),
+        // A line row's Details is the line's own detail (stored as the line's
+        // `note`, spec §2.6) — edited like the booking's (Oct 2026, Markus).
+        // Filters search it together with the booking's Details.
+        filterValueGetter: (p) =>
+          p.data.__isLine ? `${p.data.__parent.lines[p.data.__lineIndex]?.note ?? ''} ${p.data.__parent.detail ?? ''}`.trim() : p.data.detail,
+        valueGetter: (p) => (p.data.__isLine ? (p.data.__parent.lines[p.data.__lineIndex]?.note ?? '') : p.data.detail),
         comparator: glueToParent((t) => t.detail),
         valueSetter: (p) => {
-          if (p.data.__isLine) return false
+          if (p.data.__isLine) {
+            const { __parent: parent, __lineIndex: idx } = p.data
+            parent.lines = parent.lines.map((l, i) => (i === idx ? { ...l, note: p.newValue ?? '' } : l))
+            return true
+          }
           p.data.detail = p.newValue ?? ''
           return true
         },
         ...QUICK_FILTER,
-        editable: (p) => !p.data.__isLine && !isRowDeleted(p.data),
+        editable: (p) => !isRowDeleted(p.data),
         flex: 1.3,
       },
       {
@@ -2102,7 +2103,12 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         // resolves each to a name+color chip; the comparator below uses its
         // own resolved-name string separately (tagsValue), so this can stay
         // the plain array AG Grid actually hands the cellRenderer.
-        valueGetter: (p) => (p.data.__isLine ? (p.data.__parent.lines[p.data.__lineIndex]?.tags ?? []) : tagIdsValue(p.data)),
+        // A split booking's own row shows no tags (Oct 2026, Markus: tags belong
+        // to the line they were set on — "Salsa, AISC, Cars" on the parent only
+        // repeated its lines). It still *filters* by all its lines' tags (below),
+        // so a tag filter keeps the booking and its matching lines in view.
+        valueGetter: (p) =>
+          p.data.__isLine ? (p.data.__parent.lines[p.data.__lineIndex]?.tags ?? []) : (p.data.lines ?? []).length > 1 ? [] : tagIdsValue(p.data),
         comparator: glueToParent(tagsValue),
         // Markus's "C": a real header filter, the same convention spec.md
         // §3a already describes for every column ("tag 'has this tag'")

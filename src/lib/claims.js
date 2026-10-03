@@ -11,23 +11,24 @@ export const AUSSENSTAENDE_ACCOUNT_ID = 'aussenstaende'
 // and CPAM claims were missing because only Außenstände itself was looked at).
 export const receivableAccountIds = (accounts) => new Set(accounts.filter((a) => a.group === 'receivable').map((a) => a.id))
 
-// Every claim/loan tag: tags declared `groupingType: 'claim'`, plus any other
-// tag used on a line of a booking that touches the Außenstände account
-// (Konten's panel discovers them the same way — a loan tag like "Dirk Sept"
-// may never have been given a type). Claim-category tags (Meal/Taxi/…) are
-// labels *within* a claim, never a claim themselves.
+// Every claim/loan tag: tags declared `groupingType: 'claim'`, plus any
+// *untyped* tag used on a line of a booking that touches a receivable account
+// (a loan tag like "Dirk Sept" may never have been given a type). A tag with
+// another type is never a claim, even on such a booking: Reisekostenart
+// (Meal/Taxi/…) labels a claim's lines, Reise/Projekt and Abrechnung tags just
+// travel along (Oct 2026, Markus: "2026 Schottland: Mietwagen" showed up as an
+// open claim in the panel and put red dots on its bookings).
 //
 // @returns {string[]} tag ids
 export function claimTagIds(tags, transactions, receivableIds) {
   const byId = Object.fromEntries(tags.map((t) => [t.id, t]))
-  const excluded = (id) => byId[id]?.groupingType === 'claim-category' || byId[id]?.class === 'allocation'
+  const excluded = (id) => byId[id]?.class === 'allocation' || Boolean(byId[id]?.groupingType && byId[id].groupingType !== 'claim')
   const ids = new Set(tags.filter((t) => t.groupingType === 'claim').map((t) => t.id))
   for (const tx of transactions) {
     if (!receivableIds.has(tx.fromAccountId) && !receivableIds.has(tx.toAccountId)) continue
     for (const line of tx.lines ?? []) {
-      // Since the old plain-text tags were converted (Oct 2026, PLAN.md Phase 5b
-      // step 6) every tag here has a record: labels within a claim are typed
-      // Anspruchsart and excluded, no "first plain-text tag" rule needed.
+      // Every tag has a record since the plain-text conversion (PLAN.md Phase 5b
+      // step 6), so no special rule for plain-text tags is needed.
       for (const id of line.tags ?? []) if (!excluded(id)) ids.add(id)
     }
   }
@@ -51,7 +52,8 @@ export function claimLines(tagId, transactions, tags, receivableIds) {
         date: tx.date,
         accountId: receivableIds.has(tx.fromAccountId) ? tx.fromAccountId : receivableIds.has(tx.toAccountId) ? tx.toAccountId : null,
         label: tx.displayLabel || line.note || '',
-        detail: tx.detail ?? '',
+        // A split booking's line has its own detail (Konten's Details on the line).
+        detail: ((tx.lines ?? []).length > 1 && line.note) || tx.detail || '',
         cents,
         tagIds: line.tags ?? [],
       })
@@ -90,7 +92,8 @@ export function claimOverview(tags, transactions, receivableIds) {
         date: tx.date,
         accountId: receivableIds.has(tx.fromAccountId) ? tx.fromAccountId : receivableIds.has(tx.toAccountId) ? tx.toAccountId : null,
         label: tx.displayLabel || line.note || '',
-        detail: tx.detail ?? '',
+        // A split booking's line has its own detail (Konten's Details on the line).
+        detail: ((tx.lines ?? []).length > 1 && line.note) || tx.detail || '',
         cents,
         tagIds,
       }

@@ -39,6 +39,19 @@ describe('claim discovery and totals', () => {
   })
 })
 
+describe('trip and statement tags on a receivable booking', () => {
+  it('are not claims; an untyped tag there still is', () => {
+    const t = [
+      { id: 'cars', name: 'Cars', class: 'grouping', groupingType: 'claim' },
+      { id: 'mw', name: 'Mietwagen', class: 'grouping', groupingType: 'project' },
+      { id: 'visa', name: '2025-07', class: 'grouping', groupingType: 'statement' },
+      { id: 'dirk', name: 'Dirk Sept', class: 'grouping', groupingType: null },
+    ]
+    const txs = [tx('a', '2025-07-31', 'aussenstaende', 'bnp', 88275, ['cars', 'mw', 'visa']), tx('b', '2025-08-01', 'bnp', 'aussenstaende', 500, ['dirk'])]
+    expect(claimTagIds(t, txs, REC).sort()).toEqual(['cars', 'dirk'])
+  })
+})
+
 describe('labels within a claim', () => {
   it('a tag typed Anspruchsart is a label, not a claim', () => {
     const t = [

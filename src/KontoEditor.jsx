@@ -108,14 +108,19 @@ const KontoEditor = forwardRef(function KontoEditor(props, ref) {
     api.stopEditing(true)
   }
 
-  const options = [
+  const listOf = (keep) => [
     { id: '', name: '– keins –' },
     ...accounts
-      .filter((a) => a.tracked !== false && a.group !== 'system')
+      .filter(keep)
       .slice()
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((a) => ({ id: a.id, name: a.name })),
   ]
+  const options = listOf((a) => a.tracked !== false && a.group !== 'system')
+  // The opening-balance account Jahresabschluß (group 'system') is offered as a
+  // source (Von/Abfluss) only — opening balances flow out of it (Oct 2026,
+  // Markus), never into it.
+  const fromOptions = listOf((a) => a.tracked !== false)
   const filteredAccountName = accounts.find((a) => a.id === filteredAccountId)?.name ?? filteredAccountId
 
   return (
@@ -143,7 +148,7 @@ const KontoEditor = forwardRef(function KontoEditor(props, ref) {
             // Enter closes" convention TagEditor's own redesign
             // established.
             onEnter={fixedSide === 'to' ? (id) => apply({ fromId: id }) : () => toRef.current?.focus()}
-            options={options}
+            options={fromOptions}
             placeholder="– keins –"
           />
         </label>

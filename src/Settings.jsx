@@ -209,6 +209,7 @@ export default function Settings() {
   // Type chips above the list (Oct 2026, Markus): show only tags of one type.
   // null = all; 'none' = untyped; 'allocation' = the fixed Rücklagen tags.
   const [typeFilter, setTypeFilter] = useState(null)
+  const [bulkType, setBulkType] = useState('')
 
   useEffect(() => onSnapshot(collection(db, 'categories'), (snap) => setCategories(snap.docs.map((d) => d.data()))), [])
   const [accounts, setAccounts] = useState([])
@@ -331,6 +332,42 @@ export default function Settings() {
             ),
           )}
         </div>
+        {/* Change the type of every tag shown (Oct 2026, Markus) — narrow the list
+            with the chips and/or the search field first. */}
+        {flat && typeFilter !== 'allocation' && shown.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--color-text-muted)]">
+            <span>
+              Alle {shown.length} angezeigten Tags auf Typ
+            </span>
+            <select
+              value={bulkType}
+              onChange={(e) => setBulkType(e.target.value)}
+              aria-label="Typ für alle angezeigten"
+              className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-1 py-0.5 text-xs text-[var(--color-text)]"
+            >
+              <option value="">— wählen —</option>
+              {CREATE_TYPES.map((o) => (
+                <option key={o.groupingType ?? 'none'} value={o.groupingType ?? 'none'}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={!bulkType}
+              onClick={() => {
+                const type = bulkType === 'none' ? null : bulkType
+                const label = CREATE_TYPES.find((o) => (o.groupingType ?? 'none') === bulkType)?.label
+                if (!window.confirm(`${shown.length} Tags auf „${label}“ setzen?`)) return
+                shown.forEach(({ tag }) => tagActions.setType(tag.id, type))
+                setBulkType('')
+              }}
+              className="rounded-md bg-[var(--color-computed)] px-2 py-0.5 font-medium text-white disabled:opacity-40"
+            >
+              setzen
+            </button>
+          </div>
+        )}
         {typeFilter !== 'allocation' && (
         <div className="rounded-lg border border-[color-mix(in_srgb,var(--color-text)_30%,transparent)] bg-[var(--color-surface)]">
           {shown.length === 0 && <div className="px-3 py-3 text-sm text-[var(--color-text-muted)]">Keine Tags gefunden.</div>}
@@ -381,7 +418,7 @@ export default function Settings() {
           <div className="relative flex w-full max-w-md flex-col gap-3 rounded-lg bg-[var(--color-surface)] p-5 text-sm" onClick={(e) => e.stopPropagation()}>
             <p className="font-medium">Alte Text-Tags übernehmen</p>
             <p>
-              {convertPreview.creates.length} Text-Tags bekommen einen eigenen Eintrag: {convertPreview.counts.claim} als Anspruch, {convertPreview.counts['claim-category']} als Anspruchsart,{' '}
+              {convertPreview.creates.length} Text-Tags bekommen einen eigenen Eintrag: {convertPreview.counts.claim} als Anspruch, {convertPreview.counts['claim-category']} als Reisekostenart,{' '}
               {convertPreview.counts.none} ohne Typ. Die Buchungen bleiben unverändert
               {convertPreview.rewrites.length > 0 ? `, außer ${convertPreview.rewrites.length} mit einem „/“ im Tag (bekommen den neuen Namen ohne „/“)` : ''}.
             </p>

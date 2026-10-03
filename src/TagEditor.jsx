@@ -39,7 +39,7 @@ function Chip({ tag, label, onRemove, title }) {
 // then closes. Backspace on an empty field removes the last chip. Tab keeps
 // what's there, closes and adds a new booking row below (Markus).
 //
-// Anspruchsart (claim-category) tags are only offered once a claim tag is on
+// Reisekostenart (claim-category) tags are only offered once a claim tag is on
 // the line (spec.md §2.5's sequencing rule).
 const TagEditor = forwardRef(function TagEditor(props, ref) {
   const { data, tags, recentTagValues = [], initialTagIds = [], onApply, onCreateTag, onTabAddRow, api } = props
