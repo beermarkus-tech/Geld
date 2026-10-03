@@ -592,6 +592,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return
       const wrapper = gridWrapperRef.current
       if (!wrapper || wrapper.contains(document.activeElement)) return
+      if (document.activeElement?.closest?.('[data-sidebar]')) return // browsing the sidebar
       restoreLastFocusDirect()
     }
     window.addEventListener('keydown', onKeyDown, true)
@@ -1317,6 +1318,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     if (!confirmDeleteId) return
     const onKeyDown = (e) => {
       if (e.key === 'Escape') {
+        e.preventDefault() // used up — App.jsx then doesn't open the sidebar
         clearTimeout(confirmTimeoutRef.current)
         setConfirmDeleteId(null)
       }
@@ -1329,7 +1331,10 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   useEffect(() => {
     if (!confirmPurgeOpen) return
     const onKeyDown = (e) => {
-      if (e.key === 'Escape') setConfirmPurgeOpen(false)
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setConfirmPurgeOpen(false)
+      }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)

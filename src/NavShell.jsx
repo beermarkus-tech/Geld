@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { reloadApp } from './lib/reloadApp'
 import { effectiveDark, toggleTheme } from './lib/theme'
@@ -51,9 +51,10 @@ function NavButton({ item, active, onClick, className = '' }) {
     <button
       type="button"
       onClick={onClick}
+      data-nav-id={item.id}
       aria-current={active ? 'page' : undefined}
       className={
-        'rounded-md px-3 py-2 text-left text-sm ' +
+        'rounded-md px-3 py-2 text-left text-sm focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-computed)] ' +
         (active ? 'bg-[var(--color-computed)] text-white' : 'text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]') +
         ' ' +
         className
@@ -106,6 +107,7 @@ export default function NavShell({
   photoURL,
   usingCachedSession,
   onSignOut,
+  onLeaveNav,
   children,
 }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed)
@@ -142,7 +144,10 @@ export default function NavShell({
   }, [])
 
   function navigate(id) {
+    // Picked with the keyboard from the sidebar: the cursor goes on to that screen.
+    const fromKeyboard = Boolean(document.activeElement?.closest?.('[data-sidebar]'))
     onNavigate(id)
+    if (fromKeyboard) setTimeout(() => onLeaveNav?.(id), 100)
     setMoreOpen(false)
     // The nav button that was just used must not keep keyboard focus: the
     // next Tab should place the cursor on the new screen (lib/screenCursor.js).
@@ -152,7 +157,10 @@ export default function NavShell({
   useEffect(() => {
     if (!moreOpen) return
     const onKeyDown = (e) => {
-      if (e.key === 'Escape') setMoreOpen(false)
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setMoreOpen(false)
+      }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -161,7 +169,10 @@ export default function NavShell({
   useEffect(() => {
     if (!signOutConfirmOpen) return
     const onKeyDown = (e) => {
-      if (e.key === 'Escape') setSignOutConfirmOpen(false)
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setSignOutConfirmOpen(false)
+      }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -190,6 +201,45 @@ export default function NavShell({
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [onNavigate])
+
+  // Esc when nothing else is left to close (App.jsx sends 'geld-open-nav')
+  // opens the sidebar with the cursor on the active screen (Oct 2026, Markus);
+  // ↓/↑ move, Enter opens that screen, Esc closes the sidebar again and puts
+  // the cursor back on the screen. On a phone (no sidebar) it opens "Mehr".
+  const navRef = useRef(null)
+  const [focusNav, setFocusNav] = useState(0)
+  useEffect(() => {
+    const open = () => {
+      if (!window.matchMedia('(min-width: 768px)').matches) {
+        setMoreOpen(true)
+        return
+      }
+      setSidebarCollapsed(false)
+      setFocusNav((n) => n + 1)
+    }
+    window.addEventListener('geld-open-nav', open)
+    return () => window.removeEventListener('geld-open-nav', open)
+  }, [])
+  useEffect(() => {
+    if (!focusNav) return
+    const nav = navRef.current
+    ;(nav?.querySelector(`[data-nav-id="${activeView}"]`) ?? nav?.querySelector('[data-nav-id]'))?.focus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when asked to focus
+  }, [focusNav])
+  function onNavKeyDown(e) {
+    const buttons = [...(navRef.current?.querySelectorAll('[data-nav-id]') ?? [])]
+    const i = buttons.indexOf(document.activeElement)
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      const next = e.key === 'ArrowDown' ? Math.min(buttons.length - 1, i + 1) : Math.max(0, i - 1)
+      buttons[next < 0 ? 0 : next]?.focus()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      setSidebarCollapsed(true)
+      document.activeElement?.blur?.()
+      setTimeout(() => onLeaveNav?.(activeView), 0)
+    }
+  }
 
   const activeItem = ALL_ITEMS.find((i) => i.id === activeView)
 
@@ -305,7 +355,7 @@ export default function NavShell({
             just icons-only) when collapsed, per spec.md §1b.2: "so the
             content area can reclaim the full screen width." */}
         {!sidebarCollapsed && (
-          <nav className="hidden w-48 shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)] md:flex">
+          <nav ref={navRef} data-sidebar onKeyDown={onNavKeyDown} className="hidden w-48 shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)] md:flex">
             <div className="flex flex-1 flex-col gap-1 overflow-y-auto overscroll-none p-3">
               {ALL_ITEMS.map((item) => (
                 <NavButton

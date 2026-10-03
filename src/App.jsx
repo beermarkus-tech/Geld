@@ -110,12 +110,43 @@ export default function App() {
       const a = document.activeElement
       if (a && ['INPUT', 'TEXTAREA', 'SELECT'].includes(a.tagName)) return
       if (document.querySelector('.fixed.inset-0, .ag-popup, .ag-cell-inline-editing')) return
+      e.preventDefault() // used up — no sidebar on this Esc
       setKontenFrom(null)
       setView(kontenFrom)
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [view, kontenFrom])
+
+  // Esc with nothing left to close opens the sidebar on the active screen
+  // (Oct 2026, Markus; NavShell.jsx handles the sidebar's own keys). "Nothing
+  // left" is judged at the moment the key goes down — before any handler runs
+  // — so the Esc that closes a modal, a popup, an editor or a field never also
+  // opens the sidebar; and any handler that uses the key (going back to
+  // Quickview/Verlauf, disarming a delete) marks it with preventDefault.
+  useEffect(() => {
+    let busy = false
+    const before = (e) => {
+      if (e.key !== 'Escape') return
+      const a = document.activeElement
+      busy =
+        Boolean(a && (['INPUT', 'TEXTAREA', 'SELECT'].includes(a.tagName) || a.isContentEditable || a.closest?.('[data-sidebar]'))) ||
+        Boolean(document.querySelector('.fixed.inset-0, .ag-popup, .ag-cell-inline-editing, [data-quick-filter]'))
+    }
+    const after = (e) => {
+      if (e.key !== 'Escape' || e.ctrlKey || e.metaKey || e.altKey) return
+      const wasBusy = busy
+      setTimeout(() => {
+        if (!wasBusy && !e.defaultPrevented) window.dispatchEvent(new Event('geld-open-nav'))
+      }, 0)
+    }
+    window.addEventListener('keydown', before, true)
+    window.addEventListener('keydown', after)
+    return () => {
+      window.removeEventListener('keydown', before, true)
+      window.removeEventListener('keydown', after)
+    }
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -189,6 +220,7 @@ export default function App() {
         photoURL={user.photoURL}
         usingCachedSession={usingCachedSession}
         onSignOut={() => signOut(auth)}
+        onLeaveNav={(id) => focusScreenCursor(id)}
       >
         {/* Konten and Verlauf both stay mounted permanently once first
             visited, hidden via plain CSS rather than conditionally rendered

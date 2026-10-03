@@ -451,6 +451,8 @@ Open question raised by Markus: the totality of existing budgeting apps tested s
 
 ---
 
+**Esc opens the sidebar (Oct 2026, Markus):** on any screen, once there is nothing left for Esc to close — no cell being edited, no modal, popup, filter or field with the cursor in it, no "back" step (Konten → Quickview/Außenstände, Quickview → Verlauf) — Esc opens the sidebar with the cursor on the active screen's entry. ↓/↑ move through the screens, Enter opens one (the cursor goes into it), Esc closes the sidebar again and puts the cursor back where it was. On a phone (no sidebar) Esc opens the "Mehr" sheet instead. The Esc that closes something is never also the one that opens the sidebar.
+
 ## 3a. Konten (main ledger) — detailed spec
 
 **Ground truth principle:** Konten reflects 100% what has actually happened on real bank statements, plus corrective/internal transactions that never appear on a statement (e.g. Sparen Julia → Sparen Sophia). Future/planned bookings are never entered here — that belongs entirely to Verlauf/Planung.

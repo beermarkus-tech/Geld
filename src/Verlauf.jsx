@@ -655,6 +655,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         e.preventDefault()
         confirmRemove()
       } else if (e.key === 'Escape') {
+        e.preventDefault()
         closeConfirmRemove()
       }
     }
@@ -695,6 +696,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
       if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return
       const wrapper = gridWrapperRef.current
       if (!wrapper || wrapper.contains(document.activeElement)) return
+      if (document.activeElement?.closest?.('[data-sidebar]')) return // browsing the sidebar
       if (lastFocusedRowIdRef.current) focusRowNow(lastFocusedRowIdRef.current, focusedColIdRef.current)
     }
     window.addEventListener('keydown', onKeyDown, true)
