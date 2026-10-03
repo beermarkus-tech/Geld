@@ -1,9 +1,9 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { collection, deleteDoc, doc, onSnapshot, setDoc, writeBatch } from 'firebase/firestore'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { TAG_RENAME_MESSAGES, validateTagRename } from './lib/tagRename'
 import { qualifiedTagName, tagColorVar } from './lib/tagStyle'
-import { findTagByText, splitTagText, tagKey } from './lib/tagPicker'
+import { findTagByText, headerChildMapping, replaceOptions, splitTagText, tagKey } from './lib/tagPicker'
 import ui from './lib/uiState'
 import { AgGridReact } from 'ag-grid-react'
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community'
@@ -336,6 +336,101 @@ function CellCommentField({ cell, description, savedText, onSave, onDone, inputR
     </div>
   )
 }
+
+// Editing a breakdown line's or Übergruppe's title (Oct 2026, Markus): type a
+// new name and press Enter to rename the tag, or pick an existing tag from the
+// list below (Down/Up, Enter or a click) to put it in this row's place. The
+// list holds only tags that fit where the cursor is (see replaceOptions()).
+const TagTitleEditor = forwardRef(function TagTitleEditor({ value, eventKey, api, options, onRename, onReplace }, ref) {
+  const original = String(value ?? '')
+  const [text, setText] = useState(eventKey && eventKey.length === 1 ? eventKey : original)
+  const [highlight, setHighlight] = useState(-1)
+  const inputRef = useRef(null)
+  useImperativeHandle(ref, () => ({ getValue: () => original, isCancelBeforeStart: () => false }))
+  useEffect(() => {
+    const el = inputRef.current
+    el?.focus()
+    if (text === original) el?.select()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once on open
+  }, [])
+
+  const filtered = useMemo(() => {
+    const q = text.trim().toLowerCase()
+    return text === original || q === '' ? options : options.filter((t) => t.name.toLowerCase().includes(q))
+  }, [options, text, original])
+
+  const live = useRef({})
+  live.current = { text, highlight, filtered }
+  function finishWith(fn) {
+    api.stopEditing(true)
+    fn?.()
+  }
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    // Native listener: AG Grid's popup acts on Enter/Escape before React's onKeyDown would.
+    const onKeyDown = (e) => {
+      const { text: t, highlight: h, filtered: f } = live.current
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        e.stopPropagation()
+        setHighlight(Math.min(f.length - 1, h + 1))
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        e.stopPropagation()
+        setHighlight(Math.max(-1, h - 1))
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        e.stopPropagation()
+        if (h >= 0 && f[h]) finishWith(() => onReplace(f[h].id))
+        else finishWith(t.trim() !== original.trim() ? () => onRename(t) : null)
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        if (h >= 0) setHighlight(-1)
+        else finishWith(null)
+      }
+    }
+    el.addEventListener('keydown', onKeyDown)
+    return () => el.removeEventListener('keydown', onKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads state through `live`
+  }, [])
+
+  return (
+    <div className="flex w-64 flex-col gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-2 text-sm text-[var(--color-text)] shadow-lg">
+      <input
+        ref={inputRef}
+        type="text"
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value)
+          setHighlight(-1)
+        }}
+        aria-label="Name"
+        className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1"
+      />
+      <div className="text-xs text-[var(--color-text-muted)]">Enter = umbenennen{options.length > 0 ? ' · oder ersetzen durch:' : ''}</div>
+      {filtered.length > 0 && (
+        <ul role="listbox" className="max-h-48 overflow-auto rounded border border-[var(--color-border)]">
+          {filtered.map((t, i) => (
+            <li key={t.id}>
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  finishWith(() => onReplace(t.id))
+                }}
+                className={'flex w-full px-2 py-1 text-left ' + (i === highlight ? 'bg-[var(--color-computed)] text-white' : 'hover:bg-[var(--color-bg)]')}
+              >
+                {t.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+})
 
 // "Add breakdown line" (Oct 2026, Markus): a breakdown line's title is a tag, so
 // this works like the Tags column in Konten — type to search the existing
@@ -1015,6 +1110,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         ...common,
         rowId: `${rowIdBase}:${planVersion}:rollup:${parentId}`,
         rowLabel: 'Rollup',
+        planVersion,
         isPlan0,
         blockKey,
         breakdownActionsSpanKey: blockKey,
@@ -1119,6 +1215,59 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     }
     setDoc(doc(db, 'tags', tagId), { ...tagById.get(tagId), name: result.name })
     return true
+  }
+
+  // Which existing tags a row's title editor offers (replaceOptions()).
+  function replaceOptionsFor(row) {
+    const lineIds = breakdownTagIdsFor(row.targetKey, row.targetId, row.planVersion)
+    const blockTagIds = new Set(lineIds)
+    for (const id of lineIds) if (tagById.get(id)?.parentTag) blockTagIds.add(tagById.get(id).parentTag)
+    if (row.rowLabel === 'Rollup') return replaceOptions(tags, { kind: 'header', tagId: row.renameTagId, parentId: row.renameTagId, blockTagIds })
+    const parentId = tagById.get(row.renameTagId)?.parentTag ?? null
+    return replaceOptions(tags, { kind: parentId ? 'child' : 'standalone', tagId: row.renameTagId, parentId, blockTagIds })
+  }
+
+  // Puts an existing tag in place of a breakdown line's (or, on an Übergruppe
+  // row, the parent's) tag — this block, this plan version, the shown year only
+  // (Oct 2026, Markus). The planned values and notes move to the new tag's
+  // budget rows, and the row's cell comments move with them. Bookings are not
+  // touched: a line's values are typed in, only an Übergruppe sums bookings
+  // (those tagged with it or any of its children). The old tag disappears by
+  // itself once nothing uses it any more (TagCleanup.jsx).
+  async function replaceBreakdownTag(row, newTagId) {
+    const { targetKey, targetId, planVersion } = row
+    const rowBase = `${targetKey}:${targetId}:${planVersion}`
+    let mapping
+    const commentRows = new Map()
+    if (row.rowLabel === 'Rollup') {
+      const oldParent = row.renameTagId
+      const childIds = breakdownTagIdsFor(targetKey, targetId, planVersion).filter((id) => tagById.get(id)?.parentTag === oldParent)
+      const plan = headerChildMapping(tags, childIds, newTagId)
+      mapping = plan.mapping
+      for (const c of plan.create) mapping.set(c.fromId, createPlainGroupingTag(c.name, newTagId, c.groupingType))
+      commentRows.set(`${rowBase}:rollup:${oldParent}`, `${rowBase}:rollup:${newTagId}`)
+    } else {
+      mapping = new Map([[row.renameTagId, newTagId]])
+    }
+    for (const [from, to] of mapping) commentRows.set(`${rowBase}:${from}`, `${rowBase}:${to}`)
+
+    const batch = writeBatch(db)
+    for (const b of budgets) {
+      if (b.year !== yearNum || b.planVersion !== planVersion || b[targetKey] !== targetId || !mapping.has(b.breakdownTagId)) continue
+      batch.delete(doc(db, 'budgets', b.id))
+      const next = budgetDoc(yearNum, targetKey, targetId, planVersion, b.month, mapping.get(b.breakdownTagId), b.plannedAmountCents, b.note ?? '')
+      batch.set(doc(db, 'budgets', next.id), next)
+    }
+    for (const c of cellComments) {
+      if (c.year !== yearNum || !commentRows.has(c.rowId)) continue
+      const rowId = commentRows.get(c.rowId)
+      const id = `${yearNum}__${rowId}__${c.colId}`
+      batch.delete(doc(db, 'cellComments', c.id))
+      batch.set(doc(db, 'cellComments', id), { ...c, id, rowId })
+    }
+    const focusTo = row.rowLabel === 'Rollup' ? `${rowBase}:rollup:${newTagId}` : `${rowBase}:${newTagId}`
+    claimPendingFocus(focusTo)
+    await batch.commit()
   }
 
   function createPlainGroupingTag(name, parentTag, groupingType = null) {
@@ -1399,7 +1548,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // grid body and scrolled it back to the top on every new breakdown line
   // (Oct 2026, Markus: "adding a breakdown line makes the grid jump to the top").
   const live = useRef({})
-  live.current = { persistBudgetMonth, renameTag, tagById }
+  live.current = { persistBudgetMonth, renameTag, tagById, replaceOptionsFor, replaceBreakdownTag }
   const columnDefs = useMemo(() => {
     const monthCols = MONTH_LABELS.map((label, i) => ({
       headerName: label,
@@ -1698,6 +1847,14 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         // Breakdown lines and their Übergruppe can be renamed by editing the
         // cell (double-click, like everywhere else); Prog/Plan1/Plan0 are fixed labels.
         editable: (p) => Boolean(p.data.renameTagId),
+        cellEditor: TagTitleEditor,
+        cellEditorPopup: true,
+        cellEditorPopupPosition: 'under',
+        cellEditorParams: (p) => ({
+          options: live.current.replaceOptionsFor(p.data),
+          onRename: (name) => live.current.renameTag(p.data.renameTagId, name),
+          onReplace: (tagId) => live.current.replaceBreakdownTag(p.data, tagId),
+        }),
         valueSetter: (p) => {
           live.current.renameTag(p.data.renameTagId, p.newValue)
           return false // the new name arrives with the tag's own snapshot
