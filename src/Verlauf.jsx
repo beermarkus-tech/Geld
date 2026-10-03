@@ -23,8 +23,9 @@ import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { usageHint } from './lib/tags'
 import { usageOf, useTagActions, useTagUsage, useTags } from './TagsProvider'
 import { budgetDoc, budgetDocId } from './lib/budgetDocs'
-import TagPill, { listRowClass, typeLook } from './TagPill'
-import { CREATE_TYPES } from './TagEditor'
+import TagBox from './TagBox'
+import TagPill from './TagPill'
+import { CREATE_TYPES } from './lib/tagTypes'
 
 // Ctrl/Cmd+Delete deletes a row (Oct 2026, Markus); the grid's own "Delete clears
 // the cell" must not run on it too — onCellKeyDown still sees the key.
@@ -314,225 +315,82 @@ function CellCommentField({ cell, description, savedText, onSave, onDone, inputR
   )
 }
 
-// Editing a breakdown line's or Übergruppe's title (Oct 2026, Markus): type a
-// new name and press Enter to rename the tag, or pick an existing tag from the
-// list below (Down/Up, Enter or a click) to put it in this row's place. The
-// list holds only tags that fit where the cursor is (see replaceOptions()).
+// Editing a breakdown line's or Übergruppe's title (Oct 2026, Markus), on the
+// shared tag box (TagBox.jsx): type a new name and press Enter to rename the
+// tag, or pick an existing tag with ↓/↑ + Enter (or a click) to put it in this
+// row's place. Nothing is highlighted until ↓, so a plain Enter renames. Esc
+// first puts the name back, then closes. The list holds only tags that fit
+// where the cursor is (siblings under the same parent — see replaceOptions()).
 const TagTitleEditor = forwardRef(function TagTitleEditor({ value, eventKey, api, options, onRename, onReplace }, ref) {
   const usage = useTagUsage()
   const original = String(value ?? '')
-  const [text, setText] = useState(eventKey && eventKey.length === 1 ? eventKey : original)
-  const [highlight, setHighlight] = useState(-1)
-  const inputRef = useRef(null)
+  const start = eventKey && eventKey.length === 1 ? eventKey : original
   useImperativeHandle(ref, () => ({ getValue: () => original, isCancelBeforeStart: () => false }))
-  useEffect(() => {
-    const el = inputRef.current
-    el?.focus()
-    if (text === original) el?.select()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- once on open
-  }, [])
-
-  const filtered = useMemo(() => {
-    const q = text.trim().toLowerCase()
-    return text === original || q === '' ? options : options.filter((t) => t.name.toLowerCase().includes(q))
-  }, [options, text, original])
-
-  const live = useRef({})
-  live.current = { text, highlight, filtered }
   function finishWith(fn) {
     api.stopEditing(true)
     fn?.()
   }
-  useEffect(() => {
-    const el = inputRef.current
-    if (!el) return
-    // Native listener: AG Grid's popup acts on Enter/Escape before React's onKeyDown would.
-    const onKeyDown = (e) => {
-      const { text: t, highlight: h, filtered: f } = live.current
-      if (e.key === 'ArrowDown') {
-        e.preventDefault()
-        e.stopPropagation()
-        setHighlight(Math.min(f.length - 1, h + 1))
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault()
-        e.stopPropagation()
-        setHighlight(Math.max(-1, h - 1))
-      } else if (e.key === 'Enter') {
-        e.preventDefault()
-        e.stopPropagation()
-        if (h >= 0 && f[h]) finishWith(() => onReplace(f[h].id))
-        else finishWith(t.trim() !== original.trim() ? () => onRename(t) : null)
-      } else if (e.key === 'Escape') {
-        e.preventDefault()
-        e.stopPropagation()
-        if (h >= 0) setHighlight(-1)
-        else finishWith(null)
-      }
-    }
-    el.addEventListener('keydown', onKeyDown)
-    return () => el.removeEventListener('keydown', onKeyDown)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads state through `live`
-  }, [])
-
   return (
     <div className="flex w-80 flex-col gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-2 text-sm text-[var(--color-text)] shadow-lg">
-      <input
-        ref={inputRef}
-        type="text"
-        value={text}
-        onChange={(e) => {
-          setText(e.target.value)
-          setHighlight(-1)
+      <TagBox
+        startText={start}
+        resetText={original}
+        autoHighlight={false}
+        selectOnOpen={start === original}
+        placeholder="Name"
+        getOptions={(text) => {
+          const q = text.trim().toLowerCase()
+          const list = text === original || q === '' ? options : options.filter((t) => t.name.toLowerCase().includes(q))
+          return list.map((t) => ({ key: t.id, id: t.id, tag: t, label: t.name, hint: usageHint(usageOf(usage, t.id)) }))
         }}
-        aria-label="Name"
-        className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1"
+        onPick={(o) => finishWith(() => onReplace(o.id))}
+        onEnterNone={(text) => finishWith(text.trim() !== original.trim() ? () => onRename(text) : null)}
+        onClose={() => finishWith(null)}
+        belowInput={<div className="text-xs text-[var(--color-text-muted)]">Enter = umbenennen{options.length > 0 ? ' · oder ↓ ersetzen durch:' : ''}</div>}
       />
-      <div className="text-xs text-[var(--color-text-muted)]">Enter = umbenennen{options.length > 0 ? ' · oder ersetzen durch:' : ''}</div>
-      {filtered.length > 0 && (
-        <ul role="listbox" className="max-h-48 overflow-auto rounded border border-[var(--color-border)]">
-          {filtered.map((t, i) => (
-            <li key={t.id}>
-              <button
-                type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault()
-                  finishWith(() => onReplace(t.id))
-                }}
-                className={listRowClass(i === highlight)}
-              >
-                <span className="min-w-0 flex-1">
-                  <TagPill tag={t} />
-                </span>
-                <span className="shrink-0 text-xs text-[var(--color-text-muted)]">{usageHint(usageOf(usage, t.id))}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   )
 })
 
-// "Add breakdown line" (Oct 2026, Markus): a breakdown line's title is a tag, so
-// this works like the Tags column in Konten — type to search the existing
-// tags (pick with Up/Down + Enter or a click), or create a new one: a plain
-// label makes a parent tag, "Schottland:Hotels" a child under "Schottland"
-// (reused when it exists), and the "Neu …" rows below pick the tag's type.
+// "Add breakdown line" (Oct 2026, Markus), on the shared tag box (TagBox.jsx):
+// a breakdown line's title is a tag — search the existing tags, or create one
+// with a "Neu … — Typ" row: a plain label makes a parent tag, "Schottland:Hotels"
+// a child under "Schottland" (reused when it exists; a new parent gets the type
+// too). Tags already a line in this block aren't offered. Esc clears the field,
+// then closes.
 function AddBreakdownModal({ tags, excludeIds, onSubmit, onCancel }) {
   const usage = useTagUsage()
-  const [text, setText] = useState('')
-  const [highlight, setHighlight] = useState(0)
-  const inputRef = useRef(null)
-
-  useEffect(() => {
-    inputRef.current?.focus()
-  }, [])
-  useEffect(() => {
-    const onKeyDown = (e) => {
-      if (e.key === 'Escape') onCancel()
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [onCancel])
-
   const tagById = useMemo(() => Object.fromEntries(tags.map((t) => [t.id, t])), [tags])
-  const typed = text.trim()
-  const key = tagKey(typed)
-  const suggestions = useMemo(
-    () =>
-      tags
-        .filter((t) => t.class === 'grouping' && !t.archived && !excludeIds.has(t.id))
-        .map((t) => ({ tag: t, label: qualifiedTagName(t, tagById) }))
-        .filter((o) => key === '' || tagKey(o.label).includes(key))
-        .sort((a, b) => a.label.localeCompare(b.label))
-        .slice(0, 25),
-    [tags, tagById, excludeIds, key],
-  )
-  const exists = typed !== '' && Boolean(findTagByText(tags, typed))
-  const createOptions = typed !== '' && !exists ? CREATE_TYPES.filter((o) => o.groupingType !== 'claim-category') : []
-  const optionCount = suggestions.length + createOptions.length
-
-  function choose(idx) {
-    if (idx < suggestions.length) onSubmit({ tagId: suggestions[idx].tag.id })
-    else if (createOptions[idx - suggestions.length]) onSubmit({ text: typed, groupingType: createOptions[idx - suggestions.length].groupingType })
-  }
-
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center" onClick={onCancel}>
       <div className="absolute inset-0 bg-black/40" />
       <div className="relative flex w-full max-w-sm flex-col gap-3 rounded-lg bg-[var(--color-surface)] p-5" onClick={(e) => e.stopPropagation()}>
         <p className="text-sm font-medium">Neue Aufschlüsselungszeile</p>
-        <input
-          ref={inputRef}
-          type="text"
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value)
-            setHighlight(0)
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'ArrowDown') {
-              e.preventDefault()
-              setHighlight((i) => Math.min(optionCount - 1, i + 1))
-            } else if (e.key === 'ArrowUp') {
-              e.preventDefault()
-              setHighlight((i) => Math.max(0, i - 1))
-            } else if (e.key === 'Enter') {
-              e.preventDefault()
-              if (optionCount > 0) choose(highlight)
-            }
-          }}
+        <TagBox
           placeholder="Tag suchen oder neu erstellen… (z.B. Schottland:Hotels)"
-          aria-label="Tag"
-          className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-sm text-[var(--color-text)]"
+          listClassName="max-h-60"
+          getOptions={(text) => {
+            const key = tagKey(text.trim())
+            return tags
+              .filter((t) => t.class === 'grouping' && !t.archived && !excludeIds.has(t.id))
+              .map((t) => ({ t, label: qualifiedTagName(t, tagById) }))
+              .filter((o) => key === '' || tagKey(o.label).includes(key))
+              .sort((a, b) => a.label.localeCompare(b.label, 'de'))
+              .slice(0, 25)
+              .map(({ t, label }) => ({ key: t.id, id: t.id, tag: t, label, hint: usageHint(usageOf(usage, t.id)) }))
+          }}
+          getCreateTypes={(text) => (text.trim() !== '' && !findTagByText(tags, text) ? CREATE_TYPES.filter((o) => o.groupingType !== 'claim-category') : [])}
+          onPick={(o) => onSubmit({ tagId: o.id })}
+          onCreate={(text, groupingType) => onSubmit({ text, groupingType })}
+          onClose={onCancel}
+          footer={
+            <div className="flex justify-end">
+              <button type="button" onClick={onCancel} className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]">
+                Abbrechen
+              </button>
+            </div>
+          }
         />
-        {optionCount > 0 && (
-          <ul className="max-h-60 overflow-auto rounded border border-[var(--color-border)] text-sm">
-            {suggestions.map((o, idx) => {
-              return (
-                <li key={o.tag.id}>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => {
-                      e.preventDefault()
-                      choose(idx)
-                    }}
-                    className={listRowClass(idx === highlight)}
-                  >
-                    <span className="min-w-0 flex-1">
-                      <TagPill tag={o.tag}>{o.label}</TagPill>
-                    </span>
-                    <span className="shrink-0 text-xs text-[var(--color-text-muted)]">{usageHint(usageOf(usage, o.tag.id))}</span>
-                  </button>
-                </li>
-              )
-            })}
-            {createOptions.map((opt, i) => {
-              const idx = suggestions.length + i
-              return (
-                <li key={opt.groupingType ?? 'null'}>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => {
-                      e.preventDefault()
-                      choose(idx)
-                    }}
-                    className={listRowClass(idx === highlight)}
-                  >
-                    <span className="text-xs text-[var(--color-text-muted)]">Neu</span>
-                    <TagPill tag={typeLook(opt.groupingType)}>{typed}</TagPill>
-                    <span className="text-xs text-[var(--color-text-muted)]">— {opt.label}</span>
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-        <div className="flex justify-end">
-          <button type="button" onClick={onCancel} className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]">
-            Abbrechen
-          </button>
-        </div>
       </div>
     </div>
   )

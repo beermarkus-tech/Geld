@@ -1,8 +1,13 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { forwardRef, useImperativeHandle, useMemo, useState } from 'react'
 
 import { findTagByText, tagKey } from './lib/tagPicker'
 import { qualifiedTagName } from './lib/tagStyle'
-import TagPill, { listRowClass, pillLook, typeLook } from './TagPill'
+import { CREATE_TYPES } from './lib/tagTypes'
+import { usageHint } from './lib/tags'
+import TagBox from './TagBox'
+import { pillLook } from './TagPill'
+import { usageOf, useTagUsage } from './TagsProvider'
+
 
 // A selected tag: its pill (TagPill.jsx) with a remove ×. Untyped tags and old
 // plain-text tags both get the dashed outline, on purpose (Markus): "not yet
@@ -19,313 +24,143 @@ function Chip({ tag, label, onRemove, title }) {
   )
 }
 
-// New tag creation offers a type to assign at the same time (Markus asked
-// directly: "how can i create a new travel tag or statement tag etc?" —
-// resolves the open question logged Session 34). One row per groupingType
-// (plus "Unbestimmt", first/default so a plain Enter with nothing
-// highlighted still creates unspecified exactly as before — no behavior
-// change for the fast/default path, arrowing down is purely additive).
-// claim-category is only offered here under the same sequencing rule as
-// everywhere else (a claim tag already on the line).
-export const CREATE_TYPES = [
-  { groupingType: null, label: 'Unbestimmt' },
-  { groupingType: 'project', label: 'Reise/Projekt' },
-  { groupingType: 'statement', label: 'Abrechnung' },
-  { groupingType: 'claim', label: 'Anspruch' },
-  { groupingType: 'claim-category', label: 'Anspruchsart' },
-]
-
-// The real inline tag mechanism (spec.md §2.5) — replaces the earlier
-// plain comma-separated-text placeholder. Multi-select autocomplete: type
-// to filter existing tags, Enter/click to add one as a removable chip,
-// one create row per type (above) when nothing matches (grouping-class
-// tags only — allocation tags are fixed/pre-seeded, never created here,
-// per spec's "a deliberate Settings-area action" note).
+// Konten's Tags column editor (spec.md §2.5), built on the shared tag box
+// (TagBox.jsx — same list, look and keys as Verlauf's boxes since Oct 2026).
+// The tags already on the line sit above as removable chips; the list offers
+// every tag (allocation tags, grouping tags, and old plain-text values still
+// in use — reusing the exact string keeps old trip/claim labels from forking
+// into near-duplicates), and a "Neu … — Typ" row per type when the typed text
+// doesn't exist yet. "Schottland:Fähre" creates/reuses the parent and the
+// child (lib/tagActions.js). With an empty field the 5 most recently used tags
+// come first.
 //
-// **"Schottland:Fähre" creates/selects a child tag** (spec.md §2.5's
-// `parentTag` hierarchy) — a colon in the typed text splits into
-// parent/child; `onCreateTag` (Konten.jsx) resolves an existing parent by
-// name or creates one, then creates the child under it. Suggestions and
-// the "already exists" check both match against each tag's *qualified*
-// name (parent-prefixed for a child, plain for a top-level tag), so
-// typing a child's bare name or its full "Parent: Child" form both find
-// it.
+// Keys: ↓/↑, Enter picks the highlighted entry (the first one is highlighted
+// as you type) and closes — adding several tags at once is rare (Markus); with
+// nothing to pick Enter keeps what's there and closes. Esc clears the field,
+// then closes. Backspace on an empty field removes the last chip. Tab keeps
+// what's there, closes and adds a new booking row below (Markus).
 //
-// **Every grouping tag is suggested** (Oct 2026 — earlier only tags used on
-// a booking line were; unused tags now delete themselves instead), and the
-// allocation tags always.
-// `usedTagValues` (a Set, computed once in
-// Konten.jsx from every line's `tags[]` across all loaded transactions)
-// drives the legacy half: a value used somewhere that *isn't*
-// a real tag id at all is a pre-existing free-text string (typed before
-// this mechanism existed) — surfaced here as a plain, colorless,
-// selectable suggestion too, not just as a dashed chip once it's already
-// on the current line. Reusing the exact same string keeps Markus's
-// existing trip/claim labels (e.g. an informal loan's own tag) usable
-// without silently forking into a near-duplicate real tag.
-//
-// Fully removable/editable either way; turning a legacy string into a
-// real tracked tag is a deliberate re-add (remove the old chip, retype —
-// matches the real tag by name if one already exists, or creates it).
+// Anspruchsart (claim-category) tags are only offered once a claim tag is on
+// the line (spec.md §2.5's sequencing rule).
 const TagEditor = forwardRef(function TagEditor(props, ref) {
   const { data, tags, usedTagValues, recentTagValues = [], initialTagIds = [], onApply, onCreateTag, onTabAddRow, api } = props
   const [selectedIds, setSelectedIds] = useState(initialTagIds)
-  const [inputText, setInputText] = useState('')
-  const [highlight, setHighlight] = useState(0)
-  const inputRef = useRef(null)
+  const usage = useTagUsage()
 
   useImperativeHandle(ref, () => ({
     getValue: () => ({ tagIds: selectedIds }),
     isCancelBeforeStart: () => false,
   }))
 
-  useEffect(() => {
-    inputRef.current?.focus()
-  }, [])
-
   const tagById = useMemo(() => Object.fromEntries(tags.map((t) => [t.id, t])), [tags])
   const qName = (t) => qualifiedTagName(t, tagById)
-
-  const selectedChips = selectedIds.map((id) => tagById[id] ?? { id, name: id })
-  const legacyCandidates = useMemo(
-    () => [...usedTagValues].filter((v) => !tagById[v]).map((v) => ({ id: v, name: v })),
-    [usedTagValues, tagById],
-  )
-
-  // claim-category tags are only ever offered once a claim tag already
-  // sits on this same line (spec.md §2.5's UI sequencing rule — Meal/Taxi
-  // aren't meaningful outside some specific trip/claim context).
+  const legacyCandidates = useMemo(() => [...usedTagValues].filter((v) => !tagById[v]).map((v) => ({ id: v, name: v })), [usedTagValues, tagById])
   const hasClaimTag = selectedIds.some((id) => tagById[id]?.groupingType === 'claim')
 
-  // recentCount marks how many entries at the front of `suggestions` are
-  // the "recently used" section (rendered with a separator after them,
-  // below) — 0 whenever that section doesn't apply (typing a search, or
-  // nothing recent to show).
-  const { suggestions, recentCount } = useMemo(() => {
-    const text = inputText.trim().toLowerCase()
-    // Every grouping tag is offered (Oct 2026, Markus: tags created in Verlauf,
-    // used only by plan lines, were missing). The earlier "only tags used on a
-    // booking line" gate is gone: unused tags now delete themselves
-    // (TagCleanup.jsx), so every tag that still exists is in use somewhere.
-    const groupingCandidates = tags.filter((t) => t.class === 'grouping')
-    const candidates = [...tags.filter((t) => t.class === 'allocation'), ...groupingCandidates, ...legacyCandidates]
+  function getOptions(rawText) {
+    const text = rawText.trim().toLowerCase()
+    const candidates = [...tags.filter((t) => t.class === 'allocation'), ...tags.filter((t) => t.class === 'grouping'), ...legacyCandidates]
     const eligible = candidates
-      .filter((t) => !t.archived)
-      .filter((t) => !selectedIds.includes(t.id))
+      .filter((t) => !t.archived && !selectedIds.includes(t.id))
       .filter((t) => t.groupingType !== 'claim-category' || hasClaimTag)
       // Spaces around the colon don't matter: "schottland:aus" finds "Schottland: Ausgaben".
       .filter((t) => text === '' || tagKey(qName(t)).includes(tagKey(text)))
-    if (text !== '') return { suggestions: eligible.slice(0, 25), recentCount: 0 }
-    // Empty input (pure browsing): the 5 most-recently-used tags first,
-    // separated from the rest (Markus) — recentTagValues (Konten.jsx) is
-    // every used value ordered by its most recent transaction date.
-    const byId = new Map(eligible.map((t) => [t.id, t]))
-    const recent = []
-    for (const v of recentTagValues) {
-      if (recent.length >= 5) break
-      const t = byId.get(v)
-      if (t) {
-        recent.push(t)
-        byId.delete(v)
+    let list = eligible.slice(0, 25)
+    let recentCount = 0
+    if (text === '') {
+      const byId = new Map(eligible.map((t) => [t.id, t]))
+      const recent = []
+      for (const v of recentTagValues) {
+        if (recent.length >= 5) break
+        if (byId.has(v)) {
+          recent.push(byId.get(v))
+          byId.delete(v)
+        }
       }
+      recentCount = recent.length
+      list = [...recent, ...byId.values()].slice(0, 25)
     }
-    return { suggestions: [...recent, ...byId.values()].slice(0, 25), recentCount: recent.length }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- qName closes over tagById, already covered by `tags`
-  }, [tags, legacyCandidates, usedTagValues, recentTagValues, selectedIds, inputText, hasClaimTag])
+    return list.map((t, i) => ({
+      key: t.id,
+      id: t.id,
+      tag: tagById[t.id],
+      label: qName(t) || t.id,
+      hint: tagById[t.id]?.class === 'grouping' ? usageHint(usageOf(usage, t.id)) : null,
+      separatorBefore: recentCount > 0 && i === recentCount,
+    }))
+  }
 
-  // Checked against real tags *and* legacy free-text values in current
-  // use (not just `tags`) — otherwise typing a legacy string's exact name
-  // (e.g. "dirk sept") still offered a redundant "create" option right
-  // next to the real matching suggestion for that same string.
-  const canCreate =
-    inputText.trim() !== '' &&
-    !findTagByText(tags, inputText) &&
-    !tags.some((t) => t.class === 'allocation' && t.name.toLowerCase() === inputText.trim().toLowerCase()) &&
-    !legacyCandidates.some((t) => t.name.toLowerCase() === inputText.trim().toLowerCase())
-  const createTypeOptions = canCreate ? CREATE_TYPES.filter((o) => o.groupingType !== 'claim-category' || hasClaimTag) : []
-  const optionCount = suggestions.length + createTypeOptions.length
+  // Not when the text names an existing tag (incl. allocation tags and old
+  // plain-text values — "dirk sept" must not offer a duplicate).
+  function getCreateTypes(rawText) {
+    const text = rawText.trim().toLowerCase()
+    if (!text || findTagByText(tags, rawText)) return []
+    if (tags.some((t) => t.class === 'allocation' && t.name.toLowerCase() === text)) return []
+    if (legacyCandidates.some((t) => t.name.toLowerCase() === text)) return []
+    return CREATE_TYPES.filter((o) => o.groupingType !== 'claim-category' || hasClaimTag)
+  }
 
-  // Applies and closes immediately (Markus: "rarely ever will i select two
-  // tags in one go") — computes the new id directly and calls onApply
-  // itself rather than going through setSelectedIds first, since that
-  // state update wouldn't be visible yet on this same call (React state
-  // updates aren't synchronous) and the popup is closing regardless.
-  // Removing a chip (below) still doesn't auto-close — only *adding* one
-  // does, so correcting a mis-tagged line (remove, then pick the right
-  // one) stays a single visit to the popup, not two.
-  function selectSuggestion(idx) {
-    let id
-    if (idx < suggestions.length) {
-      id = suggestions[idx].id
-    } else {
-      const opt = createTypeOptions[idx - suggestions.length]
-      if (!opt) return
-      id = onCreateTag(inputText.trim(), opt.groupingType)
-    }
+  // Adding applies and closes at once; removing a chip doesn't close, so
+  // correcting a line (remove, then pick) stays one visit.
+  function add(id) {
     onApply(data, [...selectedIds, id])
     api.stopEditing(true)
   }
-
-  function removeChip(id) {
-    setSelectedIds((prev) => prev.filter((x) => x !== id))
-  }
-
-  // Writes directly via onApply, same established reason as Konto/
-  // Category's own Übernehmen (Konten.jsx): AG Grid's own getValue()/
-  // valueSetter commit pipeline confirmed unreliable for those, so this
-  // follows the same direct-write-then-stopEditing(true) pattern rather
-  // than depending on it here either. The valueSetter fallback still
-  // exists in Konten.jsx's Tags column def for whatever other way an edit
-  // might end (e.g. blur), same as Konto/Category.
+  // Writes directly via onApply (the grid's own commit pipeline proved
+  // unreliable for popup editors, see Konten.jsx), then closes.
   function apply() {
     onApply(data, selectedIds)
     api.stopEditing(true)
   }
 
-  // Native listener on the input itself, not a React onKeyDown prop — the
-  // exact race Listbox.jsx already found and fixed once (see its own long
-  // comment there): AG Grid's PopupEditorWrapper attaches a plain native
-  // keydown listener on the popup wrapper, a real DOM ancestor of this
-  // input, and still acts on Enter/Escape itself mid-edit before React's
-  // own synthetic dispatch would ever reach a plain onKeyDown prop here.
-  useEffect(() => {
-    const el = inputRef.current
-    if (!el) return
-    const onKeyDown = (e) => {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault()
-        e.stopPropagation()
-        setHighlight((i) => Math.min(optionCount - 1, i + 1))
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault()
-        e.stopPropagation()
-        setHighlight((i) => Math.max(0, i - 1))
-      } else if (e.key === 'Enter') {
-        e.preventDefault()
-        e.stopPropagation()
-        // A highlighted suggestion always wins when one exists — including
-        // with an empty input, where index 0 is already highlighted by
-        // default the moment the popup opens (Markus: Enter on "a selected
-        // tag" wasn't applying it, since the previous version treated an
-        // empty input as "just close" regardless of what was visibly
-        // highlighted). Only once there's truly nothing left to select
-        // does Enter fall back to closing with whatever's already applied
-        // — the same "final Enter closes the popup" convention as
-        // Kategorie/Unterkategorie's own chain.
-        if (optionCount > 0) selectSuggestion(highlight)
-        else apply()
-      } else if (e.key === 'Escape') {
-        e.preventDefault()
-        e.stopPropagation()
-        if (inputText !== '') setInputText('')
-        else api.stopEditing(true)
-      } else if (e.key === 'Backspace' && inputText === '' && selectedIds.length > 0) {
-        e.preventDefault()
-        e.stopPropagation()
-        setSelectedIds((prev) => prev.slice(0, -1))
-      } else if (e.key === 'Tab') {
-        // Markus: "when i hit tab on the tags field or while within the
-        // tags drop down, i want a new empty row to be created below the
-        // current one" — applies whatever's already been added as a chip
-        // (not whatever's still typed in the search box, unapplied — same
-        // as Enter's own fallback), closes this popup, and immediately
-        // adds a new blank transaction row, in place of AG Grid's own
-        // default Tab-to-next-cell/row navigation.
-        e.preventDefault()
-        e.stopPropagation()
-        apply()
-        onTabAddRow()
-      }
-    }
-    el.addEventListener('keydown', onKeyDown)
-    return () => el.removeEventListener('keydown', onKeyDown)
-  }, [inputText, highlight, optionCount, suggestions, createTypeOptions, selectedIds])
-
   return (
-    <div
-      className="flex flex-col gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-2 shadow-lg"
-      style={{ minWidth: 280 }}
-    >
-      <div className="flex flex-wrap gap-1">
-        {selectedChips.map((t) => (
-          <Chip
-            key={t.id}
-            tag={tagById[t.id]}
-            label={qName(t) || t.id}
-            onRemove={() => removeChip(t.id)}
-            title={tagById[t.id] ? undefined : 'Alter Freitext-Tag — noch nicht mit einem echten Tag verknüpft'}
-          />
-        ))}
-        {selectedChips.length === 0 && <span className="text-xs text-[var(--color-text-muted)]">Keine Tags</span>}
-      </div>
-      <input
-        ref={inputRef}
-        type="text"
-        value={inputText}
-        onChange={(e) => {
-          setInputText(e.target.value)
-          setHighlight(0)
-        }}
+    <div className="flex flex-col gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-2 shadow-lg" style={{ minWidth: 300 }}>
+      <TagBox
         placeholder="Tag suchen oder neu erstellen… (z.B. Schottland:Fähre)"
-        className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-sm"
+        getOptions={getOptions}
+        getCreateTypes={getCreateTypes}
+        onPick={(o) => add(o.id)}
+        onCreate={(text, groupingType) => add(onCreateTag(text, groupingType))}
+        onEnterNone={apply}
+        onClose={() => api.stopEditing(true)}
+        onKey={(e, text) => {
+          if (e.key === 'Backspace' && text === '' && selectedIds.length > 0) {
+            setSelectedIds((prev) => prev.slice(0, -1))
+            return true
+          }
+          if (e.key === 'Tab') {
+            apply()
+            onTabAddRow()
+            return true
+          }
+          return false
+        }}
+        header={
+          <div className="flex flex-wrap gap-1">
+            {selectedIds.map((id) => (
+              <Chip
+                key={id}
+                tag={tagById[id]}
+                label={qName(tagById[id] ?? { id, name: id }) || id}
+                onRemove={() => setSelectedIds((prev) => prev.filter((x) => x !== id))}
+                title={tagById[id] ? undefined : 'Alter Freitext-Tag — noch nicht mit einem echten Tag verknüpft'}
+              />
+            ))}
+            {selectedIds.length === 0 && <span className="text-xs text-[var(--color-text-muted)]">Keine Tags</span>}
+          </div>
+        }
+        footer={
+          // Abbrechen closes without writing; Übernehmen keeps the chips as they are now.
+          <div className="mt-1 flex justify-end gap-2">
+            <button type="button" onClick={() => api.stopEditing(true)} className="rounded px-2 py-1 text-xs text-[var(--color-text-muted)]">
+              Abbrechen
+            </button>
+            <button type="button" onClick={apply} className="rounded bg-[var(--color-computed)] px-2 py-1 text-xs font-medium text-white">
+              Übernehmen
+            </button>
+          </div>
+        }
       />
-      {(suggestions.length > 0 || createTypeOptions.length > 0) && (
-        <ul className="max-h-48 overflow-auto rounded border border-[var(--color-border)] text-sm">
-          {suggestions.map((t, idx) => {
-            return (
-              <li key={t.id}>
-                {/* Separator after the 5 most-recently-used (Markus) — only
-                    ever present when browsing (recentCount is 0 while
-                    searching, see the suggestions useMemo above). */}
-                {idx === recentCount && recentCount > 0 && <hr className="border-[var(--color-border)]" />}
-                <button
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault()
-                    selectSuggestion(idx)
-                  }}
-                  className={listRowClass(idx === highlight)}
-                >
-                  <TagPill tag={tagById[t.id]}>{qName(t)}</TagPill>
-                </button>
-              </li>
-            )
-          })}
-          {createTypeOptions.map((opt, i) => {
-            const idx = suggestions.length + i
-            return (
-              <li key={opt.groupingType ?? 'null'}>
-                <button
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault()
-                    selectSuggestion(idx)
-                  }}
-                  className={listRowClass(idx === highlight)}
-                >
-                  <span className="text-xs text-[var(--color-text-muted)]">Neu</span>
-                  <TagPill tag={typeLook(opt.groupingType)}>{inputText.trim()}</TagPill>
-                  <span className="text-xs text-[var(--color-text-muted)]">— {opt.label}</span>
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-      {/* Explicit Übernehmen/Abbrechen (same convention as Konto/Category) —
-          Abbrechen uses stopEditing(true) same as apply() does, not because
-          it's "cancelling an apply" but because AG Grid's own true meaning
-          for that argument is cancel, and skipping the fallback commit
-          pipeline here matters most exactly when the user meant to discard
-          whatever they were mid-typing. */}
-      <div className="mt-1 flex justify-end gap-2">
-        <button type="button" onClick={() => api.stopEditing(true)} className="rounded px-2 py-1 text-xs text-[var(--color-text-muted)]">
-          Abbrechen
-        </button>
-        <button type="button" onClick={apply} className="rounded bg-[var(--color-computed)] px-2 py-1 text-xs font-medium text-white">
-          Übernehmen
-        </button>
-      </div>
     </div>
   )
 })

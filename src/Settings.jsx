@@ -3,7 +3,7 @@ import { collection, onSnapshot } from 'firebase/firestore'
 
 import { db } from './firebase'
 import { TAG_RENAME_MESSAGES } from './lib/tagRename'
-import { CREATE_TYPES } from './TagEditor'
+import { CREATE_TYPES } from './lib/tagTypes'
 import TagPill from './TagPill'
 import { usageOf, useTagActions, useTagUsage, useTags } from './TagsProvider'
 
