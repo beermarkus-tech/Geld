@@ -1105,6 +1105,8 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   useEffect(() => {
     const onKeyDown = (e) => {
       if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'k') return
+      // Only on the visible screen: Strg+K means something else on Verlauf and Quickview.
+      if (!active) return
       if (gridRef.current?.api?.getEditingCells().length > 0) return
       e.preventDefault()
       const target = accountFilter
@@ -1114,7 +1116,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [accountFilter])
+  }, [accountFilter, active])
 
   // Ctrl/Cmd+H toggles "Kürzlich gelöscht" (Markus). **Real risk, flagged
   // to Markus rather than silently assumed away:** Ctrl+H is Chrome's own

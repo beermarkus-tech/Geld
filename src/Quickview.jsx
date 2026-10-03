@@ -77,14 +77,14 @@ export default function Quickview({ year, onOpenInKonten, active = true, preset 
     if (preset) select(`${preset.kind === 'category' ? 'c' : 't'}:${preset.targetId}`)
   }, [preset]) // eslint-disable-line react-hooks/exhaustive-deps -- select only uses setters
 
-  // Ctrl+L opens the category dropdown (Markus, Oct 2026); Ctrl+I toggles the
+  // Ctrl+K opens the category dropdown (Markus, Oct 2026; was Ctrl+L); Ctrl+I toggles the
   // shortcuts popover like on Konten/Verlauf, Escape closes it. Only while
   // this screen is the visible one (it stays mounted when hidden).
   useEffect(() => {
     if (!active) return
     const onKeyDown = (e) => {
       const mod = e.ctrlKey || e.metaKey
-      if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'l') {
+      if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         listboxRef.current?.focus()
       } else if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'g') {
@@ -270,7 +270,7 @@ export default function Quickview({ year, onOpenInKonten, active = true, preset 
               <div className="mb-1.5 font-medium">Tastenkürzel</div>
               <ul className="space-y-1">
                 <li>
-                  <b>Strg+L</b> — Kategorie-/Tag-Auswahl öffnen
+                  <b>Strg+K</b> — Kategorie-/Tag-Auswahl öffnen
                 </li>
                 {onBack && (
                   <li>
