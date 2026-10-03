@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { collection, deleteDoc, doc, onSnapshot, setDoc } from 'firebase/firestore'
+import { collection, deleteDoc, doc, onSnapshot, setDoc, writeBatch } from 'firebase/firestore'
 import { AgGridReact } from 'ag-grid-react'
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community'
 
@@ -375,6 +375,11 @@ const savedFilterModel = readSavedFilterModel()
 const savedSort = readSavedSort()
 
 export default function Konten({ year, onYearChange, onYearsChange, initialFocus, onFocusChange, active = true, jump = null }) {
+  // Whether this screen is the visible one — its window-level shortcuts only
+  // work then (Oct 2026: Konten's Ctrl++ / Tab fired from other screens and
+  // created empty bookings).
+  const activeRef = useRef(active)
+  activeRef.current = active
   const [accounts, setAccounts] = useState([])
   const [categories, setCategories] = useState([])
   // The central tag list (TagsProvider.jsx).
@@ -597,6 +602,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   useEffect(() => registerScreenCursor('konten', () => placeCursorRef.current()), [])
   useEffect(() => {
     const onKeyDown = (e) => {
+      if (!activeRef.current) return // screen hidden (it stays mounted): its shortcuts are off
       if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return
       const wrapper = gridWrapperRef.current
       if (!wrapper || wrapper.contains(document.activeElement)) return
@@ -958,6 +964,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // edited, so this doesn't fire in the middle of typing a category/tag/etc.
   useEffect(() => {
     const onKeyDown = (e) => {
+      if (!activeRef.current) return // screen hidden (it stays mounted): its shortcuts are off
       if (!e.ctrlKey && !e.metaKey) return
       if (e.key !== '+' && e.key !== '=') return
       if (gridRef.current?.api?.getEditingCells().length > 0) return
@@ -980,6 +987,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // plain bubble-phase listener would lose that race outright.
   useEffect(() => {
     const onKeyDown = (e) => {
+      if (!activeRef.current) return // screen hidden (it stays mounted): its shortcuts are off
       if (e.key !== 'Tab') return
       const api = gridRef.current?.api
       if (!api || api.getEditingCells().length > 0) return
@@ -1034,6 +1042,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // harmless, and saves re-deriving it if this ever moves to another key.
   useEffect(() => {
     const onKeyDown = (e) => {
+      if (!activeRef.current) return // screen hidden (it stays mounted): its shortcuts are off
       if (!e.ctrlKey && !e.metaKey) return
       if (e.key.toLowerCase() !== 't') return
       const api = gridRef.current?.api
@@ -1067,6 +1076,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // exactly where you left off, a closed loop.
   useEffect(() => {
     const onKeyDown = (e) => {
+      if (!activeRef.current) return // screen hidden (it stays mounted): its shortcuts are off
       if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'k') return
       // Only on the visible screen: Strg+K means something else on Verlauf and Quickview.
       if (!active) return
@@ -1094,6 +1104,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // and in an ordinary browser tab.
   useEffect(() => {
     const onKeyDown = (e) => {
+      if (!activeRef.current) return // screen hidden (it stays mounted): its shortcuts are off
       if (!e.ctrlKey && !e.metaKey) return
       if (e.key.toLowerCase() !== 'h') return
       if (gridRef.current?.api?.getEditingCells().length > 0) return
@@ -1114,6 +1125,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // before elsewhere in this file.
   useEffect(() => {
     const onKeyDown = (e) => {
+      if (!activeRef.current) return // screen hidden (it stays mounted): its shortcuts are off
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i') {
         e.preventDefault()
         setShortcutsOpen((v) => !v)
@@ -1172,6 +1184,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       api.setFocusedCell(0, colId)
     }
     const onKeyDown = (e) => {
+      if (!activeRef.current) return // screen hidden (it stays mounted): its shortcuts are off
       const api = gridRef.current?.api
       if (!api) return
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'f') {
@@ -1225,6 +1238,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // be strictly worse than a no-op.
   useEffect(() => {
     const onKeyDown = (e) => {
+      if (!activeRef.current) return // screen hidden (it stays mounted): its shortcuts are off
       if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 's') return
       e.preventDefault()
       const api = gridRef.current?.api
@@ -1245,6 +1259,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // never both fire off the same keypress.
   useEffect(() => {
     const onKeyDown = (e) => {
+      if (!activeRef.current) return // screen hidden (it stays mounted): its shortcuts are off
       if (!(e.ctrlKey || e.metaKey) || !e.shiftKey || e.key.toLowerCase() !== 'f') return
       if (gridRef.current?.api?.getEditingCells().length > 0) return
       e.preventDefault()
@@ -1312,6 +1327,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   useEffect(() => {
     if (!confirmDeleteId) return
     const onKeyDown = (e) => {
+      if (!activeRef.current) return // screen hidden (it stays mounted): its shortcuts are off
       if (e.key === 'Escape') {
         e.preventDefault() // used up — App.jsx then doesn't open the sidebar
         clearTimeout(confirmTimeoutRef.current)
@@ -1326,6 +1342,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   useEffect(() => {
     if (!confirmPurgeOpen) return
     const onKeyDown = (e) => {
+      if (!activeRef.current) return // screen hidden (it stays mounted): its shortcuts are off
       if (e.key === 'Escape') {
         e.preventDefault()
         setConfirmPurgeOpen(false)
@@ -2436,6 +2453,31 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   }, [accounts, activeTransactions, tags, tagById, year, claimStatus])
 
   // (Unused tags are removed by TagCleanup.jsx, app-wide.)
+  // Completely empty bookings left behind (Oct 2026: Ctrl++ / Tab in other
+  // screens reached Konten's "new booking" and created rows dated 1 January
+  // with nothing in them) are removed: made here (tx-manual id), no account,
+  // 0 €, no text, no lines, older than 10 minutes — a row just added and not
+  // filled in yet is left alone.
+  useEffect(() => {
+    if (!loaded.transactions) return
+    const cutoff = Date.now() - 10 * 60 * 1000
+    const empty = transactions.filter(
+      (t) =>
+        String(t.id).startsWith('tx-manual-') &&
+        !t.deletedAt &&
+        !t.fromAccountId &&
+        !t.toAccountId &&
+        !t.amountCents &&
+        !t.displayLabel &&
+        !t.detail &&
+        (t.lines ?? []).length === 0 &&
+        (t.createdAt ?? 0) < cutoff,
+    )
+    if (empty.length === 0) return
+    const batch = writeBatch(db)
+    empty.slice(0, 400).forEach((t) => batch.delete(doc(db, 'transactions', t.id)))
+    batch.commit().catch(() => {})
+  }, [loaded.transactions, transactions])
   const allLoaded = loaded.accounts && loaded.categories && tagsLoaded && loaded.transactions
 
   // Remembered between sessions (lib/uiState.js).

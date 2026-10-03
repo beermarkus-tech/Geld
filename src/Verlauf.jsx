@@ -397,6 +397,11 @@ function AddBreakdownModal({ tags, excludeIds, onSubmit, onCancel }) {
 }
 
 export default function Verlauf({ year, initialFocus, onFocusChange, active = true, onOpenQuickview, jump = null }) {
+  // Whether this screen is the visible one — its window-level shortcuts only
+  // work then (Oct 2026: Konten's Ctrl++ / Tab fired from other screens and
+  // created empty bookings).
+  const activeRef = useRef(active)
+  activeRef.current = active
   // Hidden screens keep the newest data aside instead of recomputing on every save elsewhere.
   const syncWhenVisible = useDeferWhileHidden(active)
   const [categories, setCategories] = useState([])
@@ -598,6 +603,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // blockOverrides too), not just the bare setShowBreakdowns toggle.
   useEffect(() => {
     const onKeyDown = (e) => {
+      if (!activeRef.current) return // screen hidden (it stays mounted): its shortcuts are off
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i') {
         e.preventDefault()
         setShortcutsOpen((v) => !v)
@@ -646,6 +652,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   useEffect(() => {
     if (!confirmRemoveRow) return
     const onKeyDown = (e) => {
+      if (!activeRef.current) return // screen hidden (it stays mounted): its shortcuts are off
       // Enter confirms the same as clicking Entfernen (Markus: "the modal
       // needs to be responsive to the enter key"); Escape cancels, same as
       // Abbrechen — both restore focus to the grid via closeConfirmRemove/
@@ -693,6 +700,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // of silently doing nothing.
   useEffect(() => {
     const onKeyDown = (e) => {
+      if (!activeRef.current) return // screen hidden (it stays mounted): its shortcuts are off
       if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return
       const wrapper = gridWrapperRef.current
       if (!wrapper || wrapper.contains(document.activeElement)) return
