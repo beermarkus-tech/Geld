@@ -3,6 +3,7 @@ import { collection, doc, onSnapshot, writeBatch } from 'firebase/firestore'
 
 import { db } from './firebase'
 import { planFindOrCreate, planMove, planRename, planReplaceInBlock, planSetType } from './lib/tagActions'
+import { planPlainTagConversion } from './lib/tagConvert'
 import { EMPTY_USAGE, tagIndex, tagUsage } from './lib/tags'
 import TagCleanup from './TagCleanup'
 
@@ -32,6 +33,7 @@ export function useTagUsage() {
 //   rename(id, name)                 → { ok } or { ok: false, reason }
 //   setType(id, groupingType)
 //   move(id, newParentId | null)     → { ok } or { ok: false, reason }
+//   previewPlainTags(receivableIds) / convertPlainTags(receivableIds) → old plain-text tags → records
 //   replaceInBlock({ year, targetKey, targetId, planVersion, oldTagId,
 //                    isHeader, lineTagIds, newTagId })
 //                                    → { focusRowId, done: Promise }
@@ -125,6 +127,17 @@ export default function TagsProvider({ children }) {
       setType(tagId, groupingType) {
         const next = planSetType(currentTags(), tagId, groupingType)
         if (next) write([{ col: 'tags', id: tagId, data: next }])
+      },
+      // Step 6 of Phase 5b: every old plain-text tag gets a record (lib/tagConvert.js).
+      previewPlainTags(receivableIds) {
+        const d = latest.current.data
+        return planPlainTagConversion({ tags: currentTags(), transactions: d.transactions ?? [], receivableIds })
+      },
+      convertPlainTags(receivableIds) {
+        const d = latest.current.data
+        const plan = planPlainTagConversion({ tags: currentTags(), transactions: d.transactions ?? [], receivableIds })
+        remember(plan.creates)
+        return write([...plan.creates.map((t) => ({ col: 'tags', id: t.id, data: t })), ...plan.rewrites.map((tx) => ({ col: 'transactions', id: tx.id, data: tx }))])
       },
       replaceInBlock(params) {
         const d = latest.current.data

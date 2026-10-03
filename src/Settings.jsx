@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { collection, onSnapshot } from 'firebase/firestore'
 
 import { db } from './firebase'
+import { receivableAccountIds } from './lib/claims'
 import { MOVE_MESSAGES, twinIds } from './lib/tagActions'
 import { TAG_RENAME_MESSAGES } from './lib/tagRename'
 import { qualifiedName } from './lib/tags'
@@ -207,6 +208,23 @@ export default function Settings() {
   const [filter, setFilter] = useState('')
 
   useEffect(() => onSnapshot(collection(db, 'categories'), (snap) => setCategories(snap.docs.map((d) => d.data()))), [])
+  const [accounts, setAccounts] = useState([])
+  useEffect(() => onSnapshot(collection(db, 'accounts'), (snap) => setAccounts(snap.docs.map((d) => d.data()))), [])
+  // Converting the old plain-text tags (PLAN.md Phase 5b step 6): a preview in
+  // a confirmation box, then one write.
+  const [convertPreview, setConvertPreview] = useState(null)
+  const [converting, setConverting] = useState(false)
+  useEffect(() => {
+    if (!convertPreview) return
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape' && !converting) {
+        e.preventDefault()
+        setConvertPreview(null)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [convertPreview, converting])
   const targetNames = useMemo(() => new Map([...categories, ...tags].map((x) => [x.id, x.name])), [categories, tags])
 
   // Old tags that exist only as plain text on booking lines (no record in `tags`).
@@ -287,9 +305,21 @@ export default function Settings() {
         {shownPlain.length > 0 && (
           <>
             <h3 className="pt-2 text-sm font-medium text-[var(--color-text-muted)]">Alte Text-Tags ({shownPlain.length})</h3>
-            <p className="text-xs text-[var(--color-text-muted)]">
-              Diese Tags hängen nur als Text an Buchungen (z. B. aus dem Import) und haben noch keinen eigenen Eintrag. Umbenennen, Typ und Übergruppe gehen, sobald sie übernommen sind.
-            </p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-[var(--color-text-muted)]">
+                Diese Tags hängen nur als Text an Buchungen (z. B. aus dem Import) und haben noch keinen eigenen Eintrag. Umbenennen, Typ und Übergruppe gehen, sobald sie übernommen sind.
+              </p>
+              {!needle && (
+                <button
+                  type="button"
+                  onClick={() => setConvertPreview(tagActions.previewPlainTags(receivableAccountIds(accounts)))}
+                  disabled={accounts.length === 0}
+                  className="rounded-md bg-[var(--color-computed)] px-3 py-1 text-xs font-medium text-white disabled:opacity-50"
+                >
+                  Alte Text-Tags übernehmen…
+                </button>
+              )}
+            </div>
             <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]">
               {shownPlain.map((id) => (
                 <PlainTagRow key={id} id={id} usage={usageOf(usage, id)} targetNames={targetNames} />
@@ -298,6 +328,46 @@ export default function Settings() {
           </>
         )}
       </section>
+      {convertPreview && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center" onClick={() => !converting && setConvertPreview(null)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="relative flex w-full max-w-md flex-col gap-3 rounded-lg bg-[var(--color-surface)] p-5 text-sm" onClick={(e) => e.stopPropagation()}>
+            <p className="font-medium">Alte Text-Tags übernehmen</p>
+            <p>
+              {convertPreview.creates.length} Text-Tags bekommen einen eigenen Eintrag: {convertPreview.counts.claim} als Anspruch, {convertPreview.counts['claim-category']} als Anspruchsart,{' '}
+              {convertPreview.counts.none} ohne Typ. Die Buchungen bleiben unverändert
+              {convertPreview.rewrites.length > 0 ? `, außer ${convertPreview.rewrites.length} mit einem „/“ im Tag (bekommen den neuen Namen ohne „/“)` : ''}.
+            </p>
+            <p className="text-xs text-[var(--color-text-muted)]">Danach lassen sie sich hier umbenennen, typisieren und verschieben. Gleichnamige Tags werden als „doppelt“ markiert, nicht zusammengelegt.</p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={converting}
+                onClick={() => setConvertPreview(null)}
+                className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]"
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                disabled={converting || convertPreview.creates.length === 0}
+                onClick={async () => {
+                  setConverting(true)
+                  try {
+                    await tagActions.convertPlainTags(receivableAccountIds(accounts))
+                  } finally {
+                    setConverting(false)
+                    setConvertPreview(null)
+                  }
+                }}
+                className="rounded-md bg-[var(--color-computed)] px-3 py-1.5 font-medium text-white disabled:opacity-50"
+              >
+                {converting ? 'Wird übernommen…' : 'Übernehmen'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
