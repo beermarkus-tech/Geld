@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { collection, deleteDoc, doc, onSnapshot, setDoc, writeBatch } from 'firebase/firestore'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { TAG_RENAME_MESSAGES, validateTagRename } from './lib/tagRename'
+import { tagColorVar } from './lib/tagStyle'
 import ui from './lib/uiState'
 import { AgGridReact } from 'ag-grid-react'
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community'
@@ -1744,6 +1745,20 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         // rows keep their plain names.
         cellRenderer: (p) => {
           const l = p.data.rowLabel
+          // A breakdown line / Übergruppe *is* a tag: shown as the same pill as
+          // every tag in Konten (Oct 2026, Markus) — coloured by the tag's type,
+          // a dashed neutral outline when it has none yet.
+          if (p.data.renameTagId) {
+            const colorVar = tagColorVar(tagById.get(p.data.renameTagId))
+            return (
+              <span
+                className={`max-w-full truncate rounded-full px-1.5 py-0.5 text-xs ${colorVar ? '' : 'border border-dashed border-[var(--color-text-muted)] text-[var(--color-text-muted)]'}`}
+                style={colorVar ? { color: `var(${colorVar})`, backgroundColor: `color-mix(in srgb, var(${colorVar}) 15%, transparent)` } : undefined}
+              >
+                {p.value}
+              </span>
+            )
+          }
           if (l !== 'Prog' && l !== 'Plan1' && l !== 'Plan0') return p.value
           return (
             <span
