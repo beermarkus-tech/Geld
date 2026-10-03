@@ -1926,3 +1926,7 @@ Markus asked to rename the Aufschlüsselungszeilen in Verlauf by editing the cel
 ## Session 37, continued a fifty-ninth time — 2026-10-02 — Verlauf: cursor reaches the row names, stays below the header
 
 Markus: let the arrow keys reach the breakdown-line titles (the cursor was confined to the month columns) and keep the cursor out of the header. **Done (`Verlauf.jsx`):** the `rowTitle` column is navigable (Left from a month cell → year total → name; Enter edits a breakdown/Übergruppe name, Prog/Plan1/Plan0 labels just hold the cursor); a name cell carries no comment (the comment field is cleared there); `suppressHeaderFocus` stops Up from the first row from entering the header. Harness-checked: m1 → Left ×2 lands on the name, Enter + new text renames the tag, 40× Up stays on the first row. Not tested on a device keyboard/touch.
+
+## Session 37, continued a sixtieth time — 2026-10-03 — Verlauf: comment box tinted yellow
+
+When the selected number cell has a comment, the comment field now has a yellow tint and border (`--color-needs-attention` mixed into the surface colour, so it works in light and dark). `CellCommentField` in `Verlauf.jsx` only; harness-checked (white when empty, tinted once text is present). Also answered in chat what Fortschritt (§3j) needs before building; awaiting Markus's five design choices.

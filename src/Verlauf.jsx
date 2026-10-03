@@ -282,7 +282,13 @@ function CellCommentField({ cell, description, savedText, onSave, onDone }) {
         placeholder="Kommentar"
         title={description || undefined}
         aria-label="Kommentar zur markierten Zelle"
-        className="w-[22rem] max-w-full rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] py-1 pl-2 pr-8 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] placeholder:opacity-50 disabled:opacity-50"
+        // Tinted yellow while the selected cell has a comment (Oct 2026, Markus),
+        // so it is obvious at a glance without reading the text.
+        className={`w-[22rem] max-w-full rounded-md border py-1 pl-2 pr-8 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] placeholder:opacity-50 disabled:opacity-50 ${
+          draft && cell
+            ? 'border-[var(--color-needs-attention)] bg-[color-mix(in_srgb,var(--color-needs-attention)_28%,var(--color-surface))]'
+            : 'border-[var(--color-border)] bg-[var(--color-surface)]'
+        }`}
       />
       {draft && (
         <button
