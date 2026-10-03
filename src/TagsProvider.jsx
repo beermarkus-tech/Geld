@@ -134,8 +134,8 @@ export default function TagsProvider({ children }) {
         return { ok: true, done: write(r.sets, r.deletes) }
       },
       setType(tagId, groupingType) {
-        const next = planSetType(currentTags(), tagId, groupingType)
-        if (next) write([{ col: 'tags', id: tagId, data: next }])
+        const docs = planSetType(currentTags(), tagId, groupingType)
+        if (docs.length) write(docs.map((d) => ({ col: 'tags', id: d.id, data: d })))
       },
       // Step 6 of Phase 5b: every old plain-text tag gets a record (lib/tagConvert.js).
       previewPlainTags(receivableIds) {

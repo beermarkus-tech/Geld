@@ -63,3 +63,13 @@ export function headerChildMapping(tags, childIds, newParentId) {
   }
   return { mapping, create }
 }
+
+// The "Neu … — Typ" rows to offer for a typed text (Oct 2026): all types, but
+// for "Parent:Child" under an existing parent only the parent's type — a
+// family shares one type, so the new child gets it anyway.
+export function createTypesFor(tags, text, types) {
+  const { parent } = splitTagText(text)
+  const p = parent ? findTagByText(tags, parent) : null
+  if (!p || p.parentTag) return types
+  return types.filter((o) => (o.groupingType ?? null) === (p.groupingType ?? null))
+}

@@ -58,9 +58,10 @@ export function planFindOrCreate(tags, text, groupingType = null, now = Date.now
       parentId = d.id
     }
   }
-  // A child of a Dienstreise is always a Dienstreise too ("2024-05 HAM: Hotel").
-  const parentType = parentId ? (tags.find((t) => t.id === parentId)?.groupingType ?? creates.find((c) => c.id === parentId)?.groupingType) : null
-  const d = newTagDoc(taken, { name: child, parentTag: parentId, groupingType: parentType === 'business-trip' ? 'business-trip' : groupingType, now })
+  // A family shares one type (Oct 2026, Markus): a new child under an existing
+  // parent takes the parent's type ("2024-05 HAM: Hotel" is a Dienstreise).
+  const existingParent = parentId ? tags.find((t) => t.id === parentId) : null
+  const d = newTagDoc(taken, { name: child, parentTag: parentId, groupingType: existingParent ? (existingParent.groupingType ?? null) : groupingType, now })
   creates.push(d)
   return { tagId: d.id, creates }
 }
@@ -74,11 +75,18 @@ export function planRename(tags, tagId, rawName) {
   return { ok: true, doc: { ...tags.find((t) => t.id === tagId), name: result.name } }
 }
 
-// Change type. Allocation tags are fixed; no change → null.
+// Change type — for the whole family at once (Oct 2026, Markus): changing a
+// parent or any of its children gives the parent and every child that type.
+// Allocation tags are fixed. Returns only the documents that actually change
+// ([] when nothing does).
 export function planSetType(tags, tagId, groupingType) {
   const tag = tags.find((t) => t.id === tagId)
-  if (!tag || tag.class === 'allocation' || (tag.groupingType ?? null) === (groupingType ?? null)) return null
-  return { ...tag, groupingType: groupingType ?? null }
+  if (!tag || tag.class === 'allocation') return []
+  const type = groupingType ?? null
+  const rootId = tag.parentTag && tags.some((t) => t.id === tag.parentTag) ? tag.parentTag : tag.id
+  return tags
+    .filter((t) => t.class === 'grouping' && (t.id === rootId || t.parentTag === rootId) && (t.groupingType ?? null) !== type)
+    .map((t) => ({ ...t, groupingType: type }))
 }
 
 // Put an existing tag in place of a Verlauf breakdown line's tag — or, on an
@@ -131,6 +139,7 @@ export function planReplaceInBlock({ tags, budgets, cellComments, year, targetKe
 // › Tags (Oct 2026, Markus). Only the `parentTag` changes; bookings and plan
 // lines keep pointing at the same tag, so in Verlauf the line then sits under
 // its new Übergruppe (and that Übergruppe's sum includes its bookings).
+// The moved tag takes its new parent's type (a family shares one type).
 // Refused: allocation tags; a tag that has children itself (tags are one level
 // deep); a parent that is itself a child; a sibling of the same name there.
 // @returns {{ ok: true, doc } | { ok: false, reason: 'missing'|'locked'|'has-children'|'bad-parent'|'same'|'clash' }}
@@ -147,7 +156,9 @@ export function planMove(tags, tagId, newParentId) {
   }
   const name = tag.name.trim().toLowerCase()
   if (tags.some((t) => t.id !== tagId && (t.parentTag ?? null) === target && t.name.trim().toLowerCase() === name)) return { ok: false, reason: 'clash' }
-  return { ok: true, doc: { ...tag, parentTag: target } }
+  // Moved under a parent, it joins that family's type.
+  const newParent = target ? tags.find((t) => t.id === target) : null
+  return { ok: true, doc: { ...tag, parentTag: target, ...(newParent ? { groupingType: newParent.groupingType ?? null } : {}) } }
 }
 
 export const MOVE_MESSAGES = {

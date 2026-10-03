@@ -1,6 +1,6 @@
 import { forwardRef, useImperativeHandle, useMemo, useState } from 'react'
 
-import { findTagByText, tagKey } from './lib/tagPicker'
+import { createTypesFor, findTagByText, tagKey } from './lib/tagPicker'
 import { qualifiedTagName } from './lib/tagStyle'
 import { CREATE_TYPES } from './lib/tagTypes'
 import { usageHint } from './lib/tags'
@@ -91,7 +91,7 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
     const text = rawText.trim().toLowerCase()
     if (!text || findTagByText(tags, rawText)) return []
     if (tags.some((t) => t.class === 'allocation' && t.name.toLowerCase() === text)) return []
-    return CREATE_TYPES
+    return createTypesFor(tags, rawText, CREATE_TYPES)
   }
 
   // Adding applies and closes at once; removing a chip doesn't close, so

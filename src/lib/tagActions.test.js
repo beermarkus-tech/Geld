@@ -22,9 +22,9 @@ describe('planFindOrCreate', () => {
     expect(planFindOrCreate(tags, 'schottland:hotels')).toEqual({ tagId: 'hotels', creates: [] })
     expect(planFindOrCreate(tags, 'Schottland: Hotels').tagId).toBe('hotels')
   })
-  it('creates a child under an existing parent', () => {
+  it("creates a child under an existing parent, with the parent's type", () => {
     const r = planFindOrCreate(tags, 'Schottland:Fähre', 'statement', 1)
-    expect(r.creates).toEqual([expect.objectContaining({ id: 'faehre', name: 'Fähre', parentTag: 'schottland', groupingType: 'statement' })])
+    expect(r.creates).toEqual([expect.objectContaining({ id: 'faehre', name: 'Fähre', parentTag: 'schottland', groupingType: 'project' })])
     expect(r.tagId).toBe('faehre')
   })
   it('creates a new parent with the chosen type too', () => {
@@ -46,9 +46,13 @@ describe('planRename / planSetType', () => {
     expect(planRename(tags, 'sparen', 'X')).toMatchObject({ ok: false, reason: 'locked' })
   })
   it('changes the type, not of allocation tags, not when unchanged', () => {
-    expect(planSetType(tags, 'hotels', 'claim')).toMatchObject({ id: 'hotels', groupingType: 'claim' })
-    expect(planSetType(tags, 'hotels', 'project')).toBeNull()
-    expect(planSetType(tags, 'sparen', 'claim')).toBeNull()
+    // a child's change goes to the whole family (parent + children)
+    expect(planSetType(tags, 'hotels', 'claim').map((d) => [d.id, d.groupingType])).toEqual([
+      ['schottland', 'claim'],
+      ['hotels', 'claim'],
+    ])
+    expect(planSetType(tags, 'schottland', 'project')).toEqual([])
+    expect(planSetType(tags, 'sparen', 'claim')).toEqual([])
   })
 })
 
@@ -91,7 +95,7 @@ describe('planMove / twinIds', () => {
     { id: 'spar', name: 'Sparen', parentTag: null, class: 'allocation' },
   ]
   it('moves a tag under a parent or to the top level', () => {
-    expect(planMove(t, 'auto', 'sco')).toMatchObject({ ok: true, doc: { id: 'auto', parentTag: 'sco' } })
+    expect(planMove([...t.slice(0, 4), { ...t[4], groupingType: 'claim' }, t[5]].map((x) => (x.id === 'sco' ? { ...x, groupingType: 'project' } : x)), 'auto', 'sco')).toMatchObject({ ok: true, doc: { id: 'auto', parentTag: 'sco', groupingType: 'project' } })
     expect(planMove(t, 'hot', null)).toMatchObject({ ok: true, doc: { parentTag: null } })
   })
   it('refuses what would break the one-level tree or clash', () => {

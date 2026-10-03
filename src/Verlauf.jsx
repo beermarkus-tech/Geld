@@ -3,7 +3,7 @@ import { collection, deleteDoc, doc, onSnapshot, setDoc, writeBatch } from 'fire
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { TAG_RENAME_MESSAGES } from './lib/tagRename'
 import { qualifiedTagName } from './lib/tagStyle'
-import { findTagByText, replaceOptions, tagKey } from './lib/tagPicker'
+import { createTypesFor, findTagByText, replaceOptions, tagKey } from './lib/tagPicker'
 import ui from './lib/uiState'
 import { AgGridReact } from 'ag-grid-react'
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community'
@@ -379,7 +379,7 @@ function AddBreakdownModal({ tags, excludeIds, onSubmit, onCancel }) {
               .slice(0, 25)
               .map(({ t, label }) => ({ key: t.id, id: t.id, tag: t, label, hint: usageHint(usageOf(usage, t.id)) }))
           }}
-          getCreateTypes={(text) => (text.trim() !== '' && !findTagByText(tags, text) ? CREATE_TYPES : [])}
+          getCreateTypes={(text) => (text.trim() !== '' && !findTagByText(tags, text) ? createTypesFor(tags, text, CREATE_TYPES) : [])}
           onPick={(o) => onSubmit({ tagId: o.id })}
           onCreate={(text, groupingType) => onSubmit({ text, groupingType })}
           onClose={onCancel}
