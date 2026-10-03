@@ -325,6 +325,31 @@ export default function Settings({ onOpenInKonten, onOpenInPlanung }) {
   // Type chips above the list (Oct 2026, Markus): show only tags of one type.
   // null = all; 'none' = untyped; 'allocation' = the fixed Rücklagen tags.
   const [typeFilter, setTypeFilter] = useState(() => ui.get('settings', 'typeFilter', null))
+  // Ctrl+K → search field, Ctrl+I → shortcuts (Oct 2026, Markus).
+  const searchRef = useRef(null)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) {
+        if (e.key === 'Escape' && shortcutsOpen) {
+          e.stopPropagation()
+          setShortcutsOpen(false)
+        }
+        return
+      }
+      const k = e.key.toLowerCase()
+      if (k === 'k') {
+        e.preventDefault()
+        searchRef.current?.focus()
+        searchRef.current?.select()
+      } else if (k === 'i') {
+        e.preventDefault()
+        setShortcutsOpen((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [shortcutsOpen])
   const [openIds, setOpenIds] = useState(() => new Set(ui.get('settings', 'open', [])))
   useEffect(() => ui.set('settings', 'filter', filter), [filter])
   useEffect(() => ui.set('settings', 'typeFilter', typeFilter), [typeFilter])
@@ -446,17 +471,64 @@ export default function Settings({ onOpenInKonten, onOpenInPlanung }) {
       <section className="flex flex-col gap-3">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h2 className="text-lg font-semibold">Tags</h2>
-          <input
-            type="search"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder="Tags durchsuchen…"
-            className="w-60 max-w-full rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-sm"
-          />
+          <div className="flex items-center gap-3">
+            <input
+              ref={searchRef}
+              type="search"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              onKeyDown={(e) => {
+                // Esc clears the field (the browser's own), on an empty field it leaves it.
+                if (e.key === 'Escape' && !filter) e.currentTarget.blur()
+              }}
+              placeholder="Tags durchsuchen… (Strg+K)"
+              className="w-60 max-w-full rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-sm"
+            />
+            {/* Keyboard shortcuts, like Konten's (i): hover, or Ctrl+I. */}
+            <div className="relative">
+              <button
+                type="button"
+                onMouseEnter={() => setShortcutsOpen(true)}
+                onMouseLeave={() => setShortcutsOpen(false)}
+                title="Tastenkürzel (Strg+I)"
+                className="flex h-6 w-6 items-center justify-center rounded-full border border-[var(--color-border)] text-xs font-medium text-[var(--color-text-muted)] hover:text-[var(--color-computed)]"
+              >
+                i
+              </button>
+              {shortcutsOpen && (
+                <div className="absolute right-0 top-full z-10 mt-1 w-80 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-xs text-[var(--color-text)] shadow-lg">
+                  <div className="mb-1.5 font-medium">Tastenkürzel &amp; Bedienung</div>
+                  <ul className="space-y-1">
+                    <li>
+                      <b>Strg+K</b> — ins Suchfeld
+                    </li>
+                    <li>
+                      <b>Esc</b> — im Suchfeld: leeren, dann verlassen; sonst Seitenleiste öffnen
+                    </li>
+                    <li>
+                      <b>Name anklicken</b> — umbenennen (Enter speichert, Esc bricht ab)
+                    </li>
+                    <li>
+                      <b>Übergruppe / Typ</b> — rechts in der Zeile ändern
+                    </li>
+                    <li>
+                      <b>⇢</b> — in einen anderen Tag übernehmen (zusammenführen)
+                    </li>
+                    <li>
+                      <b>Buchungszeilen ▾</b> — wo der Tag verwendet wird; Buchung/Planzeile anklicken öffnet Konten/Planung, Esc kommt hierher zurück
+                    </li>
+                    <li>
+                      <b>Chips oben</b> — nur Tags eines Typs zeigen
+                    </li>
+                    <li>
+                      <b>Strg+I</b> — diese Übersicht ein-/ausblenden
+                    </li>
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-        <p className="text-sm text-[var(--color-text-muted)]">
-          Auf einen Namen klicken, neuen Namen eintippen, Enter. Das ändert nur den Namen — alle Buchungen und Budgets bleiben verbunden, und der neue Name gilt überall (Konten, Quickview, Außenstände, Verlauf). Rechts lassen sich Übergruppe und Typ ändern — er bestimmt Farbe und Verwendung: Anspruch erscheint in Außenstände, Reise/Projekt benennt Zeilen in Quickview.
-        </p>
         <div className="flex flex-wrap gap-2">
           {chips.map((c) =>
             c.key === null ? (
