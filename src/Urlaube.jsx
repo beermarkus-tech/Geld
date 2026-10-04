@@ -24,7 +24,7 @@ function Amount({ cents }) {
   return <span className={`tabular-nums ${cents === 0 ? 'text-[var(--color-text-muted)]' : ''}`}>{cents === 0 ? '–' : euro(cents)}</span>
 }
 
-function Card({ card, flash, onOpenRow, innerRef }) {
+function Card({ card, flash, onOpenRow, onOpenTag, onOpenVerlauf, innerRef }) {
   const total = Math.abs(card.booked) + Math.abs(card.planned)
   const share = total > 0 ? Math.round((Math.abs(card.booked) / total) * 100) : 0
   return (
@@ -35,12 +35,23 @@ function Card({ card, flash, onOpenRow, innerRef }) {
     >
       <header className="flex flex-wrap items-start justify-between gap-3">
         <h2 className="flex items-center gap-2 text-base font-semibold">
-          <TagPill tag={card.tag} size="md">{card.tag.name}</TagPill>
+          {/* The badge opens Konten on the holiday: the parent and all its children, every year. */}
+          <TagPill as="button" tag={card.tag} size="md" onClick={() => onOpenTag(card)} title="In Konten zeigen: der Urlaub mit allen Untertags, alle Jahre" className="cursor-pointer hover:underline">
+            {card.tag.name}
+          </TagPill>
           {/* The year, when the tag name doesn't start with it; the booking years when they differ. */}
           {!card.tag.name.trim().startsWith(String(card.tripYear)) && <span className="text-sm font-normal text-[var(--color-text-muted)]">{card.tripYear}</span>}
           {card.years.length > 1 && <span className="text-sm font-normal text-[var(--color-text-muted)]">gebucht {card.years[0]}–{card.years.at(-1)}</span>}
         </h2>
-        <div className="flex shrink-0 gap-6 text-sm">
+        <div className="flex shrink-0 items-center gap-6 text-sm">
+          <button
+            type="button"
+            onClick={() => onOpenVerlauf(card)}
+            title="In Verlauf zeigen: die Plan-Zeilen dieses Urlaubs"
+            className="rounded-md border border-[var(--color-border)] px-2 py-0.5 text-xs text-[var(--color-text-muted)] hover:border-[var(--color-computed)] hover:text-[var(--color-computed)]"
+          >
+            In Verlauf
+          </button>
           <div className="text-right">
             <div className="text-xs text-[var(--color-text-muted)]">Budget</div>
             <div className="tabular-nums">{euro(card.budget)}</div>
@@ -220,7 +231,7 @@ function Overview({ years, holidays, untagged, outside, yearFilter, onYear, onHo
   )
 }
 
-export default function Urlaube({ onOpenInKonten, active = true }) {
+export default function Urlaube({ onOpenInKonten, onOpenInVerlauf, active = true }) {
   const syncWhenVisible = useDeferWhileHidden(active)
   const { tags } = useTags()
   const [categories, setCategories] = useState([])
@@ -305,6 +316,14 @@ export default function Urlaube({ onOpenInKonten, active = true }) {
 
   // A row opens Konten on that tag, in the latest year it was booked or planned; Esc there comes back here.
   const openRow = (r) => onOpenInKonten({ tagId: r.tagId, year: String(r.lastYear), from: 'urlaube' })
+  // The holiday badge: Konten on the parent and all its children, across all years.
+  const openTag = (h) => onOpenInKonten({ tagId: h.tag.id, allYears: true, year: String(h.tripYear), from: 'urlaube' })
+  // "In Verlauf": the Urlaube block at the holiday's group, in its year (the one in
+  // the badge); a holiday planned only in other years goes to the latest of those.
+  const openVerlauf = (h) => {
+    const year = h.planYears.includes(h.tripYear) ? h.tripYear : (h.planYears.at(-1) ?? h.tripYear)
+    onOpenInVerlauf({ year: String(year), targetKey: 'categoryId', targetId: categoryId, planVersion: 'plan1', groupId: h.tag.id, from: 'urlaube' })
+  }
   // A holiday in the overview scrolls to its card (showing archive/search state as needed).
   function jumpTo(h) {
     if (Boolean(h.tag.archived) !== archive) setArchive(Boolean(h.tag.archived))
@@ -386,7 +405,7 @@ export default function Urlaube({ onOpenInKonten, active = true }) {
             <p className="text-sm text-[var(--color-text-muted)]">{overview.holidays.length === 0 ? 'Noch keine Urlaube mit Buchungen oder Plan.' : 'Nichts gefunden.'}</p>
           )}
           {shown.map((h) => (
-            <Card key={h.key} card={h} flash={flash === h.key} onOpenRow={openRow} innerRef={(el) => (el ? cardRefs.current.set(h.key, el) : cardRefs.current.delete(h.key))} />
+            <Card key={h.key} card={h} flash={flash === h.key} onOpenRow={openRow} onOpenTag={openTag} onOpenVerlauf={openVerlauf} innerRef={(el) => (el ? cardRefs.current.set(h.key, el) : cardRefs.current.delete(h.key))} />
           ))}
         </div>
         <div className="min-h-0 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">

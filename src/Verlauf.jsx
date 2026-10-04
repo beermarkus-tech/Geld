@@ -1378,11 +1378,14 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     appliedJumpRef.current = jump.id
     if (jump.planVersion === 'plan0') setShowPlan0(true)
     setBlockExpanded(`${jump.targetKey}:${jump.targetId}:${jump.planVersion}`, true)
-    const rowId = `${jump.targetKey}:${jump.targetId}:${jump.planVersion}:${jump.tagId}`
+    // A line (`tagId`), or a holiday's Übergruppe (`groupId`: its group row, or its
+    // own line when it has no children) — the Urlaube screen's "In Verlauf".
+    const base = `${jump.targetKey}:${jump.targetId}:${jump.planVersion}`
+    const rowIds = jump.groupId ? [`${base}:rollup:${jump.groupId}`, `${base}:${jump.groupId}`] : [`${base}:${jump.tagId}`]
     let tries = 0
     const tick = () => {
       const api = gridApiRef.current
-      const node = api?.getRowNode(rowId)
+      const node = rowIds.map((id) => api?.getRowNode(id)).find(Boolean)
       if (node) {
         api.ensureNodeVisible(node, 'middle')
         api.setFocusedCell(node.rowIndex, 'm1')

@@ -401,6 +401,9 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // transaction's direction. Picking an account here instead re-displays
   // every matching row from *that* account's own perspective.
   const [accountFilter, setAccountFilter] = useState(() => ui.get('konten', 'accountFilter'))
+  // A tag filter that spans every year (a holiday opened from Urlaube, Oct 2026) —
+  // like a claim's; holds the tag id it was opened for, so any other filter is year-based again.
+  const [allYearsTag, setAllYearsTag] = useState(null)
   // Tracks AG Grid's own column filters (Datum/Empfänger/Kategorie/
   // Unterkategorie/Details/Betrag/Tags' header filters) — separate from
   // accountFilter, which is Konten's own account/tag mechanism, not an AG
@@ -464,6 +467,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     if (jump.tagId) {
       api.setFilterModel(null)
       setAccountFilter(jump.tagId)
+      setAllYearsTag(jump.allYears ? jump.tagId : null)
       // From Settings › Tags: the cursor on the clicked booking — on its line
       // carrying the tag when the booking is split (opened for that).
       if (jump.focusTxId) {
@@ -1490,7 +1494,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     // tagFilterMatchIds() so the row filter and the toolbar's own total
     // can't quietly disagree on what counts as a match.
     const tagMatchIds = accountFilter && !filteredAccountId ? tagFilterMatchIds(accountFilter, tags) : null
-    const isClaimTagFilter = Boolean(tagMatchIds) && claimStatus.all.has(accountFilter)
+    const isClaimTagFilter = Boolean(tagMatchIds) && (claimStatus.all.has(accountFilter) || allYearsTag === accountFilter)
     return transactions
       // A claim's tag filter shows the claim across all years (a claim often
       // spans two — Oct 2026, Markus); every other filter stays year-based.
@@ -1511,7 +1515,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       })
       .slice()
       .sort((a, b) => (a.date === b.date ? a.id.localeCompare(b.id) : a.date.localeCompare(b.date)))
-  }, [transactions, year, accountFilter, filteredAccountId, tags, showDeleted, receivableView, claimStatus])
+  }, [transactions, year, accountFilter, filteredAccountId, tags, showDeleted, receivableView, claimStatus, allYearsTag])
 
   // Once a pending row (addRow's new row, or a just-edited row that may
   // have moved) actually settles into `rows` — via the Firestore

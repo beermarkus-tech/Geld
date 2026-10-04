@@ -88,7 +88,7 @@ export default function App() {
   const [verlaufJump, setVerlaufJump] = useState(null)
   const [verlaufFrom, setVerlaufFrom] = useState(null)
   const openInVerlauf = (j) => {
-    setVerlaufFrom('settings')
+    setVerlaufFrom(j.from ?? 'settings')
     if (j.year) setYear(String(j.year))
     setVerlaufJump({ ...j, id: Date.now() })
     setView('verlauf')
@@ -327,7 +327,7 @@ export default function App() {
         </div>
         {/* Mounted once, only hidden — like Quickview (Oct 2026). */}
         <div className={view === 'urlaube' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
-          <Urlaube onOpenInKonten={openInKonten} active={view === 'urlaube'} />
+          <Urlaube onOpenInKonten={openInKonten} onOpenInVerlauf={openInVerlauf} active={view === 'urlaube'} />
         </div>
         {view === 'settings' && <Settings year={year} onOpenInKonten={openInKonten} onOpenInVerlauf={openInVerlauf} />}
         {view === 'importexport' && <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} />}
