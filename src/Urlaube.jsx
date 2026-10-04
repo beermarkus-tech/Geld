@@ -24,7 +24,7 @@ function Amount({ cents }) {
   return <span className={`tabular-nums ${cents === 0 ? 'text-[var(--color-text-muted)]' : ''}`}>{cents === 0 ? '–' : euro(cents)}</span>
 }
 
-function Card({ card, flash, onOpenRow, onOpenTag, onOpenVerlauf, innerRef }) {
+function Card({ card, flash, collapsed, onToggle, onOpenRow, onOpenTag, onOpenVerlauf, innerRef }) {
   const total = Math.abs(card.booked) + Math.abs(card.planned)
   const share = total > 0 ? Math.round((Math.abs(card.booked) / total) * 100) : 0
   return (
@@ -33,10 +33,28 @@ function Card({ card, flash, onOpenRow, onOpenTag, onOpenVerlauf, innerRef }) {
       className={`flex scroll-mt-2 flex-col gap-3 rounded-lg border bg-[var(--color-surface)] p-4 ${flash ? 'border-[var(--color-computed)] ring-2 ring-[var(--color-computed)]' : 'border-[var(--color-border)]'}`}
       aria-label={card.tag.name}
     >
-      <header className="flex flex-wrap items-start justify-between gap-3">
+      {/* A click anywhere on the header (not on the badge or the Verlauf button, which go
+          elsewhere) folds the card up or open (Oct 2026, Markus); also by keyboard. */}
+      <header
+        role="button"
+        tabIndex={0}
+        aria-expanded={!collapsed}
+        title={collapsed ? 'Aufklappen' : 'Zuklappen'}
+        onClick={onToggle}
+        onKeyDown={(e) => {
+          if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault()
+            onToggle()
+          }
+        }}
+        className="-m-1 flex cursor-pointer flex-wrap items-start justify-between gap-3 rounded p-1 hover:bg-[var(--color-bg)]"
+      >
         <h2 className="flex items-center gap-2 text-base font-semibold">
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 text-[var(--color-text-muted)] transition-transform ${collapsed ? '' : 'rotate-90'}`} aria-hidden="true">
+            <path d="M6 3l5 5-5 5" />
+          </svg>
           {/* The badge opens Konten on the holiday: the parent and all its children, every year. */}
-          <TagPill as="button" tag={card.tag} size="md" onClick={() => onOpenTag(card)} title="In Konten zeigen: der Urlaub mit allen Untertags, alle Jahre" className="cursor-pointer hover:underline">
+          <TagPill as="button" tag={card.tag} size="md" onClick={(e) => { e.stopPropagation(); onOpenTag(card) }} title="In Konten zeigen: der Urlaub mit allen Untertags, alle Jahre" className="cursor-pointer hover:underline">
             {card.tag.name}
           </TagPill>
           {/* The year, when the tag name doesn't start with it; the booking years when they differ. */}
@@ -46,7 +64,10 @@ function Card({ card, flash, onOpenRow, onOpenTag, onOpenVerlauf, innerRef }) {
         <div className="flex shrink-0 items-center gap-6 text-sm">
           <button
             type="button"
-            onClick={() => onOpenVerlauf(card)}
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpenVerlauf(card)
+            }}
             title="In Verlauf zeigen: die Plan-Zeilen dieses Urlaubs"
             className="rounded-md border border-[var(--color-border)] px-2 py-0.5 text-xs text-[var(--color-text-muted)] hover:border-[var(--color-computed)] hover:text-[var(--color-computed)]"
           >
@@ -63,6 +84,8 @@ function Card({ card, flash, onOpenRow, onOpenTag, onOpenVerlauf, innerRef }) {
         </div>
       </header>
 
+      {!collapsed && (
+        <>
       {card.outside !== 0 && (
         <p className="text-xs text-[var(--color-plan-off)]">
           Hinweis: {euro(-card.outside)} Ausgaben mit diesem Tag in anderen Kategorien — hier nicht mitgezählt (Zuschüsse und Geschenke zählen immer mit).
@@ -136,6 +159,8 @@ function Card({ card, flash, onOpenRow, onOpenTag, onOpenVerlauf, innerRef }) {
           })}
         </div>
       </div>
+        </>
+      )}
     </section>
   )
 }
@@ -252,11 +277,20 @@ export default function Urlaube({ onOpenInKonten, onOpenInVerlauf, active = true
   const [archive, setArchive] = useState(() => Boolean(ui.get('urlaube', 'archive', false)))
   const [yearFilter, setYearFilter] = useState(null)
   const [flash, setFlash] = useState(null)
+  const [collapsed, setCollapsed] = useState(() => new Set(ui.get('urlaube', 'collapsed', []) || []))
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const searchRef = useRef(null)
   const cardRefs = useRef(new Map())
   useEffect(() => ui.set('urlaube', 'filter', filter), [filter])
   useEffect(() => ui.set('urlaube', 'archive', archive), [archive])
+  useEffect(() => ui.set('urlaube', 'collapsed', [...collapsed]), [collapsed])
+  const toggleCard = (key) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
 
   useEffect(() => {
     const unsubs = [
@@ -338,6 +372,12 @@ export default function Urlaube({ onOpenInKonten, onOpenInVerlauf, active = true
     if (Boolean(h.tag.archived) !== archive) setArchive(Boolean(h.tag.archived))
     setFilter('')
     setYearFilter(null)
+    setCollapsed((prev) => {
+      if (!prev.has(h.key)) return prev
+      const next = new Set(prev)
+      next.delete(h.key)
+      return next
+    })
     setFlash(h.key)
     setTimeout(() => cardRefs.current.get(h.key)?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 50)
     setTimeout(() => setFlash((f) => (f === h.key ? null : f)), 1800)
@@ -414,7 +454,7 @@ export default function Urlaube({ onOpenInKonten, onOpenInVerlauf, active = true
             <p className="text-sm text-[var(--color-text-muted)]">{overview.holidays.length === 0 ? 'Noch keine Urlaube mit Buchungen oder Plan.' : 'Nichts gefunden.'}</p>
           )}
           {shown.map((h) => (
-            <Card key={h.key} card={h} flash={flash === h.key} onOpenRow={openRow} onOpenTag={openTag} onOpenVerlauf={openVerlauf} innerRef={(el) => (el ? cardRefs.current.set(h.key, el) : cardRefs.current.delete(h.key))} />
+            <Card key={h.key} card={h} flash={flash === h.key} collapsed={collapsed.has(h.key)} onToggle={() => toggleCard(h.key)} onOpenRow={openRow} onOpenTag={openTag} onOpenVerlauf={openVerlauf} innerRef={(el) => (el ? cardRefs.current.set(h.key, el) : cardRefs.current.delete(h.key))} />
           ))}
         </div>
         <div className="min-h-0 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
