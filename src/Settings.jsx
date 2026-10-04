@@ -589,7 +589,7 @@ export default function Settings({ year, onOpenInKonten, onOpenInVerlauf }) {
     <div
       ref={scrollRef}
       onScroll={(e) => ui.set('settings', 'scrollTop', e.currentTarget.scrollTop)}
-      className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 overflow-y-auto px-4 py-4"
+      className="mx-auto flex w-full max-w-[1440px] flex-1 flex-col gap-4 overflow-y-auto px-4 py-4"
     >
       <section className="flex flex-col gap-3">
         <div className="flex flex-wrap items-baseline justify-between gap-3">

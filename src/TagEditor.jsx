@@ -1,6 +1,6 @@
 import { forwardRef, useImperativeHandle, useMemo, useState } from 'react'
 
-import { createTypesFor, findTagByText, tagKey } from './lib/tagPicker'
+import { createTypesFor, findTagByText, splitTagText, tagKey } from './lib/tagPicker'
 import { qualifiedTagName } from './lib/tagStyle'
 import { CREATE_TYPES } from './lib/tagTypes'
 import { usageHint } from './lib/tags'
@@ -132,8 +132,12 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
 
   // Adding applies and closes at once; removing a chip doesn't close, so
   // correcting a line (remove, then pick) stays one visit.
-  function add(id) {
-    onApply(data, [...selectedIds, id])
+  // Adding a child drops its parent from the line (Oct 2026, Markus): picking
+  // "GET 2026-02: Meal" removes a "GET 2026-02" already there. `text` is the
+  // typed "Parent:Child" for a just-created tag (not in `tags` yet).
+  function add(id, text) {
+    const parentId = tagById[id]?.parentTag ?? (text && splitTagText(text).parent ? findTagByText(tags, splitTagText(text).parent)?.id : null)
+    onApply(data, [...selectedIds.filter((x) => x !== parentId), id])
     api.stopEditing(true)
   }
   // Writes directly via onApply (the grid's own commit pipeline proved
@@ -149,8 +153,8 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
         placeholder="Tag suchen oder neu erstellen… (z.B. Schottland:Fähre)"
         getOptions={getOptions}
         getCreateTypes={getCreateTypes}
-        onPick={(o) => add(o.createText ? onCreateTag(o.createText, o.groupingType) : o.id)}
-        onCreate={(text, groupingType) => add(onCreateTag(text, groupingType))}
+        onPick={(o) => (o.createText ? add(onCreateTag(o.createText, o.groupingType), o.createText) : add(o.id))}
+        onCreate={(text, groupingType) => add(onCreateTag(text, groupingType), text)}
         onEnterNone={apply}
         onClose={() => api.stopEditing(true)}
         onKey={(e, text) => {

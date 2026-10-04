@@ -2114,3 +2114,7 @@ Markus: a parent's count should be the whole family's. **Done** (`Settings.jsx` 
 ## Session 37, continued a hundred-and-fourth time — 2026-10-04 — Indent + expand/collapse all
 
 Markus: children indented; an expand-all / collapse-all button. **Done** (`Settings.jsx`): row indent per depth 22 → 44 px (the parent's ▸ had eaten the old indent), "▸ Alle aufklappen / ▾ Alle zuklappen" (all families with shown children) next to "alle Jahre", both right of the chips on one line. Screenshot checked.
+
+## Session 37, continued a hundred-and-fifth time — 2026-10-04 — Wider Settings; a child replaces its parent in Konten
+
+Markus: Settings › Tags wider again (`max-w-6xl` → `max-w-[1440px]`); in Konten, adding a child ("GET 2026-02: Meal") should drop its parent ("GET 2026-02") from the line. **Done** (`TagEditor.jsx` `add`): the parent is found from the picked tag, or from the typed "Parent:Child" for a just-created one, and removed from the line's tags in the same write. Verlauf is unaffected.
