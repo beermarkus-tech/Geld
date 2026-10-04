@@ -67,6 +67,13 @@ export default function TagBox({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once on open
   }, [])
 
+  // Keep the highlighted row in view when moving with ↓/↑ in a long list.
+  const listRef = useRef(null)
+  useEffect(() => {
+    const li = listRef.current?.children[shown]
+    li?.scrollIntoView({ block: 'nearest' })
+  }, [shown])
+
   const live = useRef({})
   live.current = { text, shown, total, options, choose, onEnterNone, onClose, onKey, reset: resetText ?? startText }
   useEffect(() => {
@@ -126,7 +133,13 @@ export default function TagBox({
       />
       {belowInput}
       {total > 0 && (
-        <ul role="listbox" className={`${listClassName} overflow-auto rounded border border-[var(--color-border)] text-sm`}>
+        <ul
+          ref={listRef}
+          role="listbox"
+          // AG Grid's popup editor would otherwise swallow the wheel.
+          onWheel={(e) => e.stopPropagation()}
+          className={`${listClassName} overflow-auto rounded border border-[var(--color-border)] text-sm`}
+        >
           {options.map((o, idx) => (
             <li key={o.key}>
               {o.separatorBefore && <hr className="border-[var(--color-border)]" />}

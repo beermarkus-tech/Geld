@@ -2246,3 +2246,7 @@ Markus: (1) clicking the "Geplant / Gebucht" text at the top of Verlauf should t
 ## Session 37, continued a hundred-and-thirty-fifth time — 2026-10-04 — Verlauf: turn a tag line into a text line
 
 Markus: transform an existing tag into a simple text tag inside the modal. **Done** (`Verlauf.jsx`, `tagToLabel`): the line's name editor (double-click) gets a last list row "in Nur Text umwandeln — kein Tag mehr" (not on Übergruppe or text rows); it re-keys the line to `lbl:<slug>` via `replaceInBlock` (values, notes, comments move; tag and bookings untouched; refused if the block already has that text). Harness: Ausgaben line → `lbl:ausgaben`, tag count unchanged. **Interpretation:** I read "the modal" as the name editor, since that is where an existing tag line is edited; the add-line modal already offers text. Tell me if you meant something else.
+
+## Session 37, continued a hundred-and-thirty-sixth time — 2026-10-04 — Tag box list scrolls
+
+Markus: the list inside the modal did not scroll. **Fixed** (`TagBox.jsx`, shared by Verlauf's add-line modal and name editor and Konten's tag editor): ↓/↑ now scroll the highlighted row into view, and the mouse wheel over the list no longer gets swallowed by AG Grid's popup. Harness: 13-row list, 14× ↓ scrolls to 144 px, wheel up returns to 0.
