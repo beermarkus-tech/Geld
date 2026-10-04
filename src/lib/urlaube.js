@@ -58,6 +58,9 @@ const sum = (xs) => xs.reduce((s, x) => s + x, 0)
 // The reduction a holiday got from subventions and gifts: total cost ÷ cost
 // only − 1, in whole percent (−20 for 800 € left of 1.000 €). Null without a
 // cost to compare to.
+// A row that holds only money in — a Subvention, a Geschenk.
+export const isReductionRow = (r) => r.subvention > 0 && r.cost === 0
+
 export function reductionPercent(cost, subvention) {
   if (!(cost > 0)) return null
   return Math.round(((cost - subvention) / cost - 1) * 100) + 0
@@ -251,7 +254,9 @@ export function urlaubeOverview({ categoryId, incomeIds = new Set(), tags = [], 
         details: distinct([...entries].sort((a, b) => Math.abs(b.cents) - Math.abs(a.cents)).map((e) => e.detail), 4),
         comments: distinct(comments, 3),
       }))
-      .sort((a, b) => (a.childTag ? a.childTag.name : '').localeCompare(b.childTag ? b.childTag.name : '', 'de'))
+      // Rows of only subventions / gifts go to the bottom (Oct 2026, Markus), the
+      // rest alphabetically, each group by name.
+      .sort((a, b) => Number(isReductionRow(a)) - Number(isReductionRow(b)) || (a.childTag ? a.childTag.name : '').localeCompare(b.childTag ? b.childTag.name : '', 'de'))
     const last = rows.map((r) => r._last).sort().at(-1) ?? ''
     const fromName = /^\s*(\d{4})/.exec(root.name)
     const booked = sum(rows.map((r) => r.booked))

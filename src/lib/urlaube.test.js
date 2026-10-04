@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { incomeCategoryIds, reductionPercent, urlaubeCategoryId, urlaubeOverview } from './urlaube'
+import { incomeCategoryIds, isReductionRow, reductionPercent, urlaubeCategoryId, urlaubeOverview } from './urlaube'
 
 const categories = [
   { id: 'sonst', name: 'Sonstiges', parentCategoryId: null },
@@ -135,6 +135,18 @@ describe('urlaubeOverview', () => {
   it('a planned subvention alone makes no holiday', () => {
     const r = urlaubeOverview({ ...base, transactions: [], budgets: [b(2026, 9, 20000, 'it-sub', { categoryId: 'sonst-einn' })] })
     expect(r.holidays).toEqual([])
+  })
+  it('rows of only subventions / gifts go to the bottom of a card, each group alphabetical', () => {
+    const t2 = [...tags, { id: 'it-a', name: 'Aktivitäten', parentTag: 'it', class: 'grouping' }, { id: 'it-z', name: 'Zuschuss', parentTag: 'it', class: 'grouping' }]
+    const r = urlaubeOverview({
+      ...base,
+      tags: t2,
+      transactions: [...transactions, tx('act', '2026-02-02', -500, ['it-a']), tx('zus', '2026-02-03', 900, ['it-z'], 'sonst-einn')],
+      budgets: [...budgets, b(2026, 9, 20000, 'it-sub', { categoryId: 'sonst-einn' })],
+    })
+    const rows = r.holidays.find((x) => x.key === 'it').rows
+    expect(rows.map((x) => x.label)).toEqual(['(allgemein)', 'Aktivitäten', 'Subvention', 'Zuschuss'])
+    expect(rows.map(isReductionRow)).toEqual([false, false, true, true])
   })
   it('only the holiday tag counts when a line carries several tags', () => {
     // "Rechnung offen" is first on the line, yet the booking is La Rochelle's

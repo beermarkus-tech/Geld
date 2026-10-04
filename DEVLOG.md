@@ -2214,3 +2214,7 @@ Markus: highlight the Subvention and Geschenk rows in the holiday cards, font gr
 ## Session 37, continued a hundred-and-twenty-ninth time — 2026-10-04 — Urlaube: collapsible cards
 
 Markus: collapse the cards by clicking the header (not the tag, which opens Konten). **Done** (`Urlaube.jsx`): the card header is a `role="button"` (Enter/Space too) that toggles the card; the badge and the "In Verlauf" button `stopPropagation`; a small chevron shows the state; a folded card shows only its header (tag, years, Verlauf button, Budget/Prognose). The folded set is remembered (`uiState` 'urlaube' › 'collapsed'); a click on a holiday in the overview unfolds its card. Harness: header click folds/opens, badge → Konten without folding, Enter on the focused header folds, state survives a reload, overview jump re-opens. No "fold all" button yet.
+
+## Session 37, continued a hundred-and-thirtieth time — 2026-10-04 — Urlaube: subvention rows at the bottom
+
+Markus: move the subvention lines always to the bottom of the card. **Done** (`lib/urlaube.js`): rows of only money in (`isReductionRow`, the same test that makes them green) sort after all others; each group stays alphabetical, "(allgemein)" first. Test +1 (20 in all for this lib).

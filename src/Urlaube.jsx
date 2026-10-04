@@ -4,7 +4,7 @@ import { collection, onSnapshot } from 'firebase/firestore'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { db } from './firebase'
 import { centsToWholeEuro } from './lib/format'
-import { incomeCategoryIds, reductionPercent, urlaubeCategoryId, urlaubeOverview } from './lib/urlaube'
+import { incomeCategoryIds, isReductionRow, reductionPercent, urlaubeCategoryId, urlaubeOverview } from './lib/urlaube'
 import ui from './lib/uiState'
 import TagPill from './TagPill'
 import { useTags } from './TagsProvider'
@@ -125,7 +125,7 @@ function Card({ card, flash, collapsed, onToggle, onOpenRow, onOpenTag, onOpenVe
           {card.rows.map((r) => {
             // A row of only money in — a Subvention, a Geschenk — is highlighted in green
             // (Oct 2026, Markus): the cost reductions stand out from the costs.
-            const reduction = r.subvention > 0 && r.cost === 0
+            const reduction = isReductionRow(r)
             return (
               <button
                 key={r.key}
