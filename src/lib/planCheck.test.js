@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { categoryActualIndex, checkMessage, partsWithoutLine, planStatus, unassignedCents } from './planCheck'
+import { categoryActualIndex, checkMessage, planStatus } from './planCheck'
 
 describe('planStatus', () => {
   const s = (plan, actual, closed = true, percent = 5) => planStatus({ plan, actual, closed, percent })
@@ -51,44 +51,18 @@ describe('categoryActualIndex', () => {
   })
 })
 
-describe('parts and unassigned', () => {
-  const nameOf = (id) => ({ sco: 'Schottland', auto: 'Auto', hot: 'Hotels' })[id]
-  const lines = [
-    { cents: -90, tags: ['auto'] },
-    { cents: -20, tags: ['sco'] },
-    { cents: -500, tags: ['hot'] },
-    { cents: -40, tags: [] },
-  ]
-  it('names what has no plan line of its own under an Übergruppe', () => {
-    expect(partsWithoutLine({ lines, parentId: 'sco', familyIds: new Set(['sco', 'auto', 'hot']), plannedChildIds: ['hot'], nameOf })).toEqual([
-      { label: 'Auto', cents: -90 },
-      { label: 'Schottland ohne Untertag', cents: -20 },
-    ])
-  })
-  it('totals what no plan line covers', () => {
-    expect(unassignedCents(lines, new Set(['sco', 'auto', 'hot']))).toBe(-40)
-  })
-})
-
 describe('checkMessage', () => {
-  const base = { where: 'Urlaube › Hotels', scope: 'Juli', percent: 5 }
-  it('says ok / off / unplanned in words', () => {
-    expect(checkMessage({ ...base, plan: -50000, actual: -49800, status: 'ok', closed: true }).text).toBe('Urlaube › Hotels · Juli: Plan -500 €, gebucht -498 € — im Rahmen (±5 %)')
-    const off = checkMessage({ ...base, plan: -50000, actual: -62000, status: 'off', closed: true })
-    expect(off.text).toContain('Abweichung -120 € (24 %) → Plan1 prüfen')
-    expect(off.tone).toBe('off')
-    expect(checkMessage({ ...base, plan: 0, actual: -9000, status: 'unplanned', closed: false }).text).toContain('nichts geplant, aber gebucht -90 €')
+  it('shows planned and booked, toned by the status', () => {
+    expect(checkMessage({ plan: -50000, actual: -62000, status: 'off' })).toEqual({ text: 'Geplant: -500 € · Gebucht: -620 €', tone: 'off' })
+    expect(checkMessage({ plan: -50000, actual: -49800, status: 'ok' })).toEqual({ text: 'Geplant: -500 € · Gebucht: -498 €', tone: 'ok' })
+    expect(checkMessage({ plan: 0, actual: -9000, status: 'unplanned' })).toEqual({ text: 'Geplant: 0 € · Gebucht: -90 €', tone: 'off' })
+    expect(checkMessage({ plan: -50000, actual: -2000, status: null })).toEqual({ text: 'Geplant: -500 € · Gebucht: -20 €', tone: 'info' })
   })
-  it('shows a decimal percentage with a comma', () => {
-    expect(checkMessage({ ...base, percent: 2.5, plan: -50000, actual: -50000, status: 'ok', closed: true }).text).toContain('±2,5 %')
+  it('shows cents when there are some', () => {
+    expect(checkMessage({ plan: -10000, actual: -10040, status: 'ok' }).text).toBe('Geplant: -100 € · Gebucht: -100,40 €')
   })
-  it('open month with an early booking is information only; nothing at all gives no message', () => {
-    expect(checkMessage({ ...base, plan: -50000, actual: -2000, status: null, closed: false })).toMatchObject({ tone: 'info' })
-    expect(checkMessage({ ...base, plan: -50000, actual: 0, status: null, closed: false })).toBeNull()
-  })
-  it('appends what has no plan line', () => {
-    const m = checkMessage({ ...base, plan: -100, actual: -300, status: 'off', closed: true, parts: [{ label: 'Auto', cents: -9000 }], unassigned: -4000 })
-    expect(m.text).toContain('davon ohne eigene Plan-Zeile: Auto -90 €')
-    expect(m.text).toContain('davon keiner Plan-Zeile zugeordnet: -40 €')
+  it('says nothing when nothing is booked and the month is not judged', () => {
+    expect(checkMessage({ plan: -50000, actual: 0, status: null })).toBeNull()
+    expect(checkMessage({ plan: 0, actual: 0, status: null })).toBeNull()
   })
 })

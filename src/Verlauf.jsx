@@ -26,7 +26,7 @@ import { budgetDoc, budgetDocId } from './lib/budgetDocs'
 import TagBox from './TagBox'
 import TagPill from './TagPill'
 import { CREATE_TYPES } from './lib/tagTypes'
-import { categoryActualIndex, checkMessage, partsWithoutLine, planStatus, unassignedCents } from './lib/planCheck'
+import { categoryActualIndex, checkMessage, planStatus } from './lib/planCheck'
 import { usePlanTolerance } from './lib/usePlanTolerance'
 
 // Ctrl/Cmd+Delete deletes a row (Oct 2026, Markus); the grid's own "Delete clears
@@ -99,7 +99,6 @@ function monthTextColorVar(rowLabel, isClosed, isPlan0) {
 // Plan1 versus reality (Oct 2026, Markus). Rows of Plan1 carry `actuals`
 // (what was booked per month under that row); a month cell asks planStatus(),
 // the year column the same over the ticked months only.
-const MONTH_NAMES_LONG = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember']
 function monthCheck(row, i, closedMonths, percent) {
   if (!row.actuals) return null
   return planStatus({ plan: row.months[i], actual: row.actuals[i], closed: closedMonths.includes(i + 1), percent })
@@ -909,10 +908,6 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     // top-bar message (Oct 2026, Markus) — Plan0 and Prog never get any.
     if (!isPlan0) {
       topRow.actuals = monthlyActuals(common, null)
-      topRow.checkKind = 'top'
-      // The tags the plan lines cover; bookings with none of them sit in the
-      // total under no line (named in the message).
-      if (rowHasBreakdown) topRow.coveredIds = new Set(breakdownTagIds.flatMap((id) => [...familyOf(id).ids]))
     }
     const out = [topRow]
     // Breakdown rows exist independent of the global "Aufschlüsselung
@@ -962,7 +957,6 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         ...(isPlan0
           ? {}
           : {
-              checkKind: 'line',
               // A child counts its own tag; a line without Übergruppe also its
               // real children, unless it is itself an Übergruppe above.
               actuals: monthlyActuals(common, tagById.get(tagId)?.parentTag || byParent.has(tagId) ? new Set([tagId]) : familyOf(tagId).ids),
@@ -1002,7 +996,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         breakdownLabel: tagName(parentId),
         months: rollupMonths,
         yearTotal: rollupMonths.reduce((a, b) => a + b, 0),
-        ...(isPlan0 ? {} : { checkKind: 'group', actuals: monthlyActuals(common, family), parentId, familyIds: family, plannedChildIds: childIds }),
+        ...(isPlan0 ? {} : { actuals: monthlyActuals(common, family) }),
       })
       childIds.forEach((tagId) => out.push(breakdownRow(tagId)))
     }
@@ -1946,42 +1940,19 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         .join(' · ')
     : ''
 
-  // The top-bar sentence for the cell under the cursor (Oct 2026, Markus): how
-  // Plan1 compares with what was booked, in words — for keyboard use, instead
-  // of a tooltip. Only Plan1 rows (and their year figure) have one.
+  // The top-bar text for the cell under the cursor (Oct 2026, Markus):
+  // "Geplant … · Gebucht …" — for keyboard use, instead of a tooltip. Only
+  // Plan1 rows (and their year figure) have one.
   function buildCheck(row, colId) {
-    const cat = row.targetKey === 'categoryId'
-    const t = row.breakdownTagId ? tagById.get(row.breakdownTagId) : null
-    const detail =
-      row.checkKind === 'line'
-        ? `${t?.parentTag ? `${tagName(t.parentTag)}: ` : ''}${tagName(row.breakdownTagId)}`
-        : row.checkKind === 'group'
-          ? tagName(row.parentId)
-          : row.rowHasBreakdown
-            ? 'gesamt'
-            : ''
-    const where = [row.subcatName, detail].filter(Boolean).join(' › ')
     if (colId === 'label') {
       if (closedMonths.length === 0) return null
       const { plan, actual } = yearSums(row, closedMonths)
-      const status = planStatus({ plan, actual, closed: true, percent: tolerancePercent })
-      const scope = `Stand abgehakter Monate (bis ${MONTH_NAMES_LONG[Math.max(...closedMonths) - 1]})`
-      return checkMessage({ where, scope, plan, actual, status, closed: true, percent: tolerancePercent })
+      return checkMessage({ plan, actual, status: planStatus({ plan, actual, closed: true, percent: tolerancePercent }) })
     }
     const m = Number(colId.slice(1))
-    const i = m - 1
-    const closed = closedMonths.includes(m)
-    const plan = row.months[i]
-    const actual = row.actuals[i]
-    const status = planStatus({ plan, actual, closed, percent: tolerancePercent })
-    let parts = []
-    let unassigned = 0
-    if (cat && row.checkKind === 'group') {
-      parts = partsWithoutLine({ lines: actualIndex.lines(row.targetId, m), parentId: row.parentId, familyIds: row.familyIds, plannedChildIds: row.plannedChildIds, nameOf: tagName })
-    } else if (cat && row.checkKind === 'top' && row.coveredIds) {
-      unassigned = unassignedCents(actualIndex.lines(row.targetId, m), row.coveredIds)
-    }
-    return checkMessage({ where, scope: MONTH_NAMES_LONG[i], plan, actual, status, closed, percent: tolerancePercent, parts, unassigned })
+    const plan = row.months[m - 1]
+    const actual = row.actuals[m - 1]
+    return checkMessage({ plan, actual, status: planStatus({ plan, actual, closed: closedMonths.includes(m), percent: tolerancePercent }) })
   }
   const checkInfo = commentRow?.actuals ? buildCheck(commentRow, commentCell.colId) : null
 
@@ -2035,11 +2006,11 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
           role="status"
           aria-live="polite"
           title={checkInfo?.text}
-          className={`flex h-8 w-[40rem] max-w-full items-center text-xs leading-4 ${
+          className={`flex h-8 w-[18rem] max-w-full items-center whitespace-nowrap text-sm ${
             checkInfo?.tone === 'ok' ? 'text-[var(--color-plan-ok)]' : checkInfo?.tone === 'off' ? 'text-[var(--color-plan-off)]' : 'text-[var(--color-text-muted)]'
           }`}
         >
-          <span className="line-clamp-2">{checkInfo?.text}</span>
+          <span>{checkInfo?.text}</span>
         </div>
         <CellCommentField
           cell={activeCommentCell}
