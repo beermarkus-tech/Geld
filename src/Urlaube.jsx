@@ -30,7 +30,7 @@ function Card({ card, flash, onOpenRow, innerRef }) {
   return (
     <section
       ref={innerRef}
-      className={`flex flex-col gap-3 rounded-lg border bg-[var(--color-surface)] p-4 ${flash ? 'border-[var(--color-computed)] ring-2 ring-[var(--color-computed)]' : 'border-[var(--color-border)]'}`}
+      className={`flex scroll-mt-2 flex-col gap-3 rounded-lg border bg-[var(--color-surface)] p-4 ${flash ? 'border-[var(--color-computed)] ring-2 ring-[var(--color-computed)]' : 'border-[var(--color-border)]'}`}
       aria-label={card.tag.name}
     >
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -381,7 +381,7 @@ export default function Urlaube({ onOpenInKonten, active = true }) {
       {categories.length > 0 && !categoryId && <p className="text-sm text-[var(--color-text-muted)]">Die Kategorie Sonstiges › Urlaube gibt es nicht.</p>}
 
       <div className="mx-auto grid min-h-0 w-full max-w-[1800px] flex-1 grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-6">
-        <div className="flex min-h-0 flex-col gap-4 overflow-y-auto pr-1">
+        <div className="flex min-h-0 flex-col gap-4 overflow-y-auto p-1">
           {shown.length === 0 && (
             <p className="text-sm text-[var(--color-text-muted)]">{overview.holidays.length === 0 ? 'Noch keine Urlaube mit Buchungen oder Plan.' : 'Nichts gefunden.'}</p>
           )}
