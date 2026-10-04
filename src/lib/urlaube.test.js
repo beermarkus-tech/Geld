@@ -1,18 +1,21 @@
 import { describe, expect, it } from 'vitest'
 
-import { urlaubeCategoryId, urlaubeOverview } from './urlaube'
+import { incomeCategoryIds, urlaubeCategoryId, urlaubeOverview } from './urlaube'
 
 const categories = [
   { id: 'sonst', name: 'Sonstiges', parentCategoryId: null },
   { id: 'urlaube', name: 'Urlaube', parentCategoryId: 'sonst' },
   { id: 'food', name: 'Lebensmittel', parentCategoryId: 'leben' },
+  { id: 'einn', name: 'Einnahmen', parentCategoryId: null },
+  { id: 'sonst-einn', name: 'Sonstige Einnahmen', parentCategoryId: 'einn' },
 ]
 const tags = [
   { id: 'lr', name: '2025 La Rochelle', parentTag: null, class: 'grouping' },
   { id: 'lr-h', name: 'Hotel', parentTag: 'lr', class: 'grouping' },
-  { id: 'sco', name: 'Schottland', parentTag: null, class: 'grouping' },
+  { id: 'sco', name: 'Schottland', parentTag: null, class: 'grouping', groupingType: 'project' },
   { id: 'sco-f', name: 'Flüge', parentTag: 'sco', class: 'grouping' },
   { id: 'it', name: '2026 Italien', parentTag: null, class: 'grouping' },
+  { id: 'rechn', name: 'Rechnung offen', parentTag: null, class: 'grouping', groupingType: 'claim' }, // not a holiday tag
   { id: 'spar', name: 'Sparen', parentTag: null, class: 'allocation' },
 ]
 const tx = (id, date, cents, tagIds, categoryId = 'urlaube', extra = {}) => ({ id, date, detail: '', lines: [{ amountCents: cents, categoryId, tags: tagIds }], ...extra })
@@ -20,23 +23,32 @@ const b = (year, month, cents, tag, extra = {}) => ({ year, planVersion: 'plan1'
 
 const transactions = [
   tx('f24', '2024-12-20', -30000, ['lr-h'], 'urlaube', { detail: 'Anzahlung' }), // paid the year before
-  tx('h25', '2025-08-03', -70000, ['lr-h'], 'urlaube', { detail: 'Hotel' }),
+  tx('h25', '2025-08-03', -70000, ['rechn', 'lr-h'], 'urlaube', { detail: 'Hotel' }), // the Rechnung tag comes first
   tx('s25', '2025-09-01', -20000, ['sco-f']), // Schottland: no year in the name → latest booking year
   tx('s26', '2026-02-01', -5000, ['sco-f']),
   tx('i26', '2026-03-05', -10000, ['it']),
   tx('loose', '2026-04-01', -1000, []), // no holiday tag
   tx('other', '2026-05-01', -400, ['sco'], 'food'), // a holiday tag in another category
-  tx('gift', '2026-06-01', 2000, ['it']), // a subvention: positive booking
+  tx('gift', '2026-06-01', 2000, ['it'], 'sonst-einn'), // a subvention in Sonstige Einnahmen: belongs to the holiday
+  tx('salary', '2026-06-02', 300000, [], 'sonst-einn'), // plain income: not Urlaube's business
+  tx('rechnung-only', '2026-06-03', -300, ['rechn']), // Urlaube booking with no holiday tag
   tx('x', '2026-02-02', -7, ['spar'], 'food'),
 ]
 const budgets = [b(2025, 8, -80000, 'lr-h'), b(2026, 9, -50000, 'it'), b(2026, 4, -3000, 'sco-f'), b(2026, 8, -9, 'it', { planVersion: 'plan0' })]
-const base = { categoryId: 'urlaube', tags, transactions, budgets, closedByYear: new Map([[2026, [1, 2, 3, 4, 5, 6]]]), todayYear: 2026 }
+const base = { categoryId: 'urlaube', incomeIds: incomeCategoryIds(categories), tags, transactions, budgets, closedByYear: new Map([[2026, [1, 2, 3, 4, 5, 6]]]), todayYear: 2026 }
 
 describe('urlaubeCategoryId', () => {
   it('finds Sonstiges › Urlaube by name', () => {
     expect(urlaubeCategoryId(categories)).toBe('urlaube')
     expect(urlaubeCategoryId([{ id: 'u', name: 'Urlaube', parentCategoryId: 'other' }, { id: 'other', name: 'Hobbys' }])).toBeNull()
     expect(urlaubeCategoryId([])).toBeNull()
+  })
+})
+
+describe('incomeCategoryIds', () => {
+  it('the categories of the group Einnahmen', () => {
+    expect([...incomeCategoryIds(categories)]).toEqual(['sonst-einn'])
+    expect(incomeCategoryIds([]).size).toBe(0)
   })
 })
 
@@ -57,21 +69,35 @@ describe('urlaubeOverview', () => {
     // Italien: -10000 + 2000 booked in ticked months, -50000 planned in September
     expect(h('it')).toMatchObject({ booked: -8000, planned: -50000, total: 58000 })
   })
-  it('a subvention or gift (positive booking) reduces the cost', () => {
+  it('a subvention or gift in an income category belongs to the holiday and reduces its cost', () => {
     expect(h('it').rows[0].booked).toBe(-8000)
+    expect(o.outside).toBe(400) // the income booking is not "outside"
+  })
+  it('only the holiday tag counts when a line carries several tags', () => {
+    // "Rechnung offen" is first on the line, yet the booking is La Rochelle's
+    expect(h('lr').rows.find((r) => r.year === 2025).booked).toBe(-70000)
+    expect(o.holidays.map((x) => x.key)).not.toContain('rechn')
+    // a line with only a non-holiday tag has no holiday: untagged
+    expect(o.untagged).toBe(1300)
+  })
+  it('plain income without a holiday tag is ignored, and a non-holiday plan tag makes no card', () => {
+    expect(o.years.find((x) => x.year === 2026).booked).toBe(14300)
+    const r = urlaubeOverview({ ...base, budgets: [...budgets, b(2026, 5, -999, 'rechn')] })
+    expect(r.holidays.map((x) => x.key)).not.toContain('rechn')
   })
   it('per year: trips of the year, everything booked in the year, difference, budget', () => {
     const y = (n) => o.years.find((x) => x.year === n)
     expect(o.years.map((x) => x.year)).toEqual([2026, 2025, 2024])
     // 2026: Italien 58000 + Schottland 25000 | booked in 2026: 5000 + 10000 + 1000 − 2000
-    expect(y(2026)).toMatchObject({ trips: 2, tripCost: 83000, booked: 14000, untagged: 1000, difference: 69000, budget: 53000 })
+    // + the invoice-only booking (300) is untagged: booked 14300
+    expect(y(2026)).toMatchObject({ trips: 2, tripCost: 83000, booked: 14300, untagged: 1300, difference: 68700, budget: 53000 })
     // 2025: La Rochelle 100000 | booked in 2025: 70000 + 20000
     expect(y(2025)).toMatchObject({ trips: 1, tripCost: 100000, booked: 90000, difference: 10000, budget: 80000 })
     // 2024: only the Anzahlung for a 2025 trip
     expect(y(2024)).toMatchObject({ trips: 0, tripCost: 0, booked: 30000, difference: -30000 })
   })
   it('reports what is not counted: untagged Urlaube bookings and holiday tags used in other categories', () => {
-    expect(o.untagged).toBe(1000)
+    expect(o.untagged).toBe(1300)
     expect(h('sco').outside).toBe(-400)
     expect(o.outside).toBe(400)
   })

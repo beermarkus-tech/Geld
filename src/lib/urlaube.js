@@ -17,10 +17,16 @@ import { isAnchorTransaction } from './balance'
 //                the split is not "gebucht" but reads "davon schon gebucht"
 //   rows         per child tag and year: Details of the bookings, Verlauf's
 //                comments on that line, booked and still to be booked
-// A booking line with several grouping tags goes to the first one. Only the
-// category Urlaube counts; bookings with a holiday's tag in *other* categories
-// are not counted but reported (`outside`), as are Urlaube bookings with no
-// holiday tag (`untagged`).
+// Which tag on a line is the holiday tag (Oct 2026, Markus: a line may also
+// carry a Rechnung tag or other grouping tags, which are none of this screen's
+// business): a tag whose top-level tag starts with a year ("2025 La Rochelle")
+// or is typed Reise/Projekt; the year-named one wins. A line with no such tag
+// has no holiday.
+// What counts: the category Urlaube, plus the holiday's bookings in the
+// Einnahmen categories (a subvention or gift lands in "Sonstige Einnahmen" but
+// belongs to the holiday and reduces its cost). Bookings with a holiday's tag in
+// any *other* category are not counted but reported (`outside`), as are Urlaube
+// bookings with no holiday tag (`untagged`).
 //
 // Per year (`years`): `tripCost` = the total of the holidays *of* that year,
 // whenever booked; `booked` = everything booked in that year, whichever holiday
@@ -29,6 +35,12 @@ import { isAnchorTransaction } from './balance'
 
 export const URLAUBE_GROUP = 'Sonstiges'
 export const URLAUBE_NAME = 'Urlaube'
+
+// The ids of the categories in the group Einnahmen (Sonstige Einnahmen, …).
+export function incomeCategoryIds(categories) {
+  const group = categories.find((c) => !c.parentCategoryId && c.name === 'Einnahmen')
+  return new Set(categories.filter((c) => group && c.parentCategoryId === group.id).map((c) => c.id))
+}
 
 // The category's id by name, or null while categories are not loaded.
 export function urlaubeCategoryId(categories) {
@@ -51,7 +63,7 @@ const distinct = (texts, limit) => {
 }
 
 // @returns {{ holidays: object[], years: object[], untagged: number, outside: number }}
-export function urlaubeOverview({ categoryId, tags = [], transactions = [], budgets = [], cellComments = [], closedByYear = new Map(), todayYear }) {
+export function urlaubeOverview({ categoryId, incomeIds = new Set(), tags = [], transactions = [], budgets = [], cellComments = [], closedByYear = new Map(), todayYear }) {
   if (!categoryId) return { holidays: [], years: [], untagged: 0, outside: 0 }
   const tagById = new Map(tags.map((t) => [t.id, t]))
   const isGrouping = (id) => tagById.get(id)?.class === 'grouping'
@@ -59,6 +71,13 @@ export function urlaubeOverview({ categoryId, tags = [], transactions = [], budg
     const t = tagById.get(tagId)
     const parent = t.parentTag ? tagById.get(t.parentTag) : null
     return parent ? { root: parent, child: t } : { root: t, child: null }
+  }
+  // A holiday's top-level tag: named with a year, or typed Reise/Projekt.
+  const isHolidayRoot = (root) => /^\s*\d{4}/.test(root.name) || root.groupingType === 'project'
+  // The holiday tag of a set of tag ids (the year-named one first), or null.
+  const holidayTag = (tagIds) => {
+    const found = (tagIds ?? []).filter(isGrouping).map((id) => ({ id, root: place(id).root })).filter((x) => isHolidayRoot(x.root))
+    return (found.find((x) => /^\s*\d{4}/.test(x.root.name)) ?? found[0])?.id ?? null
   }
 
   const cells = new Map() // `${rootId}|${childId|'self'}|${year}`
@@ -82,11 +101,13 @@ export function urlaubeOverview({ categoryId, tags = [], transactions = [], budg
     const month = Number(tx.date.slice(5, 7))
     if (!(year > 0 && month >= 1 && month <= 12)) continue
     for (const line of tx.lines ?? []) {
-      const id = (line.tags ?? []).find(isGrouping)
+      const id = holidayTag(line.tags)
       const cents = line.amountCents ?? 0
       if (line.categoryId !== categoryId) {
-        if (id) add(outsideByRoot, place(id).root.id, cents)
-        continue
+        // Income categories (a subvention, a gift) belong to the holiday; any
+        // other category is only reported.
+        if (id && !incomeIds.has(line.categoryId)) add(outsideByRoot, place(id).root.id, cents)
+        if (!id || !incomeIds.has(line.categoryId)) continue
       }
       add(bookedByYear, year, cents)
       if (!id) {
@@ -103,6 +124,7 @@ export function urlaubeOverview({ categoryId, tags = [], transactions = [], budg
   for (const b of planRows) {
     if (!b.breakdownTagId || !isGrouping(b.breakdownTagId) || !(b.month >= 1 && b.month <= 12)) continue
     const { root, child } = place(b.breakdownTagId)
+    if (!isHolidayRoot(root)) continue
     const c = cellFor(root, child, b.year)
     c.plan[b.month - 1] += b.plannedAmountCents ?? 0
     if ((b.plannedAmountCents ?? 0) !== 0) c.planMonths += 1

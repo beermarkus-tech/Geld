@@ -4,7 +4,7 @@ import { collection, onSnapshot } from 'firebase/firestore'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { db } from './firebase'
 import { centsToWholeEuro } from './lib/format'
-import { urlaubeCategoryId, urlaubeOverview } from './lib/urlaube'
+import { incomeCategoryIds, urlaubeCategoryId, urlaubeOverview } from './lib/urlaube'
 import ui from './lib/uiState'
 import TagPill from './TagPill'
 import { useTags } from './TagsProvider'
@@ -54,7 +54,7 @@ function Card({ card, flash, onOpenRow, innerRef }) {
 
       {card.outside !== 0 && (
         <p className="text-xs text-[var(--color-plan-off)]">
-          Hinweis: {euro(-card.outside)} mit diesem Tag in anderen Kategorien gebucht — hier nicht mitgezählt.
+          Hinweis: {euro(-card.outside)} mit diesem Tag in anderen Kategorien (außer Einnahmen) gebucht — hier nicht mitgezählt.
         </p>
       )}
 
@@ -162,7 +162,7 @@ function Overview({ years, holidays, untagged, outside, yearFilter, onYear, onHo
         {(untagged !== 0 || outside !== 0) && (
           <div className="mt-1 space-y-0.5 text-xs text-[var(--color-plan-off)]">
             {untagged !== 0 && <p>Hinweis: {euro(untagged)} in Urlaube ohne Urlaubs-Tag gebucht — zählt zu „Im Jahr gebucht“, aber zu keinem Urlaub.</p>}
-            {outside !== 0 && <p>Hinweis: {euro(outside)} mit Urlaubs-Tags in anderen Kategorien gebucht — nirgends mitgezählt.</p>}
+            {outside !== 0 && <p>Hinweis: {euro(outside)} mit Urlaubs-Tags in anderen Kategorien (außer Einnahmen) gebucht — nirgends mitgezählt.</p>}
           </div>
         )}
       </section>
@@ -267,10 +267,11 @@ export default function Urlaube({ onOpenInKonten, active = true }) {
   }, [active, shortcutsOpen, yearFilter])
 
   const categoryId = useMemo(() => urlaubeCategoryId(categories), [categories])
+  const incomeIds = useMemo(() => incomeCategoryIds(categories), [categories])
   const todayYear = new Date().getFullYear()
   const overview = useMemo(
-    () => urlaubeOverview({ categoryId, tags, transactions, budgets, cellComments, closedByYear, todayYear }),
-    [categoryId, tags, transactions, budgets, cellComments, closedByYear, todayYear],
+    () => urlaubeOverview({ categoryId, incomeIds, tags, transactions, budgets, cellComments, closedByYear, todayYear }),
+    [categoryId, incomeIds, tags, transactions, budgets, cellComments, closedByYear, todayYear],
   )
 
   const needle = filter.trim().toLowerCase()
