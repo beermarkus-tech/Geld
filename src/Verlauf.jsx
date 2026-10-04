@@ -10,8 +10,8 @@ import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-communi
 
 import { db } from './firebase'
 import {
+  allocationMonthActual,
   breakdownGroupAllocationMonthActual,
-  breakdownGroupMonthActual,
   budgetBreakdownLineMonths,
   budgetTopLineMonths,
   progMonths as progMonthsFor,
@@ -26,6 +26,8 @@ import { budgetDoc, budgetDocId } from './lib/budgetDocs'
 import TagBox from './TagBox'
 import TagPill from './TagPill'
 import { CREATE_TYPES } from './lib/tagTypes'
+import { categoryActualIndex, checkMessage, partsWithoutLine, planStatus, unassignedCents } from './lib/planCheck'
+import { usePlanTolerance } from './lib/usePlanTolerance'
 
 // Ctrl/Cmd+Delete deletes a row (Oct 2026, Markus); the grid's own "Delete clears
 // the cell" must not run on it too — onCellKeyDown still sees the key.
@@ -79,22 +81,49 @@ const SECTION_TINT_VAR = {
 }
 
 // Font color by row and by that month's own open/closed state (spec.md
-// §3b, Sept 2026): Plan0 is always grey. Plan1 is black while its month is
-// still open (the actively relevant forecast), grey once closed
-// (superseded by the real actual). Prog is the mirror image — grey while
-// open (a placeholder echo of Plan1), black once closed (now the real
-// number). A breakdown/rollup row (Sept 2026) follows whichever of these
-// three its own plan-line rule already covers — a Plan1 breakdown line
-// reads like Plan1, a Plan0 one like Plan0, and the automated rollup
-// header like Prog (same mirror-then-lock behavior).
+// §3b): Plan0 is always grey. Prog is grey while its month is open (a
+// placeholder echo of Plan1), black once closed (now the real number).
+// Plan1 — its top line, breakdown lines and Übergruppe rows alike — is black
+// (Oct 2026, Markus: Plan1 is a control tower, not a mirror of Prog); in a
+// ticked month cellStyle() turns it green or orange by how the booked amount
+// compares (planStatus(), lib/planCheck.js).
 function monthTextColorVar(rowLabel, isClosed, isPlan0) {
   if (rowLabel === 'Plan0' || rowLabel === 'Plan0-breakdown') return '--color-text-muted'
-  if (rowLabel === 'Plan1' || rowLabel === 'Plan1-breakdown') return isClosed ? '--color-text-muted' : '--color-text'
-  // A Plan0 Rollup row reads like Plan0 (always muted) rather than Prog's
-  // mirror-then-lock rule — it's a plain sum of planned values, never a
-  // real actual, same as every other Plan0 row (Sept 2026).
-  if (rowLabel === 'Rollup' && isPlan0) return '--color-text-muted'
-  return isClosed ? '--color-text' : '--color-text-muted' // Prog, Plan1's own Rollup
+  if (rowLabel === 'Plan1' || rowLabel === 'Plan1-breakdown') return '--color-text'
+  // Übergruppe rows are plain sums of their lines' planned values in both
+  // plan versions (Oct 2026, Markus) — Plan0's reads like Plan0, Plan1's like Plan1.
+  if (rowLabel === 'Rollup') return isPlan0 ? '--color-text-muted' : '--color-text'
+  return isClosed ? '--color-text' : '--color-text-muted' // Prog
+}
+
+// Plan1 versus reality (Oct 2026, Markus). Rows of Plan1 carry `actuals`
+// (what was booked per month under that row); a month cell asks planStatus(),
+// the year column the same over the ticked months only.
+const MONTH_NAMES_LONG = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember']
+function monthCheck(row, i, closedMonths, percent) {
+  if (!row.actuals) return null
+  return planStatus({ plan: row.months[i], actual: row.actuals[i], closed: closedMonths.includes(i + 1), percent })
+}
+function yearSums(row, closedMonths) {
+  let plan = 0
+  let actual = 0
+  for (const m of closedMonths) {
+    plan += row.months[m - 1]
+    actual += row.actuals[m - 1]
+  }
+  return { plan, actual }
+}
+function yearCheck(row, closedMonths, percent) {
+  if (!row.actuals || closedMonths.length === 0) return null
+  const { plan, actual } = yearSums(row, closedMonths)
+  return planStatus({ plan, actual, closed: true, percent })
+}
+// Applies a status to a cell's style: green / orange text, or a tint for
+// "booked but never planned".
+function applyCheckStyle(style, status) {
+  if (status === 'ok') style.color = 'var(--color-plan-ok)'
+  else if (status === 'off') style.color = 'var(--color-plan-off)'
+  else if (status === 'unplanned') style.backgroundColor = 'var(--color-plan-unplanned)'
 }
 
 // **Deferred, not solved — see the long history in DEVLOG.md/CODEMAP.md:**
@@ -411,6 +440,8 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   const [transactions, setTransactions] = useState([])
   const [budgets, setBudgets] = useState([])
   const [closedMonths, setClosedMonths] = useState([])
+  // Plan1's colour tolerance in percent (Settings › Verlauf, lib/usePlanTolerance.js).
+  const [tolerancePercent] = usePlanTolerance()
   // Global controls (spec.md §3b): Plan0's own show/hide, and (Sept 2026)
   // "Aufschlüsselung anzeigen/ausblenden" for every breakdown block at
   // once — corrected the same round (Markus: unchecking it should only
@@ -798,6 +829,27 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     return progMonthsFor(isAllocation ? 'allocationTagId' : 'categoryId', targetId, plan1Months, closedMonths, yearNum, transactions, tags)
   }
 
+  // What was really booked, per category and month — Plan1's rows carry it as
+  // `actuals` (see planVersionRows) for the colours and the top-bar message.
+  const actualIndex = useMemo(() => categoryActualIndex(transactions, yearNum), [transactions, yearNum])
+  // Booked per month under one row: the whole category/allocation tag
+  // (`tagIds` null) or only lines carrying one of `tagIds`.
+  function monthlyActuals(common, tagIds) {
+    const cat = common.targetKey === 'categoryId'
+    return Array.from({ length: 12 }, (_, i) => {
+      const m = i + 1
+      if (cat) return tagIds ? actualIndex.sumTags(common.targetId, m, tagIds) : actualIndex.total(common.targetId, m)
+      return tagIds
+        ? breakdownGroupAllocationMonthActual(common.targetId, tagIds, yearNum, m, transactions, tags)
+        : allocationMonthActual(common.targetId, yearNum, m, transactions, tags)
+    })
+  }
+  // A tag's family: its top-level tag and every real child (planned or not).
+  function familyOf(tagId) {
+    const root = tagById.get(tagId)?.parentTag ?? tagId
+    return { root, ids: new Set([root, ...tags.filter((t) => t.parentTag === root).map((t) => t.id)]) }
+  }
+
   // Whether a category/allocation tag's top-line row is still the real,
   // directly-edited figure or has become computed (spec.md §2.7: "once
   // breakdown lines exist, the top-line value becomes the sum of its
@@ -852,6 +904,16 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     // sign") — only the breakdown/rollup rows under it (below) share
     // `blockKey` to merge into one ✚ cell together.
     topRow.breakdownActionsSpanKey = topRow.rowId
+    const breakdownTagIds = rowHasBreakdown ? breakdownTagIdsFor(common.targetKey, common.targetId, planVersion) : []
+    // Plan1 only: what was booked against this row, for the colours and the
+    // top-bar message (Oct 2026, Markus) — Plan0 and Prog never get any.
+    if (!isPlan0) {
+      topRow.actuals = monthlyActuals(common, null)
+      topRow.checkKind = 'top'
+      // The tags the plan lines cover; bookings with none of them sit in the
+      // total under no line (named in the message).
+      if (rowHasBreakdown) topRow.coveredIds = new Set(breakdownTagIds.flatMap((id) => [...familyOf(id).ids]))
+    }
     const out = [topRow]
     // Breakdown rows exist independent of the global "Aufschlüsselung
     // anzeigen" checkbox now (Sept 2026 — see blockOverrides' own comment
@@ -859,7 +921,6 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     // state gate them, never showBreakdowns directly.
     if (!rowHasBreakdown || !topRow.blockExpanded) return out
 
-    const breakdownTagIds = breakdownTagIdsFor(common.targetKey, common.targetId, planVersion)
     const byParent = new Map()
     const standalone = []
     for (const tagId of breakdownTagIds) {
@@ -898,6 +959,14 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         breakdownLabel: tagName(tagId),
         months: line.months,
         yearTotal: line.yearTotal,
+        ...(isPlan0
+          ? {}
+          : {
+              checkKind: 'line',
+              // A child counts its own tag; a line without Übergruppe also its
+              // real children, unless it is itself an Übergruppe above.
+              actuals: monthlyActuals(common, tagById.get(tagId)?.parentTag || byParent.has(tagId) ? new Set([tagId]) : familyOf(tagId).ids),
+            }),
       }
     }
 
@@ -908,48 +977,15 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
           (sum, cid) => sum + budgetBreakdownLineMonths(common.targetKey, common.targetId, cid, planVersion, yearNum, budgets).months[i],
           0,
         )
-      // Plan0's own rollup row is a plain sum of its children's *planned*
-      // values, every month, never switching to a real actual — Plan0
-      // never reflects actuals anywhere else in this screen either (its
-      // top-line and breakdown rows both stay planned-only, always muted),
-      // so its rollup shouldn't behave differently just because it's a
-      // computed row (Sept 2026, Markus: "plan0 should also render dark
-      // yellow rows" — corrected from the original "Plan1's own block
-      // only" design once Markus reconsidered it).
-      //
-      // Real bug found and fixed here (Sept 2026, Markus: "none of the
-      // bookings just has Schottland as a tag, they all have a child...
-      // the dark yellow rows need to look for the parent tags plus pure
-      // parent tags: Schottland:Anything + Schottland (only)") — the
-      // actual-computation's own tag set was built from `childIds`, which
-      // is deliberately narrower than "every real child of this parent": it
-      // only ever includes a child that *already has its own planned
-      // breakdown line* (that's what makes it show up as its own row at
-      // all), never a child that only ever exists on real transactions
-      // with no plan of its own. A real Schottland:Haustiere booking, with
-      // no "Haustiere" breakdown line ever planned, was therefore silently
-      // excluded from Schottland's own rollup actual — every closed month
-      // whose real spending happened to land entirely on never-planned
-      // children summed to 0. Fixed by widening the *actual*-side tag set
-      // (not the *displayed rows*, which correctly stay scoped to childIds
-      // — a row needs a plan value to show/edit in the first place) to
-      // every tag in the whole app whose own `parentTag` is this group,
-      // planned or not.
-      const allRealChildIds = tags.filter((t) => t.parentTag === parentId).map((t) => t.id)
-      const tagIdSet = new Set([parentId, ...allRealChildIds])
-      const rollupMonths = Array.from({ length: 12 }, (_, i) => {
-        if (isPlan0 || !closedMonths.includes(i + 1)) return plannedSum(i)
-        const month = i + 1
-        // Real bug fixed here (Sept 2026, Markus: "the übergruppe
-        // autocalculated rows dont show the totals for checked months
-        // while they should") — a Rücklagen (allocationTagId) breakdown's
-        // own rollup used to hardcode 0 for a closed month instead of
-        // computing anything real, since only the category side had an
-        // actual-computation function at all.
-        return common.targetKey === 'categoryId'
-          ? breakdownGroupMonthActual(common.targetId, tagIdSet, yearNum, month, transactions)
-          : breakdownGroupAllocationMonthActual(common.targetId, tagIdSet, yearNum, month, transactions, tags)
-      })
+      // An Übergruppe row is the plain sum of its lines' planned values in
+      // every month, in Plan0 and Plan1 alike (Oct 2026, Markus — it used to
+      // switch to real bookings in ticked months, which made Plan1 and Prog
+      // mean the same thing). What was really booked under it is compared
+      // through `actuals` (colours + top-bar message) instead: the parent
+      // tag plus *every* real child counts, planned or not (Sept 2026 fix:
+      // a booking on a never-planned child must not vanish from the group).
+      const family = familyOf(parentId).ids
+      const rollupMonths = Array.from({ length: 12 }, (_, i) => plannedSum(i))
       out.push({
         ...common,
         rowId: `${rowIdBase}:${planVersion}:rollup:${parentId}`,
@@ -966,6 +1002,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         breakdownLabel: tagName(parentId),
         months: rollupMonths,
         yearTotal: rollupMonths.reduce((a, b) => a + b, 0),
+        ...(isPlan0 ? {} : { checkKind: 'group', actuals: monthlyActuals(common, family), parentId, familyIds: family, plannedChildIds: childIds }),
       })
       childIds.forEach((tagId) => out.push(breakdownRow(tagId)))
     }
@@ -1370,7 +1407,23 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     if (active) gridApiRef.current?.refreshCells({ columns: ['rowTitle'], force: true })
   }, [tagById, active])
   const live = useRef({})
-  live.current = { persistBudgetMonth, renameTag, tagById, replaceOptionsFor, replaceBreakdownTag }
+  live.current = { persistBudgetMonth, renameTag, tagById, replaceOptionsFor, replaceBreakdownTag, percent: tolerancePercent }
+  // Plan1's colours depend on bookings and plan figures, which change the row
+  // data but not the cell value AG Grid compares — so those cells are redrawn
+  // whenever the rows are rebuilt.
+  useEffect(() => {
+    const api = gridApiRef.current
+    if (!active || !api) return
+    const nodes = []
+    api.forEachNode((n) => {
+      if (n.data?.actuals) nodes.push(n)
+    })
+    if (nodes.length > 0) api.refreshCells({ rowNodes: nodes, columns: [...MONTH_LABELS.map((_, i) => `m${i + 1}`), 'label'], force: true })
+  }, [rowData, active])
+  // A changed tolerance (Settings › Verlauf) recolours Plan1's cells.
+  useEffect(() => {
+    if (active) gridApiRef.current?.refreshCells({ columns: [...MONTH_LABELS.map((_, i) => `m${i + 1}`), 'label'], force: true })
+  }, [tolerancePercent, active])
   const columnDefs = useMemo(() => {
     const monthCols = MONTH_LABELS.map((label, i) => ({
       headerName: label,
@@ -1425,6 +1478,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
           style.backgroundColor = 'var(--color-breakdown-tint)'
           if (p.data.rowLabel === 'Plan0-breakdown') style.fontStyle = 'italic'
         }
+        applyCheckStyle(style, monthCheck(p.data, i, closedMonths, live.current.percent))
         return style
       },
       // Flexed rather than a fixed width (Markus, Sept 2026: "configure the
@@ -1830,6 +1884,8 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
             style.backgroundColor = 'var(--color-breakdown-tint)'
             if (p.data.rowLabel === 'Plan0-breakdown') style.fontStyle = 'italic'
           }
+          // Plan1's year figure is judged over the ticked months only.
+          applyCheckStyle(style, yearCheck(p.data, closedMonths, live.current.percent))
           return style
         },
         valueGetter: (p) => (p.data.yearTotal === 0 ? '' : centsToWholeEuro(p.data.yearTotal)),
@@ -1890,6 +1946,45 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         .join(' · ')
     : ''
 
+  // The top-bar sentence for the cell under the cursor (Oct 2026, Markus): how
+  // Plan1 compares with what was booked, in words — for keyboard use, instead
+  // of a tooltip. Only Plan1 rows (and their year figure) have one.
+  function buildCheck(row, colId) {
+    const cat = row.targetKey === 'categoryId'
+    const t = row.breakdownTagId ? tagById.get(row.breakdownTagId) : null
+    const detail =
+      row.checkKind === 'line'
+        ? `${t?.parentTag ? `${tagName(t.parentTag)}: ` : ''}${tagName(row.breakdownTagId)}`
+        : row.checkKind === 'group'
+          ? tagName(row.parentId)
+          : row.rowHasBreakdown
+            ? 'gesamt'
+            : ''
+    const where = [row.subcatName, detail].filter(Boolean).join(' › ')
+    if (colId === 'label') {
+      if (closedMonths.length === 0) return null
+      const { plan, actual } = yearSums(row, closedMonths)
+      const status = planStatus({ plan, actual, closed: true, percent: tolerancePercent })
+      const scope = `Stand abgehakter Monate (bis ${MONTH_NAMES_LONG[Math.max(...closedMonths) - 1]})`
+      return checkMessage({ where, scope, plan, actual, status, closed: true, percent: tolerancePercent })
+    }
+    const m = Number(colId.slice(1))
+    const i = m - 1
+    const closed = closedMonths.includes(m)
+    const plan = row.months[i]
+    const actual = row.actuals[i]
+    const status = planStatus({ plan, actual, closed, percent: tolerancePercent })
+    let parts = []
+    let unassigned = 0
+    if (cat && row.checkKind === 'group') {
+      parts = partsWithoutLine({ lines: actualIndex.lines(row.targetId, m), parentId: row.parentId, familyIds: row.familyIds, plannedChildIds: row.plannedChildIds, nameOf: tagName })
+    } else if (cat && row.checkKind === 'top' && row.coveredIds) {
+      unassigned = unassignedCents(actualIndex.lines(row.targetId, m), row.coveredIds)
+    }
+    return checkMessage({ where, scope: MONTH_NAMES_LONG[i], plan, actual, status, closed, percent: tolerancePercent, parts, unassigned })
+  }
+  const checkInfo = commentRow?.actuals ? buildCheck(commentRow, commentCell.colId) : null
+
   return (
     <div className="flex h-full flex-col gap-3 px-4 py-3">
       <div className="flex flex-wrap items-center gap-4">
@@ -1933,6 +2028,19 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         {/* The comment field and the (i) icon share one `ml-auto` wrapper,
             same single-auto-margin rule as Konten's toolbar. */}
         <div className="ml-auto flex items-center gap-3">
+        {/* The Plan1 check message, left of the notes box. A fixed slot, so the
+            toolbar never changes height as the cursor moves; the full text is
+            also the tooltip and read out as a status. */}
+        <div
+          role="status"
+          aria-live="polite"
+          title={checkInfo?.text}
+          className={`flex h-8 w-[40rem] max-w-full items-center text-xs leading-4 ${
+            checkInfo?.tone === 'ok' ? 'text-[var(--color-plan-ok)]' : checkInfo?.tone === 'off' ? 'text-[var(--color-plan-off)]' : 'text-[var(--color-text-muted)]'
+          }`}
+        >
+          <span className="line-clamp-2">{checkInfo?.text}</span>
+        </div>
         <CellCommentField
           cell={activeCommentCell}
           inputRef={commentInputRef}

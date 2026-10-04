@@ -11,6 +11,7 @@ import TagPill, { typeLook } from './TagPill'
 import TagBox from './TagBox'
 import { usageOf, useTagActions, useTagUsage, useTags } from './TagsProvider'
 import ui from './lib/uiState'
+import { usePlanTolerance } from './lib/usePlanTolerance'
 import { MERGE_MESSAGES } from './lib/tagMerge'
 import { usageHint } from './lib/tags'
 
@@ -278,6 +279,52 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
       {open && <UsageDetails usage={usage} depth={depth} targetNames={targetNames} onOpenPlan={(pl) => onOpenPlan(pl, pl.tagId ?? tag.id)} onOpenBooking={(b) => onOpenBooking(b, tag.id)} />}
       {error && <div className="px-3 pb-1.5 text-xs text-[var(--color-alert)]" style={{ paddingLeft: 12 + depth * 44 }}>{error}</div>}
     </div>
+  )
+}
+
+// Verlauf's Plan1 colours (Oct 2026, Markus): a ticked month's Plan1 figure turns
+// green when the booked amount is within this percentage of the planned one,
+// another colour when it is off. Stored in settings/app; Verlauf reads it live.
+function PlanToleranceSetting() {
+  const [percent, savePercent] = usePlanTolerance()
+  const show = (v) => String(v).replace('.', ',')
+  const [text, setText] = useState(show(percent))
+  const [editing, setEditing] = useState(false)
+  useEffect(() => {
+    if (!editing) setText(show(percent))
+  }, [percent, editing])
+  function commit() {
+    setEditing(false)
+    const v = Number(text.trim().replace(',', '.'))
+    if (text.trim() !== '' && Number.isFinite(v) && v >= 0 && v <= 100) savePercent(Math.round(v * 10) / 10)
+    else setText(show(percent))
+  }
+  return (
+    <section className="flex flex-wrap items-center gap-3">
+      <h2 className="text-lg font-semibold">Verlauf</h2>
+      <label className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
+        Plan1 gilt als eingehalten, wenn gebucht höchstens
+        <input
+          type="text"
+          inputMode="decimal"
+          value={text}
+          aria-label="Abweichung in Prozent"
+          onFocus={() => setEditing(true)}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.currentTarget.blur()
+            else if (e.key === 'Escape') {
+              setEditing(false)
+              setText(show(percent))
+              e.currentTarget.blur()
+            }
+          }}
+          className="w-16 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-right text-sm text-[var(--color-text)]"
+        />
+        % vom Plan1-Wert abweicht
+      </label>
+    </section>
   )
 }
 
@@ -613,6 +660,7 @@ export default function Settings({ year, onOpenInKonten, onOpenInVerlauf }) {
       onScroll={(e) => ui.set('settings', 'scrollTop', e.currentTarget.scrollTop)}
       className="mx-auto flex w-full max-w-[1440px] flex-1 flex-col gap-4 overflow-y-auto px-4 py-4"
     >
+      <PlanToleranceSetting />
       <section className="flex flex-col gap-3">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h2 className="text-lg font-semibold">Tags</h2>

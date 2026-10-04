@@ -43,6 +43,10 @@
   --color-tag-claim: #4f46e5; /* indigo — claim tags (CPAM, Reisekosten, informal loans, §3g) */
   --color-tag-claim-category: #e11d48; /* rose — claim-category tags (Meal/Taxi/Hotel etc.), only ever offered alongside a claim tag */
   --color-tag-health: #0284c7; /* sky — Krankenkasse claims (Oct 2026) */
+  /* Verlauf's Plan1-vs-booked check (Oct 2026, Markus): green = within the tolerance, orange = off; the tint marks something booked that was never planned. */
+  --color-plan-ok: #15803d;
+  --color-plan-off: #c2410c;
+  --color-plan-unplanned: rgba(249, 115, 22, 0.35);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -72,6 +76,9 @@
     --color-tag-claim: #818cf8;
     --color-tag-claim-category: #fb7185;
     --color-tag-health: #38bdf8;
+    --color-plan-ok: #4ade80;
+    --color-plan-off: #fb923c;
+    --color-plan-unplanned: rgba(251, 146, 60, 0.4);
   }
 }
 
@@ -107,6 +114,9 @@
   --color-tag-claim: #818cf8;
   --color-tag-claim-category: #fb7185;
   --color-tag-health: #38bdf8;
+  --color-plan-ok: #4ade80;
+  --color-plan-off: #fb923c;
+  --color-plan-unplanned: rgba(251, 146, 60, 0.4);
 }
 
 html,
