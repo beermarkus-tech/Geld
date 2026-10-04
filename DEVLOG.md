@@ -2170,3 +2170,7 @@ Markus: in the per-year overview, per holiday, columns: total cost as booked, co
 ## Session 37, continued a hundred-and-eighteenth time — 2026-10-04 — Urlaube cards simplified
 
 Markus: remove the Jahr column from the cards; just the totals per child category (e.g. Ausgaben), whichever year booked. **Done:** `lib/urlaube.js` merges a holiday's rows over all years per child tag (booked / planned / cost / subvention summed; Details and comments from all years; `lastYear` = latest year booked or planned); `Urlaube.jsx` drops the column; a card row opens Konten on the tag in its `lastYear` (a tag filter is year-based, so one year has to be chosen). Tests 15 (+1: a parent-only booking next to children stays its own "(allgemein)" row). Harness: "Unterkünfte" 2024 −300 + 2025 −900 is one row −1.200 €. Card header still says "gebucht 2024–2025" when a holiday's bookings span years. **Note:** the row click now shows only the latest year in Konten, not every year of that child.
+
+## Session 37, continued a hundred-and-nineteenth time — 2026-10-04 — Urlaube overview slimmed
+
+Markus: remove "davon noch offen" from Urlaube je Jahr; in Pro Jahr remove Differenz and Budget, and give the number of holidays its own column. **Done** (`Urlaube.jsx`): Pro Jahr is now *Jahr | Anzahl | Urlaube des Jahres | Im Jahr gebucht*; the planned-amount line under a holiday is gone. `difference` and `budget` are still computed per year in `lib/urlaube.js` (and tested) but no longer shown — can be removed if they stay unused.

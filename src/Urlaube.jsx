@@ -130,17 +130,16 @@ function Reduction({ cost, subvention }) {
 
 // The overviews (right): per year, then each year's holidays.
 function Overview({ years, holidays, untagged, outside, yearFilter, onYear, onHoliday }) {
-  const cols = 'grid grid-cols-[3rem_repeat(4,minmax(0,1fr))] items-baseline gap-x-2'
+  const cols = 'grid grid-cols-[3rem_4rem_repeat(2,minmax(0,1fr))] items-baseline gap-x-2'
   return (
     <aside className="flex flex-col gap-5" aria-label="Übersicht">
       <section className="flex flex-col gap-1.5">
         <h2 className="text-sm font-semibold">Pro Jahr</h2>
         <div className={`${cols} border-b border-[var(--color-border)] pb-1 ${HEAD} normal-case`}>
           <span>Jahr</span>
+          <span className="text-right" title="Anzahl der Urlaube dieses Jahres">Anzahl</span>
           <span className="text-right" title="Gesamtkosten aller Urlaube dieses Jahres, egal wann gebucht">Urlaube des Jahres</span>
           <span className="text-right" title="Alles, was in diesem Jahr gebucht wurde, egal für welchen Urlaub">Im Jahr gebucht</span>
-          <span className="text-right" title="Urlaube des Jahres minus im Jahr gebucht">Differenz</span>
-          <span className="text-right" title="Plan1 der Kategorie Urlaube">Budget</span>
         </div>
         {years.length === 0 && <p className="text-sm text-[var(--color-text-muted)]">Noch nichts gebucht oder geplant.</p>}
         {years.map((y) => (
@@ -153,16 +152,12 @@ function Overview({ years, holidays, untagged, outside, yearFilter, onYear, onHo
             className={`${cols} w-full rounded px-1 py-1 text-left text-sm hover:bg-[var(--color-bg)] ${yearFilter === y.year ? 'bg-[var(--color-bg)] ring-1 ring-[var(--color-computed)]' : ''}`}
           >
             <span className="font-medium">{y.year}</span>
-            <span className="text-right tabular-nums">
-              {y.tripCost === 0 && y.trips === 0 ? '–' : euro(y.tripCost)}
-              {y.trips > 0 && <span className="block text-xs text-[var(--color-text-muted)]">{y.trips} {y.trips === 1 ? 'Urlaub' : 'Urlaube'}</span>}
-            </span>
+            <span className="text-right tabular-nums text-[var(--color-text-muted)]">{y.trips === 0 ? '–' : y.trips}</span>
+            <span className="text-right tabular-nums">{y.tripCost === 0 && y.trips === 0 ? '–' : euro(y.tripCost)}</span>
             <span className="text-right tabular-nums">
               {euro(y.booked)}
               {y.untagged !== 0 && <span className="block text-xs text-[var(--color-text-muted)]">davon ohne Tag {euro(y.untagged)}</span>}
             </span>
-            <span className="text-right tabular-nums text-[var(--color-text-muted)]">{y.difference === 0 ? '–' : `${y.difference > 0 ? '+' : '−'}${euro(Math.abs(y.difference))}`}</span>
-            <span className="text-right tabular-nums text-[var(--color-text-muted)]">{y.budget === 0 ? '–' : euro(y.budget)}</span>
           </button>
         ))}
         {(untagged !== 0 || outside !== 0) && (
@@ -210,7 +205,6 @@ function Overview({ years, holidays, untagged, outside, yearFilter, onYear, onHo
                         {h.tag.name}
                         {h.outside !== 0 && <span className="ml-1 text-xs text-[var(--color-plan-off)]" title="Mit diesem Tag auch in anderen Kategorien gebucht">⚠</span>}
                       </span>
-                      {h.planned !== 0 && <span className="block text-xs text-[var(--color-text-muted)]" title="Davon noch zu buchen, in den Kosten enthalten">davon offen {euro(-h.planned)}</span>}
                     </span>
                     <Money cents={h.total} />
                     <Money cents={h.cost} />
