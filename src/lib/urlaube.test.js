@@ -180,6 +180,12 @@ describe('urlaubeOverview', () => {
     // 2024: only the Anzahlung for a 2025 trip
     expect(y(2024)).toMatchObject({ trips: 0, tripCost: 0, booked: 30000, difference: -30000 })
   })
+  it('names the bookings behind the two reports, with their newest year', () => {
+    expect(o.untaggedTxs.ids.sort()).toEqual(['loose', 'rechnung-only'])
+    expect(o.untaggedTxs.year).toBe(2026)
+    expect(o.outsideTxs).toEqual({ ids: ['other'], year: 2026 })
+    expect(urlaubeOverview({ ...base, categoryId: null }).untaggedTxs).toEqual({ ids: [], year: null })
+  })
   it('reports what is not counted: untagged Urlaube bookings and holiday tags used in other categories', () => {
     expect(o.untagged).toBe(1300)
     expect(h('sco').outside).toBe(-400)
@@ -199,6 +205,6 @@ describe('urlaubeOverview', () => {
     expect(r.holidays.find((x) => x.key === 'sco').rows.map((x) => x.label)).toEqual(['(allgemein)', 'Flüge'])
   })
   it('no category yet: nothing', () => {
-    expect(urlaubeOverview({ ...base, categoryId: null })).toEqual({ holidays: [], years: [], untagged: 0, outside: 0 })
+    expect(urlaubeOverview({ ...base, categoryId: null })).toEqual({ holidays: [], years: [], untagged: 0, outside: 0, untaggedTxs: { ids: [], year: null }, outsideTxs: { ids: [], year: null } })
   })
 })

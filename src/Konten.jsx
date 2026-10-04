@@ -404,6 +404,10 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // A tag filter that spans every year (a holiday opened from Urlaube, Oct 2026) —
   // like a claim's; holds the tag id it was opened for, so any other filter is year-based again.
   const [allYearsTag, setAllYearsTag] = useState(null)
+  // Only these bookings, across all years (a list opened from Urlaube's hints,
+  // Oct 2026) — a Set of transaction ids; cleared by "Filter zurücksetzen", by
+  // picking any other filter, or by the next jump.
+  const [idFilter, setIdFilter] = useState(null)
   // Tracks AG Grid's own column filters (Datum/Empfänger/Kategorie/
   // Unterkategorie/Details/Betrag/Tags' header filters) — separate from
   // accountFilter, which is Konten's own account/tag mechanism, not an AG
@@ -424,8 +428,12 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // Shared by the "Filter zurücksetzen" button and its Ctrl/Cmd+Shift+F
   // shortcut (Markus) — clears both kinds of filter at once, same as the
   // button always has.
-  function resetFilters() {
+  useEffect(() => {
+    if (accountFilter) setIdFilter(null)
+  }, [accountFilter])
+    function resetFilters() {
     setAccountFilter(null)
+    setIdFilter(null)
     gridRef.current?.api?.setFilterModel(null)
   }
   // "Kürzlich gelöscht" toggle (spec.md §2.9a's layer 4), off by default —
@@ -462,6 +470,13 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     const api = gridRef.current?.api
     if (!jump || !api || appliedJumpRef.current === jump.id) return
     appliedJumpRef.current = jump.id
+    setIdFilter(jump.txIds ? new Set(jump.txIds) : null)
+    if (jump.txIds) {
+      api.setFilterModel(null)
+      setAccountFilter(null)
+      setAllYearsTag(null)
+      return
+    }
     // A claim opened from Außenstände: the real tag filter (like clicking the
     // claim in the pinned panel), which spans every year of the claim.
     if (jump.tagId) {
@@ -1498,7 +1513,8 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     return transactions
       // A claim's tag filter shows the claim across all years (a claim often
       // spans two — Oct 2026, Markus); every other filter stays year-based.
-      .filter((t) => isClaimTagFilter || t.date.startsWith(year))
+      .filter((t) => isClaimTagFilter || idFilter || t.date.startsWith(year))
+      .filter((t) => !idFilter || idFilter.has(t.id))
       // Soft-deleted rows (spec.md §2.9a's layer 4) stay hidden by default,
       // same as every other view — the "Kürzlich gelöscht" toggle is the
       // one deliberate exception that lets them back into the grid itself,
@@ -1515,7 +1531,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       })
       .slice()
       .sort((a, b) => (a.date === b.date ? a.id.localeCompare(b.id) : a.date.localeCompare(b.date)))
-  }, [transactions, year, accountFilter, filteredAccountId, tags, showDeleted, receivableView, claimStatus, allYearsTag])
+  }, [transactions, year, accountFilter, filteredAccountId, tags, showDeleted, receivableView, claimStatus, allYearsTag, idFilter])
 
   // Once a pending row (addRow's new row, or a just-edited row that may
   // have moved) actually settles into `rows` — via the Firestore
@@ -2689,7 +2705,12 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
               <span className="tabular-figure font-medium text-[var(--color-computed)]">{centsToEuro(tagFilterSum)} €</span>
             </span>
           )}
-          {(accountFilter || anyColumnFilter) && (
+          {idFilter && (
+            <span className="rounded-full border border-[var(--color-computed)] px-2 py-0.5 text-sm text-[var(--color-text)]">
+              Nur diese {idFilter.size} {idFilter.size === 1 ? 'Buchung' : 'Buchungen'}, alle Jahre
+            </span>
+          )}
+          {(accountFilter || anyColumnFilter || idFilter) && (
             <button
               type="button"
               onClick={resetFilters}

@@ -54,6 +54,8 @@ export function urlaubeCategoryId(categories) {
 }
 
 const sum = (xs) => xs.reduce((s, x) => s + x, 0)
+// { ids, year }: the transactions of a tx id → year map, and the newest of their years.
+const txsOf = (m) => ({ ids: [...m.keys()], year: m.size ? Math.max(...m.values()) : null })
 
 // A row that holds only money in — a Subvention, a Geschenk.
 export const isReductionRow = (r) => r.subvention > 0 && r.cost === 0
@@ -89,9 +91,11 @@ const distinct = (texts, limit) => {
   return out.length > limit ? [...out.slice(0, limit), '…'] : out
 }
 
-// @returns {{ holidays: object[], years: object[], untagged: number, outside: number }}
+// `untaggedTxs` / `outsideTxs` (`{ ids, year }`, newest year) are the bookings behind
+// those two reports, for "show me" links.
+// @returns {{ holidays: object[], years: object[], untagged: number, outside: number, untaggedTxs: object, outsideTxs: object }}
 export function urlaubeOverview({ categoryId, incomeIds = new Set(), tags = [], transactions = [], budgets = [], cellComments = [], closedByYear = new Map(), todayYear }) {
-  if (!categoryId) return { holidays: [], years: [], untagged: 0, outside: 0 }
+  if (!categoryId) return { holidays: [], years: [], untagged: 0, outside: 0, untaggedTxs: { ids: [], year: null }, outsideTxs: { ids: [], year: null } }
   const tagById = new Map(tags.map((t) => [t.id, t]))
   const isGrouping = (id) => tagById.get(id)?.class === 'grouping'
   const place = (tagId) => {
@@ -123,6 +127,8 @@ export function urlaubeOverview({ categoryId, incomeIds = new Set(), tags = [], 
   const bookedByYear = new Map() // everything booked in the category per year (cents)
   const untaggedByYear = new Map()
   const outsideByRoot = new Map()
+  const untaggedTx = new Map() // tx id → year
+  const outsideTx = new Map() // root id → Map(tx id → year)
   const extras = [] // money in booked outside Urlaube, added once its holiday is known
   const add = (m, k, v) => m.set(k, (m.get(k) ?? 0) + v)
 
@@ -139,7 +145,12 @@ export function urlaubeOverview({ categoryId, incomeIds = new Set(), tags = [], 
         // wherever it was booked — an Einnahmen category, an expense category,
         // none yet; money out in another category is only reported.
         const belongs = id && (incomeIds.has(line.categoryId) || cents > 0)
-        if (id && !belongs) add(outsideByRoot, place(id).root.id, cents)
+        if (id && !belongs) {
+          const rootId = place(id).root.id
+          add(outsideByRoot, rootId, cents)
+          if (!outsideTx.has(rootId)) outsideTx.set(rootId, new Map())
+          outsideTx.get(rootId).set(tx.id, year)
+        }
         if (belongs) {
           // Details as Konten shows them: a split line's own, else the booking's.
           const { root, child } = place(id)
@@ -150,6 +161,7 @@ export function urlaubeOverview({ categoryId, incomeIds = new Set(), tags = [], 
       add(bookedByYear, year, cents)
       if (!id) {
         add(untaggedByYear, year, cents)
+        untaggedTx.set(tx.id, year)
         continue
       }
       const { root, child } = place(id)
@@ -317,5 +329,7 @@ export function urlaubeOverview({ categoryId, incomeIds = new Set(), tags = [], 
     untagged: -sum([...untaggedByYear.values()]),
     // what carries a holiday's tag in other categories (not counted anywhere)
     outside: -sum(holidays.map((h) => h.outside)),
+    untaggedTxs: txsOf(untaggedTx),
+    outsideTxs: txsOf(new Map(holidays.flatMap((h) => [...(outsideTx.get(h.key) ?? [])]))),
   }
 }

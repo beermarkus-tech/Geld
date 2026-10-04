@@ -175,7 +175,7 @@ function Reduction({ cost, subvention }) {
 }
 
 // The overviews (right): per year, then each year's holidays.
-function Overview({ years, holidays, untagged, outside, yearFilter, onYear, onHoliday }) {
+function Overview({ years, holidays, untagged, outside, untaggedTxs, outsideTxs, onOpenTxs, yearFilter, onYear, onHoliday }) {
   const cols = 'grid grid-cols-[3rem_4rem_repeat(2,minmax(0,1fr))] items-baseline gap-x-2'
   return (
     <aside className="flex flex-col gap-5" aria-label="Übersicht">
@@ -208,8 +208,16 @@ function Overview({ years, holidays, untagged, outside, yearFilter, onYear, onHo
         ))}
         {(untagged !== 0 || outside !== 0) && (
           <div className="mt-1 space-y-0.5 text-xs text-[var(--color-plan-off)]">
-            {untagged !== 0 && <p>Hinweis: {euro(untagged)} in Urlaube ohne Urlaubs-Tag gebucht — zählt zu „Im Jahr gebucht“, aber zu keinem Urlaub.</p>}
-            {outside !== 0 && <p>Hinweis: {euro(outside)} Ausgaben mit Urlaubs-Tags in anderen Kategorien — nirgends mitgezählt.</p>}
+            {untagged !== 0 && (
+              <button type="button" onClick={() => onOpenTxs(untaggedTxs)} title="Diese Buchungen in Konten zeigen" className="block text-left hover:underline">
+                Hinweis: {euro(untagged)} in Urlaube ohne Urlaubs-Tag gebucht — zählt zu „Im Jahr gebucht“, aber zu keinem Urlaub. Anzeigen →
+              </button>
+            )}
+            {outside !== 0 && (
+              <button type="button" onClick={() => onOpenTxs(outsideTxs)} title="Diese Buchungen in Konten zeigen" className="block text-left hover:underline">
+                Hinweis: {euro(outside)} Ausgaben mit Urlaubs-Tags in anderen Kategorien — nirgends mitgezählt. Anzeigen →
+              </button>
+            )}
           </div>
         )}
       </section>
@@ -368,6 +376,9 @@ export default function Urlaube({ onOpenInKonten, onOpenInVerlauf, active = true
     const year = h.planYears.includes(h.tripYear) ? h.tripYear : (h.planYears.at(-1) ?? h.tripYear)
     onOpenInVerlauf({ year: String(year), targetKey: 'categoryId', targetId: categoryId, planVersion: 'plan1', groupId: h.tag.id, from: 'urlaube' })
   }
+  // A hint's bookings: Konten shows exactly these, across all years (the app year is
+  // the newest of them); Esc comes back here.
+  const openTxs = ({ ids, year }) => ids.length > 0 && onOpenInKonten({ txIds: ids, year: String(year), from: 'urlaube' })
   // A holiday in the overview scrolls to its card (showing archive/search state as needed).
   function jumpTo(h) {
     if (Boolean(h.tag.archived) !== archive) setArchive(Boolean(h.tag.archived))
@@ -464,6 +475,9 @@ export default function Urlaube({ onOpenInKonten, onOpenInVerlauf, active = true
             holidays={overview.holidays}
             untagged={overview.untagged}
             outside={overview.outside}
+            untaggedTxs={overview.untaggedTxs}
+            outsideTxs={overview.outsideTxs}
+            onOpenTxs={openTxs}
             yearFilter={yearFilter}
             onYear={(y) => setYearFilter((cur) => (cur === y ? null : y))}
             onHoliday={jumpTo}

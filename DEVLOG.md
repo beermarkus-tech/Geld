@@ -2230,3 +2230,7 @@ Markus (correcting my previous round): he had meant *remove the budget* — only
 ## Session 37, continued a hundred-and-thirty-third time — 2026-10-04 — Urlaube: deviation hint from 50 €
 
 Markus: raise the deviation message threshold to 50 €. **Done:** `BUDGET_HINT_CENTS` 500 → 5000 in `lib/urlaube.js` (the card's Budget-vs-Gesamt hint shows only above 50 €; exactly 50 € is still silent). Test boundaries 49 / 50 / 51 €. SPEC §3j updated.
+
+## Session 37, continued a hundred-and-thirty-fourth time — 2026-10-04 — Urlaube: the hints open the bookings behind them
+
+Markus (screenshot, Build 247 on the tablet): "there are 99 euros without tag, take me to them when I click on the comment". **Done:** the note under Pro Jahr is a link; `urlaubeOverview` now returns `untaggedTxs` and `outsideTxs` (`{ ids, year }`); `Urlaube.jsx` → `onOpenInKonten({ txIds, year, from: 'urlaube' })`; Konten got an `idFilter` (a Set of transaction ids, all years) with a chip "Nur diese n Buchungen, alle Jahre", cleared by "Filter zurücksetzen", by picking an account/tag filter or by the next jump. Same mechanism for the second note (Ausgaben with holiday tags in other categories) — I added that one unasked, it was the same few lines. Tests 22. Harness: "ohne Urlaubs-Tag" → the one untagged booking, Esc back; "anderen Kategorien" → the 6 bookings, reset clears the chip. **Not done:** the card-level "in anderen Kategorien" hint is still plain text; the per-year "davon ohne Tag" line under Im Jahr gebucht is not a link (it sits inside the clickable year row).
