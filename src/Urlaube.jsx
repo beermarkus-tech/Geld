@@ -54,7 +54,7 @@ function Card({ card, flash, onOpenRow, innerRef }) {
 
       {card.outside !== 0 && (
         <p className="text-xs text-[var(--color-plan-off)]">
-          Hinweis: {euro(-card.outside)} mit diesem Tag in anderen Kategorien (außer Einnahmen) gebucht — hier nicht mitgezählt.
+          Hinweis: {euro(-card.outside)} Ausgaben mit diesem Tag in anderen Kategorien — hier nicht mitgezählt (Zuschüsse und Geschenke zählen immer mit).
         </p>
       )}
 
@@ -163,7 +163,7 @@ function Overview({ years, holidays, untagged, outside, yearFilter, onYear, onHo
         {(untagged !== 0 || outside !== 0) && (
           <div className="mt-1 space-y-0.5 text-xs text-[var(--color-plan-off)]">
             {untagged !== 0 && <p>Hinweis: {euro(untagged)} in Urlaube ohne Urlaubs-Tag gebucht — zählt zu „Im Jahr gebucht“, aber zu keinem Urlaub.</p>}
-            {outside !== 0 && <p>Hinweis: {euro(outside)} mit Urlaubs-Tags in anderen Kategorien (außer Einnahmen) gebucht — nirgends mitgezählt.</p>}
+            {outside !== 0 && <p>Hinweis: {euro(outside)} Ausgaben mit Urlaubs-Tags in anderen Kategorien — nirgends mitgezählt.</p>}
           </div>
         )}
       </section>

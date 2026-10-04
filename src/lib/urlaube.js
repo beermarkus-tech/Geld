@@ -25,11 +25,12 @@ import { isAnchorTransaction } from './balance'
 // business): a tag whose top-level tag starts with a year ("2025 La Rochelle")
 // or is typed Reise/Projekt; the year-named one wins. A line with no such tag
 // has no holiday.
-// What counts: the category Urlaube, plus the holiday's bookings in the
-// Einnahmen categories (a subvention or gift lands in "Sonstige Einnahmen" but
-// belongs to the holiday and reduces its cost). Bookings with a holiday's tag in
-// any *other* category are not counted but reported (`outside`), as are Urlaube
-// bookings with no holiday tag (`untagged`).
+// What counts: the category Urlaube, plus every booking with the holiday's tag
+// that is money in (positive) or sits in an Einnahmen category — a subvention or
+// gift lands in "Sonstige Einnahmen", or wherever it was booked, but belongs to
+// the holiday and reduces its cost. Money *out* with a holiday's tag in any other
+// category is not counted but reported (`outside`), as are Urlaube bookings with
+// no holiday tag (`untagged`).
 //
 // Per year (`years`): `tripCost` = the total of the holidays *of* that year,
 // whenever booked; `booked` = everything booked in that year, whichever holiday
@@ -83,8 +84,11 @@ export function urlaubeOverview({ categoryId, incomeIds = new Set(), tags = [], 
     const parent = t.parentTag ? tagById.get(t.parentTag) : null
     return parent ? { root: parent, child: t } : { root: t, child: null }
   }
-  // A holiday's top-level tag: named with a year, or typed Reise/Projekt.
-  const isHolidayRoot = (root) => /^\s*\d{4}/.test(root.name) || root.groupingType === 'project'
+  // A holiday's top-level tag: named with a year, or typed Reise/Projekt —
+  // never a Dienstreise, Anspruch, Krankenkasse or Abrechnung tag, whose names
+  // also start with a year ("2026-05 HAM").
+  const NOT_HOLIDAY = new Set(['business-trip', 'claim', 'health-insurance', 'statement'])
+  const isHolidayRoot = (root) => !NOT_HOLIDAY.has(root.groupingType) && (/^\s*\d{4}/.test(root.name) || root.groupingType === 'project')
   // The holiday tag of a set of tag ids (the year-named one first), or null.
   const holidayTag = (tagIds) => {
     const found = (tagIds ?? []).filter(isGrouping).map((id) => ({ id, root: place(id).root })).filter((x) => isHolidayRoot(x.root))
@@ -104,6 +108,7 @@ export function urlaubeOverview({ categoryId, incomeIds = new Set(), tags = [], 
   const bookedByYear = new Map() // everything booked in the category per year (cents)
   const untaggedByYear = new Map()
   const outsideByRoot = new Map()
+  const extras = [] // money in booked outside Urlaube, added once its holiday is known
   const add = (m, k, v) => m.set(k, (m.get(k) ?? 0) + v)
 
   for (const tx of transactions) {
@@ -115,10 +120,17 @@ export function urlaubeOverview({ categoryId, incomeIds = new Set(), tags = [], 
       const id = holidayTag(line.tags)
       const cents = line.amountCents ?? 0
       if (line.categoryId !== categoryId) {
-        // Income categories (a subvention, a gift) belong to the holiday; any
-        // other category is only reported.
-        if (id && !incomeIds.has(line.categoryId)) add(outsideByRoot, place(id).root.id, cents)
-        if (!id || !incomeIds.has(line.categoryId)) continue
+        // Money in (a subvention, a gift, a refund) belongs to the holiday
+        // wherever it was booked — an Einnahmen category, an expense category,
+        // none yet; money out in another category is only reported.
+        const belongs = id && (incomeIds.has(line.categoryId) || cents > 0)
+        if (id && !belongs) add(outsideByRoot, place(id).root.id, cents)
+        if (belongs) {
+          // Details as Konten shows them: a split line's own, else the booking's.
+          const { root, child } = place(id)
+          extras.push({ root, child, year, month, date: tx.date, cents, detail: String((tx.lines.length > 1 && line.note) || tx.detail || '').trim() })
+        }
+        continue
       }
       add(bookedByYear, year, cents)
       if (!id) {
@@ -139,6 +151,16 @@ export function urlaubeOverview({ categoryId, incomeIds = new Set(), tags = [], 
     const c = cellFor(root, child, b.year)
     c.plan[b.month - 1] += b.plannedAmountCents ?? 0
     if ((b.plannedAmountCents ?? 0) !== 0) c.planMonths += 1
+  }
+
+  // A subvention or gift counts for a holiday that really is one: a tag with at
+  // least one booking or Plan1 line in Urlaube (so a Dienstreise repayment
+  // never makes a card of its own).
+  const active = new Set([...cells.values()].filter((c) => c.entries.length > 0 || c.planMonths > 0).map((c) => c.root.id))
+  for (const x of extras) {
+    if (!active.has(x.root.id)) continue
+    add(bookedByYear, x.year, x.cents)
+    cellFor(x.root, x.child, x.year).entries.push({ month: x.month, date: x.date, cents: x.cents, detail: x.detail })
   }
 
   // Verlauf's comments on a child's Plan1 cells: rowId "categoryId:CAT:plan1:TAG".

@@ -90,6 +90,31 @@ describe('urlaubeOverview', () => {
     expect(h('it').cost - h('it').subvention).toBe(h('it').total)
     expect(h('it').rows[0]).toMatchObject({ cost: 60000, subvention: 2000 })
   })
+  it('money in with a holiday tag counts wherever it was booked; money out elsewhere is only reported', () => {
+    const r = urlaubeOverview({
+      ...base,
+      transactions: [
+        ...transactions,
+        tx('sub-expense-cat', '2026-06-10', 7000, ['it'], 'food'), // a subvention booked in an expense category
+        tx('sub-no-cat', '2026-06-11', 3000, ['it'], null), // not categorised yet
+        tx('sub-old-cat', '2026-06-12', 1000, ['it'], 'einnahmen-erstattungen'), // a category that no longer exists
+        tx('out-elsewhere', '2026-06-13', -9000, ['it'], 'food'),
+      ],
+    })
+    const it = r.holidays.find((x) => x.key === 'it')
+    expect(it.subvention).toBe(2000 + 7000 + 3000 + 1000)
+    expect(it.cost).toBe(60000) // the -9000 elsewhere is not a cost here
+    expect(it.outside).toBe(-9000)
+  })
+  it('repayments of Dienstreise / Anspruch tags make no holiday card, and a subvention alone makes none either', () => {
+    const t2 = [
+      ...tags,
+      { id: 'ham', name: '2026-05 HAM', parentTag: null, class: 'grouping', groupingType: 'business-trip' },
+      { id: 'get', name: '2026-06 GET', parentTag: null, class: 'grouping', groupingType: null }, // untyped, year-named
+    ]
+    const r = urlaubeOverview({ ...base, tags: t2, transactions: [...transactions, tx('hamrepay', '2026-06-01', 4500, ['ham'], 'food'), tx('getrepay', '2026-06-02', 124500, ['get'], 'food')] })
+    expect(r.holidays.map((x) => x.key)).toEqual(['it', 'sco', 'lr'])
+  })
   it('only the holiday tag counts when a line carries several tags', () => {
     // "Rechnung offen" is first on the line, yet the booking is La Rochelle's
     expect(h('lr').booked).toBe(-100000) // 2025's -70000 plus the 2024 Anzahlung, none lost to the Rechnung tag
