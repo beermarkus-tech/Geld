@@ -11,7 +11,7 @@ import { useValueWhileVisible } from './lib/useDeferWhileHidden'
 import NavShell, { ALL_ITEMS } from './NavShell'
 import PlaceholderScreen from './PlaceholderScreen'
 import Aussenstaende from './Aussenstaende'
-import Fortschritt from './Fortschritt'
+import Urlaube from './Urlaube'
 import Planung from './Planung'
 import Quickview from './Quickview'
 import Settings from './Settings'
@@ -326,8 +326,8 @@ export default function App() {
           <Aussenstaende onOpenInKonten={openInKonten} active={view === 'aussenstaende'} />
         </div>
         {/* Mounted once, only hidden — like Quickview (Oct 2026). */}
-        <div className={view === 'fortschritt' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
-          <Fortschritt onOpenInKonten={openInKonten} active={view === 'fortschritt'} />
+        <div className={view === 'urlaube' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
+          <Urlaube onOpenInKonten={openInKonten} active={view === 'urlaube'} />
         </div>
         {view === 'settings' && <Settings year={year} onOpenInKonten={openInKonten} onOpenInVerlauf={openInVerlauf} />}
         {view === 'importexport' && <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} />}
@@ -336,7 +336,7 @@ export default function App() {
             resolved Sept 2026 (Markus): a real nav entry exists for each
             from the start anyway, landing on a plain placeholder rather than
             being left out until its own phase ships. */}
-        {!['konten', 'verlauf', 'planung', 'quickview', 'fortschritt', 'aussenstaende', 'importexport', 'settings'].includes(view) && (
+        {!['konten', 'verlauf', 'planung', 'quickview', 'urlaube', 'aussenstaende', 'importexport', 'settings'].includes(view) && (
           <PlaceholderScreen title={ALL_ITEMS.find((i) => i.id === view)?.label ?? view} />
         )}
       </NavShell>

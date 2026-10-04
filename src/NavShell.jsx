@@ -19,7 +19,7 @@ export const PRIMARY_ITEMS = [
 ]
 export const MORE_ITEMS = [
   { id: 'quickview', label: 'Quickview' },
-  { id: 'fortschritt', label: 'Fortschritt' },
+  { id: 'urlaube', label: 'Urlaube' },
   { id: 'monatsabschluss', label: 'Monatsabschluss' },
   { id: 'aussenstaende', label: 'Außenstände' },
   { id: 'importexport', label: 'Import/Export' },
@@ -29,7 +29,7 @@ export const MORE_ITEMS = [
 // Planung swapped — Quickview now 4th/Ctrl+4, Planung 5th/Ctrl+5). Kept
 // separate from the PRIMARY/MORE split above, which is the *phone* layout
 // (bottom bar vs. "More" sheet) and was deliberately left as it was.
-const NAV_ORDER = ['dashboard', 'konten', 'verlauf', 'quickview', 'planung', 'fortschritt', 'monatsabschluss', 'aussenstaende', 'importexport', 'settings']
+const NAV_ORDER = ['dashboard', 'konten', 'verlauf', 'quickview', 'planung', 'urlaube', 'monatsabschluss', 'aussenstaende', 'importexport', 'settings']
 const BY_ID = Object.fromEntries([...PRIMARY_ITEMS, ...MORE_ITEMS].map((i) => [i.id, i]))
 export const ALL_ITEMS = NAV_ORDER.map((id) => BY_ID[id])
 

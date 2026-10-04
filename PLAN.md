@@ -82,7 +82,7 @@ See `CLAUDE.md` for how this fits alongside `spec.md` and `DEVLOG.md`.
 **Moved ahead of Dashboard (was after it) — external review, Sept 2026: Dashboard's alerts band (§1b.2) is specced to surface open Außenstände items, which didn't exist yet under the original ordering. Nothing in this phase depends on Dashboard, so moving it earlier costs nothing.**
 
 - Tag-based claim/loan net-zero closure mechanism (§3g), including the close-out action for partial settlements. *Built: Oct 2026, see DEVLOG — Außenstände screen and Konten's open-claim dot; the close-out action was built and then dropped at Markus's request, so the "under-pay a test claim" half of the deliverable below no longer applies.*
-- Fortschritt's Kategorie/Unterkategorie selector with auto-discovered tag cards (§3j). *Built: Oct 2026, see DEVLOG.*
+- Fortschritt's Kategorie/Unterkategorie selector with auto-discovered tag cards (§3j). *Built Oct 2026, then reworked twice the same week into the holiday-only "Urlaube" screen with year overviews (§3j, see DEVLOG).*
 - Quickview drill-down.
   - **Reordered Oct 2026 (Markus): Quickview is built first, ahead of Phase 3 (CSV import) and Phase 4 (parallel-run month)** — it only reads existing Konten data, so nothing blocks it. The rest of Phase 5 (Außenstände, Fortschritt) keeps its place. *Built: Oct 2026, see DEVLOG.*
 

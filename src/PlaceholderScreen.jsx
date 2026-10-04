@@ -1,5 +1,5 @@
 // Stand-in for every nav destination spec.md §1b.2 lists that isn't built
-// yet (Dashboard, Quickview, Fortschritt, Monatsabschluss, Außenstände,
+// yet (Dashboard, Quickview, Urlaube, Monatsabschluss, Außenstände,
 // Settings) — resolved Sept 2026 (Markus): every item gets a real nav
 // entry from the start rather than being left out until its own phase
 // ships, so the nav's shape is visibly complete even while most of it is
