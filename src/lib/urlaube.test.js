@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { incomeCategoryIds, urlaubeCategoryId, urlaubeOverview } from './urlaube'
+import { incomeCategoryIds, reductionPercent, urlaubeCategoryId, urlaubeOverview } from './urlaube'
 
 const categories = [
   { id: 'sonst', name: 'Sonstiges', parentCategoryId: null },
@@ -45,6 +45,16 @@ describe('urlaubeCategoryId', () => {
   })
 })
 
+describe('reductionPercent', () => {
+  it('total cost ÷ cost only − 1, in whole percent', () => {
+    expect(reductionPercent(100000, 20000)).toBe(-20)
+    expect(reductionPercent(300000, 10000)).toBe(-3)
+    expect(reductionPercent(100000, 0)).toBe(0)
+    expect(reductionPercent(100000, 150000)).toBe(-150) // more subsidy than cost
+    expect(reductionPercent(0, 5)).toBeNull()
+  })
+})
+
 describe('incomeCategoryIds', () => {
   it('the categories of the group Einnahmen', () => {
     expect([...incomeCategoryIds(categories)]).toEqual(['sonst-einn'])
@@ -72,6 +82,13 @@ describe('urlaubeOverview', () => {
   it('a subvention or gift in an income category belongs to the holiday and reduces its cost', () => {
     expect(h('it').rows[0].booked).toBe(-8000)
     expect(o.outside).toBe(400) // the income booking is not "outside"
+  })
+  it('splits every holiday into cost only (negative bookings) and subventions + gifts (positive ones)', () => {
+    // Italien: -10000 flight booked, +2000 gift, -50000 still planned
+    expect(h('it')).toMatchObject({ cost: 60000, subvention: 2000, total: 58000 })
+    expect(h('lr')).toMatchObject({ cost: 100000, subvention: 0, total: 100000 })
+    expect(h('it').cost - h('it').subvention).toBe(h('it').total)
+    expect(h('it').rows[0]).toMatchObject({ cost: 60000, subvention: 2000 })
   })
   it('only the holiday tag counts when a line carries several tags', () => {
     // "Rechnung offen" is first on the line, yet the booking is La Rochelle's

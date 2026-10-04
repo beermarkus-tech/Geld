@@ -16,7 +16,8 @@ import { isAnchorTransaction } from './balance'
 //                current one without ticks) as fully planned; a booking after
 //                the split is not "gebucht" but reads "davon schon gebucht"
 //   rows         per child tag and year: Details of the bookings, Verlauf's
-//                comments on that line, booked and still to be booked
+//                comments on that line, booked and still to be booked, and the
+//                same as cost only / subventions + gifts
 // Which tag on a line is the holiday tag (Oct 2026, Markus: a line may also
 // carry a Rechnung tag or other grouping tags, which are none of this screen's
 // business): a tag whose top-level tag starts with a year ("2025 La Rochelle")
@@ -49,6 +50,14 @@ export function urlaubeCategoryId(categories) {
 }
 
 const sum = (xs) => xs.reduce((s, x) => s + x, 0)
+
+// The reduction a holiday got from subventions and gifts: total cost ÷ cost
+// only − 1, in whole percent (−20 for 800 € left of 1.000 €). Null without a
+// cost to compare to.
+export function reductionPercent(cost, subvention) {
+  if (!(cost > 0)) return null
+  return Math.round(((cost - subvention) / cost - 1) * 100) + 0
+}
 const distinct = (texts, limit) => {
   const seen = new Set()
   const out = []
@@ -152,6 +161,12 @@ export function urlaubeOverview({ categoryId, incomeIds = new Set(), tags = [], 
     const booked = sum(c.entries.filter((e) => e.month <= pivot).map((e) => e.cents))
     const plannedBooked = sum(c.entries.filter((e) => e.month > pivot).map((e) => e.cents))
     const planned = sum(c.plan.filter((_, i) => i + 1 > pivot))
+    // Cost only (negative bookings) and subventions + gifts (positive bookings),
+    // as plus numbers; what is still planned counts by its sign. cost −
+    // subvention is the total cost.
+    const bookedEntries = c.entries.filter((e) => e.month <= pivot).map((e) => e.cents)
+    const cost = -sum(bookedEntries.filter((v) => v < 0)) + (planned < 0 ? -planned : 0)
+    const subvention = sum(bookedEntries.filter((v) => v > 0)) + (planned > 0 ? planned : 0)
     let prognose = 0
     for (let m = 1; m <= 12; m++) prognose += closed.has(m) ? sum(c.entries.filter((e) => e.month === m).map((e) => e.cents)) : c.plan[m - 1]
     const tagId = c.child ? c.child.id : c.root.id
@@ -166,6 +181,8 @@ export function urlaubeOverview({ categoryId, incomeIds = new Set(), tags = [], 
       booked,
       planned,
       plannedBooked,
+      cost,
+      subvention,
       count: c.entries.length,
       _budget: sum(c.plan),
       _prognose: prognose,
@@ -194,6 +211,8 @@ export function urlaubeOverview({ categoryId, incomeIds = new Set(), tags = [], 
       plannedBooked: sum(rows.map((r) => r.plannedBooked)),
       // what it costs, as a plus number
       total: -(booked + planned),
+      cost: sum(rows.map((r) => r.cost)),
+      subvention: sum(rows.map((r) => r.subvention)),
       outside: outsideByRoot.get(root.id) ?? 0,
       rows: rows.map(({ _budget, _prognose, _last, ...r }) => ({ ...r, label: r.label ?? (hasChildRows ? '(allgemein)' : null) })),
     }

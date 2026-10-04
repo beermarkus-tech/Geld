@@ -4,7 +4,7 @@ import { collection, onSnapshot } from 'firebase/firestore'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { db } from './firebase'
 import { centsToWholeEuro } from './lib/format'
-import { incomeCategoryIds, urlaubeCategoryId, urlaubeOverview } from './lib/urlaube'
+import { incomeCategoryIds, reductionPercent, urlaubeCategoryId, urlaubeOverview } from './lib/urlaube'
 import ui from './lib/uiState'
 import TagPill from './TagPill'
 import { useTags } from './TagsProvider'
@@ -122,6 +122,14 @@ function Card({ card, flash, onOpenRow, innerRef }) {
   )
 }
 
+const HOL = 'grid grid-cols-[minmax(0,1fr)_4.75rem_4.75rem_4.75rem_5.25rem] items-baseline gap-x-2'
+const Money = ({ cents }) => <span className={`text-right tabular-nums ${cents === 0 ? 'text-[var(--color-text-muted)]' : ''}`}>{cents === 0 ? '–' : euro(cents)}</span>
+// −20 % = the subventions took a fifth off the cost; "–" without any.
+function Reduction({ cost, subvention }) {
+  const pct = subvention === 0 ? null : reductionPercent(cost, subvention)
+  return <span className="text-right tabular-nums text-[var(--color-text-muted)]">{pct === null ? '–' : `${pct < 0 ? '−' : ''}${Math.abs(pct)} %`}</span>
+}
+
 // The overviews (right): per year, then each year's holidays.
 function Overview({ years, holidays, untagged, outside, yearFilter, onYear, onHoliday }) {
   const cols = 'grid grid-cols-[3rem_repeat(4,minmax(0,1fr))] items-baseline gap-x-2'
@@ -167,34 +175,54 @@ function Overview({ years, holidays, untagged, outside, yearFilter, onYear, onHo
         )}
       </section>
 
-      <section className="flex flex-col gap-3">
+      <section className="flex flex-col gap-1.5">
         <h2 className="text-sm font-semibold">Urlaube je Jahr</h2>
+        <div className={`${HOL} border-b border-[var(--color-border)] pb-1 ${HEAD} normal-case`}>
+          <span>Urlaub</span>
+          <span className="text-right" title="Gesamtkosten = Kosten minus Zuschüsse und Geschenke (gebucht + noch geplant)">Gesamt</span>
+          <span className="text-right" title="Nur Kosten: alle Ausgaben (negative Buchungen) plus noch Geplantes">Kosten</span>
+          <span className="text-right" title="Zuschüsse und Geschenke: alle positiven Buchungen">Zuschüsse</span>
+          <span className="text-right" title="Gesamtkosten ÷ Kosten − 1, auf ganze Prozent gerundet">Reduktion</span>
+        </div>
         {years
           .filter((y) => y.trips > 0)
-          .map((y) => (
-            <div key={y.year} className="flex flex-col">
-              <div className="mb-0.5 flex items-baseline justify-between border-b border-[var(--color-border)] pb-0.5">
-                <span className="text-sm font-medium">{y.year}</span>
-                <span className="text-sm tabular-nums">{euro(y.tripCost)}</span>
-              </div>
-              {holidays
-                .filter((h) => h.tripYear === y.year)
-                .map((h) => (
+          .map((y) => {
+            const list = holidays.filter((h) => h.tripYear === y.year)
+            const cost = list.reduce((a, h) => a + h.cost, 0)
+            const subvention = list.reduce((a, h) => a + h.subvention, 0)
+            return (
+              <div key={y.year} className="mt-1 flex flex-col">
+                <div className={`${HOL} border-b border-[var(--color-border)] px-1 pb-0.5 text-sm font-medium`}>
+                  <span>{y.year}</span>
+                  <Money cents={cost - subvention} />
+                  <Money cents={cost} />
+                  <Money cents={subvention} />
+                  <Reduction cost={cost} subvention={subvention} />
+                </div>
+                {list.map((h) => (
                   <button
                     key={h.key}
                     type="button"
                     onClick={() => onHoliday(h)}
                     title="Zur Karte springen"
-                    className="flex w-full items-baseline gap-2 rounded px-1 py-0.5 text-left text-sm hover:bg-[var(--color-bg)]"
+                    className={`${HOL} w-full rounded px-1 py-0.5 text-left text-sm hover:bg-[var(--color-bg)]`}
                   >
-                    <span className="min-w-0 flex-1 truncate">{h.tag.name}</span>
-                    {h.outside !== 0 && <span className="text-xs text-[var(--color-plan-off)]" title="Mit diesem Tag auch in anderen Kategorien gebucht">⚠</span>}
-                    {h.planned !== 0 && <span className="text-xs text-[var(--color-text-muted)]" title="Davon noch zu buchen">offen {euro(-h.planned)}</span>}
-                    <span className="shrink-0 tabular-nums">{euro(h.total)}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate">
+                        {h.tag.name}
+                        {h.outside !== 0 && <span className="ml-1 text-xs text-[var(--color-plan-off)]" title="Mit diesem Tag auch in anderen Kategorien gebucht">⚠</span>}
+                      </span>
+                      {h.planned !== 0 && <span className="block text-xs text-[var(--color-text-muted)]" title="Davon noch zu buchen, in den Kosten enthalten">davon offen {euro(-h.planned)}</span>}
+                    </span>
+                    <Money cents={h.total} />
+                    <Money cents={h.cost} />
+                    <Money cents={h.subvention} />
+                    <Reduction cost={h.cost} subvention={h.subvention} />
                   </button>
                 ))}
-            </div>
-          ))}
+              </div>
+            )
+          })}
       </section>
     </aside>
   )
@@ -360,7 +388,7 @@ export default function Urlaube({ onOpenInKonten, active = true }) {
 
       {categories.length > 0 && !categoryId && <p className="text-sm text-[var(--color-text-muted)]">Die Kategorie Sonstiges › Urlaube gibt es nicht.</p>}
 
-      <div className="mx-auto grid min-h-0 w-full max-w-[1800px] flex-1 grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-6">
+      <div className="mx-auto grid min-h-0 w-full max-w-[1800px] flex-1 grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-6">
         <div className="flex min-h-0 flex-col gap-4 overflow-y-auto pr-1">
           {shown.length === 0 && (
             <p className="text-sm text-[var(--color-text-muted)]">{overview.holidays.length === 0 ? 'Noch keine Urlaube mit Buchungen oder Plan.' : 'Nichts gefunden.'}</p>
