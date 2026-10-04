@@ -2226,3 +2226,7 @@ Markus: replace "Prognose" with "Gesamt", remove Prognose, but a text hint when 
 ## Session 37, continued a hundred-and-thirty-second time — 2026-10-04 — Urlaube card: only Gesamt, hint against the budget
 
 Markus (correcting my previous round): he had meant *remove the budget* — only Gesamt stays in the header, plus a warning if the "prognose (i.e. budget)" deviates from Gesamt by more than a few euros. **Done:** the card header shows only **Gesamt**; `budgetDeviation()` replaces `prognoseDeviation()` (5 € limit): "Hinweis: Das Budget (Plan1) von … weicht um … von Gesamt (…) ab — Plan1 prüfen." The Prognose figure is removed from the library as well (`prognose`, the per-month closed set). Harness (mock): Italien budget −400 vs Gesamt −600 → hint (a −250 flight booked but never planned), La Rochelle −1.000 vs −1.290 → hint. **Note:** since Plan1 rarely equals reality to the euro, expect a hint on most holidays until Plan1 is trued up — the same idea as Verlauf's green/orange cells. The Budget figure itself is still in the data (feeds the hint) but no longer shown.
+
+## Session 37, continued a hundred-and-thirty-third time — 2026-10-04 — Urlaube: deviation hint from 50 €
+
+Markus: raise the deviation message threshold to 50 €. **Done:** `BUDGET_HINT_CENTS` 500 → 5000 in `lib/urlaube.js` (the card's Budget-vs-Gesamt hint shows only above 50 €; exactly 50 € is still silent). Test boundaries 49 / 50 / 51 €. SPEC §3j updated.

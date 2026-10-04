@@ -140,8 +140,9 @@ describe('urlaubeOverview', () => {
     // Italien: plan -50000 (September, still to come) -> budget -50000; booked -8000 + planned -50000 -> gesamt -58000
     expect(budgetDeviation(h('it'))).toBe(-50000 - (-8000 + -50000))
     // La Rochelle: planned 100000 in August 2025, booked 100000 -> no deviation
-    expect(budgetDeviation({ budget: -10000, booked: -10300, planned: 0 })).toBe(0)
-    expect(budgetDeviation({ budget: -10000, booked: -10600, planned: 0 })).toBe(600)
+    expect(budgetDeviation({ budget: -10000, booked: -14900, planned: 0 })).toBe(0) // 49 € off: no warning
+    expect(budgetDeviation({ budget: -10000, booked: -15000, planned: 0 })).toBe(0) // exactly 50 €: still none
+    expect(budgetDeviation({ budget: -10000, booked: -15100, planned: 0 })).toBe(5100)
     expect(budgetDeviation({ budget: -10000, booked: -10000, planned: -400 })).toBe(0)
   })
   it('rows of only subventions / gifts go to the bottom of a card, each group alphabetical', () => {

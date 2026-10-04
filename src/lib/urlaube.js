@@ -70,7 +70,7 @@ export function reductionPercent(cost, subvention) {
 // booked up to the last ticked month + Plan1 after it): 0 within a few euros
 // (Markus, Oct 2026), else the difference in cents — what was booked in the
 // ticked months against what was planned for them.
-export const BUDGET_HINT_CENTS = 500
+export const BUDGET_HINT_CENTS = 5000
 export function budgetDeviation(holiday) {
   const diff = holiday.budget - (holiday.booked + holiday.planned)
   return Math.abs(diff) > BUDGET_HINT_CENTS ? diff : 0
