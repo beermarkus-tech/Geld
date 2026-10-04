@@ -25,6 +25,10 @@ import { pillLook } from './TagPill'
 // Ctrl/Cmd+Delete deletes a row (Oct 2026, Markus); the grid's own "Delete clears
 // the cell" must not run on it too — onCellKeyDown still sees the key.
 const isCtrlDelete = (p) => !p.editing && p.event.key === 'Delete' && (p.event.ctrlKey || p.event.metaKey)
+// Plain Delete on Kategorie/Unterkategorie clears the category (onCellKeyDown
+// below) instead of the grid's own clear, which would refuse the empty value.
+const CATEGORY_COLS = new Set(['kategorie', 'unterkategorie'])
+const suppressGridDelete = (p) => isCtrlDelete(p) || (!p.editing && p.event.key === 'Delete' && CATEGORY_COLS.has(p.column?.getColId()))
 
 ModuleRegistry.registerModules([AllCommunityModule])
 syncAgGridColorScheme()
@@ -2896,7 +2900,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           // Markus's request: no accidental drag-reordering or hiding.
           // Plain Delete does nothing outside an edit (Oct 2026): AG Grid would
           // otherwise empty the cell and save it — deleting a row is Ctrl+Delete.
-          defaultColDef={{ suppressMovable: true, suppressKeyboardEvent: isCtrlDelete }}
+          defaultColDef={{ suppressMovable: true, suppressKeyboardEvent: suppressGridDelete }}
           // Single-row selection just for "+ Neue Buchung"'s "insert below
           // the selected row" — not a bulk-actions feature.
           rowSelection={{ mode: 'singleRow', checkboxes: false, enableClickSelection: true }}
@@ -3000,6 +3004,16 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
               if (p.api.getEditingCells().length > 0) return
               p.event.preventDefault()
               handleDeleteClick(p.data)
+              return
+            }
+            // Delete on Kategorie or Unterkategorie empties both (Oct 2026,
+            // Markus) — the booking, or this split line, becomes uncategorized.
+            if (key === 'Delete' && !p.event.altKey && !p.event.shiftKey && CATEGORY_COLS.has(p.column?.getColId())) {
+              if (p.api.getEditingCells().length > 0) return
+              if (!p.colDef.editable?.(p)) return
+              p.event.preventDefault()
+              if (p.data.__isLine) clearCategoryToLine(p.data.__parent, p.data.__lineIndex)
+              else clearCategoryDirect(p.data)
               return
             }
             // Ctrl+D ("details") toggles the current transaction's own

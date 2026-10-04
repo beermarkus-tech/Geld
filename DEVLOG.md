@@ -2122,3 +2122,7 @@ Markus: Settings › Tags wider again (`max-w-6xl` → `max-w-[1440px]`); in Kon
 ## Session 37, continued a hundred-and-sixth time — 2026-10-04 — Settings › Tags: booking details, cleaner buttons
 
 Markus: booking entries show Details; cleaner, more visible buttons; "Alle zuklappen" also closes open usage lists. **Done:** `tagUsage` bookings carry `details` (split line's note, else the booking's detail), shown after the amount; chevron / merge / archive / restore are framed SVG icon buttons (`Icon`, `iconButton` in `Settings.jsx`), the usage toggle a rounded button with a chevron; collapse-all clears `openIds`. Harness: icons render, collapse-all leaves no usage list open. Not checked with a booking that has Details text (mock data has none).
+
+## Session 37, continued a hundred-and-seventh time — 2026-10-04 — Delete clears a booking's category
+
+Markus: Entf on Kategorie/Unterkategorie in Konten should delete the category. **Done** (`Konten.jsx`): plain Delete on those columns (not editing, cell editable) calls `clearCategoryDirect` / `clearCategoryToLine`; the grid's own Delete is suppressed there (`suppressGridDelete`). Harness: unsplit booking → categoryId null, shown "—"; split booking's own row unchanged; no editor opens, no delete armed.
