@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { reloadApp } from './lib/reloadApp'
 import { effectiveDark, toggleTheme } from './lib/theme'
+import { zoomLooksOff } from './lib/zoomGuard'
 
 // Screen-to-component map lives in App.jsx (spec.md §3's own status table) —
 // this file only owns the nav item list/labels and the shell chrome
@@ -25,7 +26,7 @@ export const MORE_ITEMS = [
   { id: 'importexport', label: 'Import/Export' },
   { id: 'settings', label: 'Settings' },
 ]
-// Sidebar order and Ctrl+1…9 hotkey order (Oct 2026, Markus: Quickview and
+// Sidebar order and Ctrl+1…0 hotkey order (Oct 2026, Markus: Quickview and
 // Planung swapped — Quickview now 4th/Ctrl+4, Planung 5th/Ctrl+5). Kept
 // separate from the PRIMARY/MORE split above, which is the *phone* layout
 // (bottom bar vs. "More" sheet) and was deliberately left as it was.
@@ -178,7 +179,7 @@ export default function NavShell({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [signOutConfirmOpen])
 
-  // Ctrl/Cmd+1 through +9 jump straight to that nav
+  // Ctrl/Cmd+1 through +9, then +0 for the 10th, jump straight to that nav
   // item, in ALL_ITEMS' own order (Markus: "assign ctrl+1 to dashboard,
   // ctrl+2 to konten, ctrl+3 to verlauf, and so on"). **Real, near-certain
   // risk, flagged rather than assumed away** — Ctrl+1 through Ctrl+8 are
@@ -193,10 +194,11 @@ export default function NavShell({
   useEffect(() => {
     const onKeyDown = (e) => {
       if (!(e.ctrlKey || e.metaKey)) return
-      // Ctrl+0 is the browser's zoom reset and stays that (Oct 2026, Markus: the
-      // app must not leave the page zoomed) — the 10th item, Settings, has no hotkey.
-      if (e.key === '0') return
-      const index = Number(e.key) - 1
+      // Ctrl+0 is Settings (the 10th item), as ever — except while the page looks
+      // zoomed (lib/zoomGuard.js): then it is left to the browser, whose Ctrl+0
+      // resets the zoom (Oct 2026, Markus).
+      if (e.key === '0' && zoomLooksOff()) return
+      const index = e.key === '0' ? 9 : Number(e.key) - 1
       if (!(index >= 0 && index < ALL_ITEMS.length)) return
       e.preventDefault()
       onNavigate(ALL_ITEMS[index].id)

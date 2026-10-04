@@ -2,7 +2,7 @@
 // when I reload"). A web page cannot set the browser's zoom — the browser
 // remembers it per site, which is why it survives a reload — but it can stop
 // causing it: Ctrl/Cmd + "+" / "-" (also the numpad), Ctrl + mouse wheel and
-// pinch are swallowed. Ctrl/Cmd+0 stays the browser's own reset. Note Ctrl+"+" is
+// pinch are swallowed. Ctrl/Cmd+0 is the app's Settings hotkey, but while the page looks zoomed (zoomLooksOff) the app leaves it to the browser, whose Ctrl+0 resets the zoom. Note Ctrl+"+" is
 // also Konten's and Verlauf's "add" shortcut: those listeners still receive the
 // key (only the browser's default is cancelled), and it used to zoom the browser
 // as a side effect whenever the app did not cancel it itself (e.g. while editing).
