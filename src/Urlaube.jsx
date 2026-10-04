@@ -314,8 +314,8 @@ export default function Urlaube({ onOpenInKonten, onOpenInVerlauf, active = true
       (!needle || h.tag.name.toLowerCase().includes(needle) || h.rows.some((r) => (r.label ?? '').toLowerCase().includes(needle))),
   )
 
-  // A row opens Konten on that tag, in the latest year it was booked or planned; Esc there comes back here.
-  const openRow = (r) => onOpenInKonten({ tagId: r.tagId, year: String(r.lastYear), from: 'urlaube' })
+  // A child row opens Konten on that tag across all years (the app year is the latest it was booked or planned in); Esc comes back here.
+  const openRow = (r) => onOpenInKonten({ tagId: r.tagId, allYears: true, year: String(r.lastYear), from: 'urlaube' })
   // The holiday badge: Konten on the parent and all its children, across all years.
   const openTag = (h) => onOpenInKonten({ tagId: h.tag.id, allYears: true, year: String(h.tripYear), from: 'urlaube' })
   // "In Verlauf": the Urlaube block at the holiday's group, in its year (the one in
