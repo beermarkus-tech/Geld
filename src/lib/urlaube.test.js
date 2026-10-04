@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { incomeCategoryIds, isReductionRow, prognoseDeviation, reductionPercent, urlaubeCategoryId, urlaubeOverview } from './urlaube'
+import { incomeCategoryIds, budgetDeviation, isReductionRow, reductionPercent, urlaubeCategoryId, urlaubeOverview } from './urlaube'
 
 const categories = [
   { id: 'sonst', name: 'Sonstiges', parentCategoryId: null },
@@ -136,17 +136,13 @@ describe('urlaubeOverview', () => {
     const r = urlaubeOverview({ ...base, transactions: [], budgets: [b(2026, 9, 20000, 'it-sub', { categoryId: 'sonst-einn' })] })
     expect(r.holidays).toEqual([])
   })
-  it('Prognose and Gesamt agree, except when a month before the last ticked one is not ticked', () => {
-    expect(prognoseDeviation(h('it'))).toBe(0)
-    expect(prognoseDeviation(h('lr'))).toBe(0)
-    // April (4) not ticked although May is: the April booking counts as booked in Gesamt, but Prognose takes April's plan (none)
-    const gap = urlaubeOverview({ ...base, closedByYear: new Map([[2026, [1, 2, 3, 5, 6]]]), transactions: [...transactions, tx('apr', '2026-04-05', -15000, ['it'])] })
-    const it = gap.holidays.find((x) => x.key === 'it')
-    expect(prognoseDeviation(it)).toBe(it.prognose - (it.booked + it.planned))
-    expect(Math.abs(prognoseDeviation(it))).toBe(15000)
-    // a few euros do not count
-    expect(prognoseDeviation({ prognose: -10000, booked: -10300, planned: 0 })).toBe(0)
-    expect(prognoseDeviation({ prognose: -10000, booked: -10600, planned: 0 })).toBe(600)
+  it('Budget against Gesamt: no warning within a few euros, else the difference', () => {
+    // Italien: plan -50000 (September, still to come) -> budget -50000; booked -8000 + planned -50000 -> gesamt -58000
+    expect(budgetDeviation(h('it'))).toBe(-50000 - (-8000 + -50000))
+    // La Rochelle: planned 100000 in August 2025, booked 100000 -> no deviation
+    expect(budgetDeviation({ budget: -10000, booked: -10300, planned: 0 })).toBe(0)
+    expect(budgetDeviation({ budget: -10000, booked: -10600, planned: 0 })).toBe(600)
+    expect(budgetDeviation({ budget: -10000, booked: -10000, planned: -400 })).toBe(0)
   })
   it('rows of only subventions / gifts go to the bottom of a card, each group alphabetical', () => {
     const t2 = [...tags, { id: 'it-a', name: 'Aktivitäten', parentTag: 'it', class: 'grouping' }, { id: 'it-z', name: 'Zuschuss', parentTag: 'it', class: 'grouping' }]

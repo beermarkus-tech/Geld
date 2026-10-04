@@ -55,26 +55,27 @@ export function urlaubeCategoryId(categories) {
 
 const sum = (xs) => xs.reduce((s, x) => s + x, 0)
 
-// The reduction a holiday got from subventions and gifts: total cost ÷ cost
-// only − 1, in whole percent (−20 for 800 € left of 1.000 €). Null without a
-// cost to compare to.
-// How far Verlauf's Prognose of a holiday (ticked month real, open month Plan1)
-// lies from its Gesamt (booked up to the last ticked month + Plan1 after it):
-// 0 within a few euros (Markus, Oct 2026), else the difference in cents. They
-// only differ when a month *before* the last ticked one is not ticked itself.
-export const PROGNOSE_HINT_CENTS = 500
-export function prognoseDeviation(holiday) {
-  const diff = holiday.prognose - (holiday.booked + holiday.planned)
-  return Math.abs(diff) > PROGNOSE_HINT_CENTS ? diff : 0
-}
-
 // A row that holds only money in — a Subvention, a Geschenk.
 export const isReductionRow = (r) => r.subvention > 0 && r.cost === 0
 
+// The reduction a holiday got from subventions and gifts: total cost ÷ cost
+// only − 1, in whole percent (−20 for 800 € left of 1.000 €). Null without a
+// cost to compare to.
 export function reductionPercent(cost, subvention) {
   if (!(cost > 0)) return null
   return Math.round(((cost - subvention) / cost - 1) * 100) + 0
 }
+
+// How far a holiday's budget (all its Plan1 lines) lies from its Gesamt (what is
+// booked up to the last ticked month + Plan1 after it): 0 within a few euros
+// (Markus, Oct 2026), else the difference in cents — what was booked in the
+// ticked months against what was planned for them.
+export const BUDGET_HINT_CENTS = 500
+export function budgetDeviation(holiday) {
+  const diff = holiday.budget - (holiday.booked + holiday.planned)
+  return Math.abs(diff) > BUDGET_HINT_CENTS ? diff : 0
+}
+
 const distinct = (texts, limit) => {
   const seen = new Set()
   const out = []
@@ -200,16 +201,19 @@ export function urlaubeOverview({ categoryId, incomeIds = new Set(), tags = [], 
     commentsOf.set(k, [...(commentsOf.get(k) ?? []), c.text.trim()])
   }
 
+  // The split of a year: its last ticked month; a past year without ticks counts
+  // as fully booked (12), a future one — and the current one without ticks — as
+  // fully planned (0).
   const closedOf = (year) => {
     const ticks = closedByYear.get(year) ?? []
-    if (ticks.length) return { pivot: Math.max(...ticks), closed: new Set(ticks) }
-    return year < todayYear ? { pivot: 12, closed: new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) } : { pivot: 0, closed: new Set() }
+    if (ticks.length) return Math.max(...ticks)
+    return year < todayYear ? 12 : 0
   }
 
   const byRoot = new Map()
   for (const c of cells.values()) {
     if (c.entries.length === 0 && c.planMonths === 0) continue
-    const { pivot, closed } = closedOf(c.year)
+    const pivot = closedOf(c.year)
     const booked = sum(c.entries.filter((e) => e.month <= pivot).map((e) => e.cents))
     const plannedBooked = sum(c.entries.filter((e) => e.month > pivot).map((e) => e.cents))
     const planned = sum(c.plan.filter((_, i) => i + 1 > pivot))
@@ -219,8 +223,6 @@ export function urlaubeOverview({ categoryId, incomeIds = new Set(), tags = [], 
     const bookedEntries = c.entries.filter((e) => e.month <= pivot).map((e) => e.cents)
     const cost = -sum(bookedEntries.filter((v) => v < 0)) + (planned < 0 ? -planned : 0)
     const subvention = sum(bookedEntries.filter((v) => v > 0)) + (planned > 0 ? planned : 0)
-    let prognose = 0
-    for (let m = 1; m <= 12; m++) prognose += closed.has(m) ? sum(c.entries.filter((e) => e.month === m).map((e) => e.cents)) : c.plan[m - 1]
     const tagId = c.child ? c.child.id : c.root.id
     const row = {
       key: c.key,
@@ -238,7 +240,6 @@ export function urlaubeOverview({ categoryId, incomeIds = new Set(), tags = [], 
       count: c.entries.length,
       _planMonths: c.planMonths,
       _budget: sum(c.plan),
-      _prognose: prognose,
       _last: [...c.entries.map((e) => e.date.slice(0, 7)), ...c.plan.map((v, i) => (v !== 0 ? `${c.year}-${String(i + 1).padStart(2, '0')}` : ''))].filter(Boolean).sort().at(-1) ?? '',
     }
     if (!byRoot.has(c.root.id)) byRoot.set(c.root.id, { root: c.root, rows: [] })
@@ -279,7 +280,6 @@ export function urlaubeOverview({ categoryId, incomeIds = new Set(), tags = [], 
       // the years in which Verlauf has Plan1 lines for it (where "In Verlauf" goes)
       planYears: [...new Set(rows.filter((r) => r._planMonths > 0).map((r) => r.year))].sort(),
       budget: sum(rows.map((r) => r._budget)),
-      prognose: sum(rows.map((r) => r._prognose)),
       booked,
       planned,
       plannedBooked: sum(rows.map((r) => r.plannedBooked)),

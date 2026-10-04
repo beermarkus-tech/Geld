@@ -4,7 +4,7 @@ import { collection, onSnapshot } from 'firebase/firestore'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { db } from './firebase'
 import { centsToWholeEuro } from './lib/format'
-import { incomeCategoryIds, isReductionRow, prognoseDeviation, reductionPercent, urlaubeCategoryId, urlaubeOverview } from './lib/urlaube'
+import { incomeCategoryIds, budgetDeviation, isReductionRow, reductionPercent, urlaubeCategoryId, urlaubeOverview } from './lib/urlaube'
 import ui from './lib/uiState'
 import TagPill from './TagPill'
 import { useTags } from './TagsProvider'
@@ -74,10 +74,6 @@ function Card({ card, flash, collapsed, onToggle, onOpenRow, onOpenTag, onOpenVe
             In Verlauf
           </button>
           <div className="text-right">
-            <div className="text-xs text-[var(--color-text-muted)]">Budget</div>
-            <div className="tabular-nums">{euro(card.budget)}</div>
-          </div>
-          <div className="text-right">
             <div className="text-xs text-[var(--color-text-muted)]" title="Gebucht bis zum letzten abgehakten Monat plus Plan1 danach">Gesamt</div>
             <div className="tabular-nums">{euro(card.booked + card.planned)}</div>
           </div>
@@ -86,9 +82,9 @@ function Card({ card, flash, collapsed, onToggle, onOpenRow, onOpenTag, onOpenVe
 
       {!collapsed && (
         <>
-      {prognoseDeviation(card) !== 0 && (
+      {budgetDeviation(card) !== 0 && (
         <p className="text-xs text-[var(--color-plan-off)]">
-          Hinweis: Die Prognose aus Verlauf ({euro(card.prognose)}) weicht um {euro(Math.abs(prognoseDeviation(card)))} von Gesamt ab — vermutlich ist ein Monat vor dem letzten abgehakten nicht abgehakt.
+          Hinweis: Das Budget (Plan1) von {euro(card.budget)} weicht um {euro(Math.abs(budgetDeviation(card)))} von Gesamt ({euro(card.booked + card.planned)}) ab — Plan1 prüfen.
         </p>
       )}
       {card.outside !== 0 && (
