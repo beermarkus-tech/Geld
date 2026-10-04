@@ -15,6 +15,7 @@ const tags = [
   { id: 'sco', name: 'Schottland', parentTag: null, class: 'grouping', groupingType: 'project' },
   { id: 'sco-f', name: 'Flüge', parentTag: 'sco', class: 'grouping' },
   { id: 'it', name: '2026 Italien', parentTag: null, class: 'grouping' },
+  { id: 'it-sub', name: 'Subvention', parentTag: 'it', class: 'grouping' },
   { id: 'rechn', name: 'Rechnung offen', parentTag: null, class: 'grouping', groupingType: 'claim' }, // not a holiday tag
   { id: 'spar', name: 'Sparen', parentTag: null, class: 'allocation' },
 ]
@@ -114,6 +115,26 @@ describe('urlaubeOverview', () => {
     ]
     const r = urlaubeOverview({ ...base, tags: t2, transactions: [...transactions, tx('hamrepay', '2026-06-01', 4500, ['ham'], 'food'), tx('getrepay', '2026-06-02', 124500, ['get'], 'food')] })
     expect(r.holidays.map((x) => x.key)).toEqual(['it', 'sco', 'lr'])
+  })
+  it('a planned subvention (a Plan1 line in Sonstige Einnahmen) belongs to the holiday', () => {
+    const r = urlaubeOverview({
+      ...base,
+      budgets: [...budgets, b(2026, 9, 20000, 'it-sub', { categoryId: 'sonst-einn' }), b(2026, 3, 20000, 'it-sub', { categoryId: 'sonst-einn' }), b(2026, 9, 99999, 'rechn', { categoryId: 'sonst-einn' }), b(2026, 9, -777, 'it', { categoryId: 'food' })],
+      cellComments: [{ rowId: 'categoryId:sonst-einn:plan1:it-sub', year: 2026, text: 'Antrag läuft' }],
+    })
+    const it = r.holidays.find((x) => x.key === 'it')
+    // March is ticked (before the split at June): only September's 200 € is still to come
+    expect(it).toMatchObject({ planned: -50000 + 20000, subvention: 2000 + 20000, cost: 60000, total: 58000 - 20000 })
+    expect(it.budget).toBe(-50000 + 20000 + 20000) // Plan1 of the holiday incl. both planned subventions
+    const row = it.rows.find((x) => x.label === 'Subvention')
+    expect(row).toMatchObject({ booked: 0, planned: 20000, subvention: 20000, cost: 0 })
+    expect(row.comments).toEqual(['Antrag läuft'])
+    // a non-holiday tag in the income category and a cost line elsewhere add nothing
+    expect(r.holidays.map((x) => x.key)).not.toContain('rechn')
+  })
+  it('a planned subvention alone makes no holiday', () => {
+    const r = urlaubeOverview({ ...base, transactions: [], budgets: [b(2026, 9, 20000, 'it-sub', { categoryId: 'sonst-einn' })] })
+    expect(r.holidays).toEqual([])
   })
   it('only the holiday tag counts when a line carries several tags', () => {
     // "Rechnung offen" is first on the line, yet the booking is La Rochelle's

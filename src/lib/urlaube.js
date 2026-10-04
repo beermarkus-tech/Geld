@@ -26,7 +26,8 @@ import { isAnchorTransaction } from './balance'
 // or is typed Reise/Projekt; the year-named one wins. A line with no such tag
 // has no holiday.
 // What counts: the category Urlaube, plus every booking with the holiday's tag
-// that is money in (positive) or sits in an Einnahmen category — a subvention or
+// that is money in (positive) or sits in an Einnahmen category — and the same for
+// Plan1 lines (a planned subvention in Sonstige Einnahmen) — a subvention or
 // gift lands in "Sonstige Einnahmen", or wherever it was booked, but belongs to
 // the holiday and reduces its cost. Money *out* with a holiday's tag in any other
 // category is not counted but reported (`outside`), as are Urlaube bookings with
@@ -162,12 +163,26 @@ export function urlaubeOverview({ categoryId, incomeIds = new Set(), tags = [], 
     add(bookedByYear, x.year, x.cents)
     cellFor(x.root, x.child, x.year).entries.push({ month: x.month, date: x.date, cents: x.cents, detail: x.detail })
   }
+  // The same for plan lines: a planned subvention is a Plan1 line "2026 Schottland:
+  // Subvention" in Einnahmen › Sonstige Einnahmen (or any category, with a positive
+  // amount). It belongs to the holiday and lowers its Budget and what is still
+  // to be booked.
+  for (const b of budgets) {
+    if (b.planVersion !== 'plan1' || !b.categoryId || b.categoryId === categoryId || !b.breakdownTagId || !isGrouping(b.breakdownTagId)) continue
+    if (!(b.month >= 1 && b.month <= 12)) continue
+    if (!(incomeIds.has(b.categoryId) || (b.plannedAmountCents ?? 0) > 0)) continue
+    const { root, child } = place(b.breakdownTagId)
+    if (!active.has(root.id)) continue
+    const c = cellFor(root, child, b.year)
+    c.plan[b.month - 1] += b.plannedAmountCents ?? 0
+    if ((b.plannedAmountCents ?? 0) !== 0) c.planMonths += 1
+  }
 
   // Verlauf's comments on a child's Plan1 cells: rowId "categoryId:CAT:plan1:TAG".
   const commentsOf = new Map()
   for (const c of cellComments) {
     const parts = String(c.rowId ?? '').split(':')
-    if (parts.length !== 4 || parts[0] !== 'categoryId' || parts[1] !== categoryId || parts[2] !== 'plan1' || !c.text) continue
+    if (parts.length !== 4 || parts[0] !== 'categoryId' || (parts[1] !== categoryId && !incomeIds.has(parts[1])) || parts[2] !== 'plan1' || !c.text) continue
     const k = `${parts[3]}|${c.year}`
     commentsOf.set(k, [...(commentsOf.get(k) ?? []), c.text.trim()])
   }
