@@ -1,111 +1,153 @@
 import { isAnchorTransaction } from './balance'
 
-// Fortschritt's lookup (spec.md §3j): one subcategory of one year split into
-// "Bereits gebucht" (real bookings up to the pivot — the last month ticked
-// "ok" in Verlauf) and "Noch geplant" (Plan1 after it), one card per
-// trip/project tag found under it. Plain data in, plain data out.
+// Fortschritt (spec.md §3j, reworked Oct 2026, Markus): the totality of a
+// project — a parent tag such as "Schottland" with its child tags — across
+// every category and every year it touches. One card per project:
+//   Budget / Prognose        Plan1 over all years / Verlauf's rule (ticked
+//                            month real, open month Plan1), summed per year
+//   Gebucht / Noch zu buchen the split at *each year's own* last "ok" month in
+//                            Verlauf; a past year without any ticks counts as
+//                            fully booked, a future one (or the current year
+//                            without ticks) as fully planned
+//   rows                     per child tag and year: Details of the bookings,
+//                            Verlauf's comments on the planned cells, what is
+//                            booked and what is still to be booked
+// A booking dated after its year's split is not in "gebucht"; its row shows it
+// as `plannedBooked` ("davon schon gebucht"). A line with several grouping tags
+// goes to the first one, so nothing is counted twice. Allocation tags and
+// Rücklagen plan lines are out of scope (§3j).
 //
-// Cards (Oct 2026, Markus):
-//   - one per *parent* tag; a child tag ("Schottland: Hotels") becomes a
-//     sub-line inside its parent's card, grouped Hotels / Flüge / …
-//   - an extra "Ohne Tag" card (key 'none') for the untagged remainder, so the
-//     cards add up to the subcategory; with no tags at all it is the one flat card
-//   - a tag is found on a booking line *or* on a Plan1 line (a trip planned but
-//     not yet booked still shows); allocation tags are never cards (§3j)
-//   - a line with several grouping tags goes to the first one (never counted twice)
-// A booking dated after the pivot is not in "Bereits gebucht"; its month's plan
-// line carries it as "davon schon gebucht" (`booked`).
+// Which tags are projects: top-level grouping tags that have child tags, or are
+// typed Reise/Projekt or Dienstreise. Only those with bookings or plan lines
+// get a card.
 //
-// Header figures: `budget` = Plan1 year total, `prognose` = Verlauf's Prog
-// (closed month → real, open month → Plan1), so both match Verlauf.
-//
-// @returns {{ pivot: number, cards: Array<{ key, tag, budget, prognose, bookedTotal, plannedTotal,
-//   subs: Array<{ key, tag, label, booked: object[], bookedTotal, planned: {month, plan, booked}[], plannedTotal }> }> }}
-export function fortschrittCards({ categoryId, year, transactions = [], budgets = [], tags = [], closedMonths = [] }) {
-  const pivot = closedMonths.length ? Math.max(...closedMonths) : 0
+// @param {{ tags, transactions, budgets, cellComments?: object[], closedByYear?: Map<number, number[]>, todayYear: number }} input
+// @returns {Array<{ key, tag, years: number[], budget, prognose, booked, planned, plannedBooked, lastActivity: string,
+//   rows: { key, tagId, childTag: object|null, label: string|null, year, details: string[], comments: string[],
+//           booked, planned, plannedBooked, count }[] }>} newest activity first
+export function projectCards({ tags = [], transactions = [], budgets = [], cellComments = [], closedByYear = new Map(), todayYear }) {
   const tagById = new Map(tags.map((t) => [t.id, t]))
   const isGrouping = (id) => tagById.get(id)?.class === 'grouping'
-  // The card tag and, for a child, the sub-line tag.
+  const hasKids = new Set(tags.filter((t) => t.class === 'grouping' && t.parentTag && tagById.has(t.parentTag)).map((t) => t.parentTag))
+  const isProject = (t) => t.class === 'grouping' && !t.parentTag && (hasKids.has(t.id) || t.groupingType === 'project' || t.groupingType === 'business-trip')
   const place = (tagId) => {
     const t = tagById.get(tagId)
     const parent = t.parentTag ? tagById.get(t.parentTag) : null
     return parent ? { root: parent, child: t } : { root: t, child: null }
   }
 
-  const cards = new Map()
-  const cardFor = (root) => {
-    const key = root ? root.id : 'none'
-    if (!cards.has(key)) cards.set(key, { key, tag: root ?? null, subs: new Map() })
-    return cards.get(key)
-  }
-  const subFor = (card, child) => {
-    const key = child ? child.id : 'self'
-    if (!card.subs.has(key)) card.subs.set(key, { key, tag: child ?? null, entries: [], plan: Array(12).fill(0) })
-    return card.subs.get(key)
+  const cells = new Map() // `${rootId}|${childId|'self'}|${year}` → data
+  const cellFor = (root, child, year) => {
+    const key = `${root.id}|${child ? child.id : 'self'}|${year}`
+    let c = cells.get(key)
+    if (!c) {
+      c = { key, root, child, year, entries: [], plan: Array(12).fill(0), planMonths: 0 }
+      cells.set(key, c)
+    }
+    return c
   }
 
   for (const tx of transactions) {
-    if (isAnchorTransaction(tx) || !tx.date?.startsWith(`${year}-`)) continue
+    if (isAnchorTransaction(tx) || !tx.date) continue
+    const year = Number(tx.date.slice(0, 4))
     const month = Number(tx.date.slice(5, 7))
-    if (!(month >= 1 && month <= 12)) continue
-    ;(tx.lines ?? []).forEach((line, lineIndex) => {
-      if (line.categoryId !== categoryId) return
+    if (!(year > 0 && month >= 1 && month <= 12)) continue
+    for (const line of tx.lines ?? []) {
       const id = (line.tags ?? []).find(isGrouping)
-      const { root, child } = id ? place(id) : { root: null, child: null }
-      subFor(cardFor(root), child).entries.push({
-        txId: tx.id,
-        lineIndex,
-        date: tx.date,
-        month,
-        label: tx.displayLabel ?? '',
-        detail: tx.detail ?? '',
-        cents: line.amountCents ?? 0,
-      })
-    })
-  }
-
-  const rows = budgets.filter((b) => b.year === year && b.planVersion === 'plan1' && b.categoryId === categoryId)
-  const tagged = rows.filter((b) => b.breakdownTagId != null && isGrouping(b.breakdownTagId))
-  // Verlauf's rule: once a category has breakdown lines, its flat total no longer counts.
-  const hasBreakdown = rows.some((b) => b.breakdownTagId != null)
-  const planRows = hasBreakdown ? tagged : rows.filter((b) => b.breakdownTagId == null)
-  for (const b of planRows) {
-    const { root, child } = b.breakdownTagId != null ? place(b.breakdownTagId) : { root: null, child: null }
-    const sub = subFor(cardFor(root), child)
-    if (b.month >= 1 && b.month <= 12) sub.plan[b.month - 1] += b.plannedAmountCents ?? 0
-  }
-
-  const sum = (xs) => xs.reduce((s, x) => s + x, 0)
-  const out = [...cards.values()].map((card) => {
-    const subList = [...card.subs.values()]
-    const subs = subList
-      .map((s) => {
-        const booked = s.entries.filter((e) => e.month <= pivot).sort((a, b) => a.date.localeCompare(b.date) || Math.abs(b.cents) - Math.abs(a.cents))
-        const planned = []
-        for (let m = pivot + 1; m <= 12; m++) {
-          const done = sum(s.entries.filter((e) => e.month === m).map((e) => e.cents))
-          if (s.plan[m - 1] !== 0 || done !== 0) planned.push({ month: m, plan: s.plan[m - 1], booked: done })
-        }
-        const label = s.tag ? s.tag.name : subList.length > 1 ? '(allgemein)' : null
-        return { key: s.key, tag: s.tag, label, booked, bookedTotal: sum(booked.map((e) => e.cents)), planned, plannedTotal: sum(planned.map((p) => p.plan)), _s: s }
-      })
-      .sort((a, b) => (a.key === 'self' ? -1 : b.key === 'self' ? 1 : a.label.localeCompare(b.label, 'de')))
-    const budget = sum(subList.map((s) => sum(s.plan)))
-    let prognose = 0
-    for (let m = 1; m <= 12; m++) {
-      const closed = closedMonths.includes(m)
-      prognose += sum(subList.map((s) => (closed ? sum(s.entries.filter((e) => e.month === m).map((e) => e.cents)) : s.plan[m - 1])))
+      if (!id) continue
+      const { root, child } = place(id)
+      if (!isProject(root)) continue
+      // Details as Konten shows them: a split line's own, else the booking's.
+      const detail = String((tx.lines.length > 1 && line.note) || tx.detail || '').trim()
+      cellFor(root, child, year).entries.push({ month, date: tx.date, cents: line.amountCents ?? 0, detail })
     }
+  }
+  for (const b of budgets) {
+    if (b.planVersion !== 'plan1' || !b.categoryId || !b.breakdownTagId || !isGrouping(b.breakdownTagId)) continue
+    const { root, child } = place(b.breakdownTagId)
+    if (!isProject(root) || !(b.month >= 1 && b.month <= 12)) continue
+    const c = cellFor(root, child, b.year)
+    c.plan[b.month - 1] += b.plannedAmountCents ?? 0
+    if ((b.plannedAmountCents ?? 0) !== 0) c.planMonths += 1
+  }
+
+  // Verlauf's comments on a child's Plan1 cells: rowId "categoryId:CAT:plan1:TAG".
+  const commentsOf = new Map() // `${tagId}|${year}` → texts
+  for (const c of cellComments) {
+    const parts = String(c.rowId ?? '').split(':')
+    if (parts.length !== 4 || parts[0] !== 'categoryId' || parts[2] !== 'plan1' || !c.text) continue
+    const k = `${parts[3]}|${c.year}`
+    commentsOf.set(k, [...(commentsOf.get(k) ?? []), c.text.trim()])
+  }
+
+  // Each year's split, and which months count as ticked for Prognose.
+  const closedOf = (year) => {
+    const ticks = closedByYear.get(year) ?? []
+    if (ticks.length) return { pivot: Math.max(...ticks), closed: new Set(ticks) }
+    return year < todayYear ? { pivot: 12, closed: new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) } : { pivot: 0, closed: new Set() }
+  }
+  const sum = (xs) => xs.reduce((s, x) => s + x, 0)
+  const distinct = (texts, limit) => {
+    const seen = new Set()
+    const out = []
+    for (const t of texts) {
+      const k = t.toLowerCase()
+      if (t && !seen.has(k)) {
+        seen.add(k)
+        out.push(t)
+      }
+    }
+    return out.length > limit ? [...out.slice(0, limit), '…'] : out
+  }
+
+  const byRoot = new Map()
+  for (const c of cells.values()) {
+    const { pivot, closed } = closedOf(c.year)
+    const booked = sum(c.entries.filter((e) => e.month <= pivot).map((e) => e.cents))
+    const plannedBooked = sum(c.entries.filter((e) => e.month > pivot).map((e) => e.cents))
+    const planned = sum(c.plan.filter((_, i) => i + 1 > pivot))
+    let prognose = 0
+    for (let m = 1; m <= 12; m++) prognose += closed.has(m) ? sum(c.entries.filter((e) => e.month === m).map((e) => e.cents)) : c.plan[m - 1]
+    const tagId = c.child ? c.child.id : c.root.id
+    const sortedEntries = [...c.entries].sort((a, b) => Math.abs(b.cents) - Math.abs(a.cents))
+    const row = {
+      key: c.key,
+      tagId,
+      childTag: c.child,
+      label: c.child ? c.child.name : null,
+      year: c.year,
+      details: distinct(sortedEntries.map((e) => e.detail), 4),
+      comments: distinct(commentsOf.get(`${tagId}|${c.year}`) ?? [], 3),
+      booked,
+      planned,
+      plannedBooked,
+      count: c.entries.length,
+      _budget: sum(c.plan),
+      _prognose: prognose,
+      _last: [...c.entries.map((e) => e.date.slice(0, 7)), ...c.plan.map((v, i) => (v !== 0 ? `${c.year}-${String(i + 1).padStart(2, '0')}` : ''))].filter(Boolean).sort().at(-1) ?? '',
+    }
+    if (c.entries.length === 0 && c.planMonths === 0) continue
+    if (!byRoot.has(c.root.id)) byRoot.set(c.root.id, { root: c.root, rows: [] })
+    byRoot.get(c.root.id).rows.push(row)
+  }
+
+  const cards = [...byRoot.values()].map(({ root, rows }) => {
+    // A parent's own, child-less bookings read "(allgemein)" once it also has children.
+    const hasChildRows = rows.some((r) => r.childTag)
+    rows.sort((a, b) => (a.childTag ? a.childTag.name : '').localeCompare(b.childTag ? b.childTag.name : '', 'de') || a.year - b.year)
     return {
-      key: card.key,
-      tag: card.tag,
-      budget,
-      prognose,
-      bookedTotal: sum(subs.map((s) => s.bookedTotal)),
-      plannedTotal: sum(subs.map((s) => s.plannedTotal)),
-      subs: subs.map(({ _s, ...s }) => s),
+      key: root.id,
+      tag: root,
+      years: [...new Set(rows.map((r) => r.year))].sort(),
+      budget: sum(rows.map((r) => r._budget)),
+      prognose: sum(rows.map((r) => r._prognose)),
+      booked: sum(rows.map((r) => r.booked)),
+      planned: sum(rows.map((r) => r.planned)),
+      plannedBooked: sum(rows.map((r) => r.plannedBooked)),
+      lastActivity: rows.map((r) => r._last).sort().at(-1) ?? '',
+      rows: rows.map(({ _budget, _prognose, _last, ...r }) => ({ ...r, label: r.label ?? (hasChildRows ? '(allgemein)' : null) })),
     }
   })
-  out.sort((a, b) => (a.key === 'none' ? 1 : b.key === 'none' ? -1 : a.tag.name.localeCompare(b.tag.name, 'de')))
-  return { pivot, cards: out }
+  cards.sort((a, b) => b.lastActivity.localeCompare(a.lastActivity) || a.tag.name.localeCompare(b.tag.name, 'de'))
+  return cards
 }

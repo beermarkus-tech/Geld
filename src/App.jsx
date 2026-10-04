@@ -44,7 +44,6 @@ export default function App() {
   const verlaufYear = useValueWhileVisible(year, view === 'verlauf')
   const planungYear = useValueWhileVisible(year, view === 'planung')
   const quickviewYear = useValueWhileVisible(year, view === 'quickview')
-  const fortschrittYear = useValueWhileVisible(year, view === 'fortschritt')
   // The cursor's last known position on each of these two grid screens
   // (Markus: "generally, save the cursor position both in konten and
   // verlauf, and place the cursor there again upon switching") — has to
@@ -328,7 +327,7 @@ export default function App() {
         </div>
         {/* Mounted once, only hidden — like Quickview (Oct 2026). */}
         <div className={view === 'fortschritt' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
-          <Fortschritt year={fortschrittYear} onOpenInKonten={openInKonten} active={view === 'fortschritt'} />
+          <Fortschritt onOpenInKonten={openInKonten} active={view === 'fortschritt'} />
         </div>
         {view === 'settings' && <Settings year={year} onOpenInKonten={openInKonten} onOpenInVerlauf={openInVerlauf} />}
         {view === 'importexport' && <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} />}
