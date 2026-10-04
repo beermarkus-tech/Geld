@@ -93,38 +93,47 @@ function Card({ card, flash, onOpenRow, onOpenTag, onOpenVerlauf, innerRef }) {
 
       <div className="overflow-x-auto">
         <div className="min-w-[34rem]">
-          <div className={`${GRID} border-b border-[var(--color-border)] pb-1 ${HEAD}`}>
+          <div className={`${GRID} border-b border-[var(--color-border)] px-1 pb-1 ${HEAD}`}>
             <span>Tag</span>
             <span>Details / Kommentar</span>
             <span className="text-right">Gebucht</span>
             <span className="text-right">Noch zu buchen</span>
           </div>
-          {card.rows.map((r) => (
-            <button
-              key={r.key}
-              type="button"
-              onClick={() => onOpenRow(r)}
-              title="In Konten zeigen"
-              className={`${GRID} w-full rounded px-0 py-1 text-left text-sm hover:bg-[var(--color-bg)]`}
-            >
-              <span className="min-w-0 truncate">{r.label ?? card.tag.name}</span>
-              <span className="min-w-0 text-xs leading-4 text-[var(--color-text-muted)]">
-                {r.details.length > 0 && <span className="text-[var(--color-text)]">{r.details.join(' · ').replace(' · …', ' …')}</span>}
-                {r.comments.length > 0 && (
-                  <span className="italic">
-                    {r.details.length > 0 ? ' — ' : ''}
-                    {r.comments.join(' · ').replace(' · …', ' …')}
-                  </span>
-                )}
-                {r.details.length === 0 && r.comments.length === 0 && '—'}
-              </span>
-              <span className="text-right"><Amount cents={r.booked} /></span>
-              <span className="text-right">
-                <Amount cents={r.planned} />
-                {r.plannedBooked !== 0 && <span className="block text-xs text-[var(--color-text-muted)]">davon gebucht {euro(r.plannedBooked)}</span>}
-              </span>
-            </button>
-          ))}
+          {card.rows.map((r) => {
+            // A row of only money in — a Subvention, a Geschenk — is highlighted in green
+            // (Oct 2026, Markus): the cost reductions stand out from the costs.
+            const reduction = r.subvention > 0 && r.cost === 0
+            return (
+              <button
+                key={r.key}
+                type="button"
+                onClick={() => onOpenRow(r)}
+                title="In Konten zeigen"
+                className={`${GRID} w-full rounded px-1 py-1 text-left text-sm ${
+                  reduction
+                    ? 'bg-[color-mix(in_srgb,var(--color-income)_14%,transparent)] text-[var(--color-income)] hover:bg-[color-mix(in_srgb,var(--color-income)_24%,transparent)]'
+                    : 'hover:bg-[var(--color-bg)]'
+                }`}
+              >
+                <span className="min-w-0 truncate">{r.label ?? card.tag.name}</span>
+                <span className={`min-w-0 text-xs leading-4 ${reduction ? '' : 'text-[var(--color-text-muted)]'}`}>
+                  {r.details.length > 0 && <span className={reduction ? '' : 'text-[var(--color-text)]'}>{r.details.join(' · ').replace(' · …', ' …')}</span>}
+                  {r.comments.length > 0 && (
+                    <span className="italic">
+                      {r.details.length > 0 ? ' — ' : ''}
+                      {r.comments.join(' · ').replace(' · …', ' …')}
+                    </span>
+                  )}
+                  {r.details.length === 0 && r.comments.length === 0 && '—'}
+                </span>
+                <span className="text-right"><Amount cents={r.booked} /></span>
+                <span className="text-right">
+                  <Amount cents={r.planned} />
+                  {r.plannedBooked !== 0 && <span className={`block text-xs ${reduction ? '' : 'text-[var(--color-text-muted)]'}`}>davon gebucht {euro(r.plannedBooked)}</span>}
+                </span>
+              </button>
+            )
+          })}
         </div>
       </div>
     </section>
