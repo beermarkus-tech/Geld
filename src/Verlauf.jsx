@@ -350,7 +350,7 @@ function CellCommentField({ cell, description, savedText, onSave, onDone, inputR
 // row's place. Nothing is highlighted until ↓, so a plain Enter renames. Esc
 // first puts the name back, then closes. The list holds only tags that fit
 // where the cursor is (siblings under the same parent — see replaceOptions()).
-const TagTitleEditor = forwardRef(function TagTitleEditor({ value, eventKey, api, options, onRename, onReplace }, ref) {
+const TagTitleEditor = forwardRef(function TagTitleEditor({ value, eventKey, api, options, onRename, onReplace, onToText }, ref) {
   const usage = useTagUsage()
   const original = String(value ?? '')
   const start = eventKey && eventKey.length === 1 ? eventKey : original
@@ -372,10 +372,12 @@ const TagTitleEditor = forwardRef(function TagTitleEditor({ value, eventKey, api
           const list = text === original || q === '' ? options : options.filter((t) => t.name.toLowerCase().includes(q))
           return list.map((t) => ({ key: t.id, id: t.id, tag: t, label: t.name, hint: usageHint(usageOf(usage, t.id)) }))
         }}
+        getCreateTypes={(text) => (onToText && text.trim() !== '' && !text.trim().endsWith(':') ? [{ groupingType: LABEL_TYPE, label: 'in Nur Text umwandeln — kein Tag mehr', plain: true }] : [])}
         onPick={(o) => finishWith(() => onReplace(o.id))}
+        onCreate={(text) => finishWith(() => onToText(text))}
         onEnterNone={(text) => finishWith(text.trim() !== original.trim() ? () => onRename(text) : null)}
         onClose={() => finishWith(null)}
-        belowInput={<div className="text-xs text-[var(--color-text-muted)]">Enter = umbenennen{options.length > 0 ? ' · oder ↓ ersetzen durch:' : ''}</div>}
+        belowInput={<div className="text-xs text-[var(--color-text-muted)]">Enter = umbenennen{options.length > 0 ? ' · oder ↓ ersetzen durch:' : ''}{onToText ? ' · ↓↓ Nur Text' : ''}</div>}
       />
     </div>
   )
@@ -1133,6 +1135,22 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     claimPendingFocus(focusRowId)
     return true
   }
+  // Turns a tag line into a plain-text line (Oct 2026, Markus): same block,
+  // plan version and year, values/notes/comments move along; the tag itself
+  // stays untouched (bookings keep it) and disappears by itself once unused.
+  function tagToLabel(row, rawName) {
+    const text = String(rawName ?? '').trim()
+    const { targetKey, targetId, planVersion } = row
+    const newId = labelIdFor(text)
+    const lineIds = breakdownTagIdsFor(targetKey, targetId, planVersion)
+    if (lineIds.includes(newId)) {
+      window.alert('Eine Zeile mit diesem Namen gibt es hier schon.')
+      return false
+    }
+    const { focusRowId } = tagActions.replaceInBlock({ year: yearNum, targetKey, targetId, planVersion, oldTagId: row.renameTagId, isHeader: false, lineTagIds: lineIds, newTagId: newId, newLabel: text })
+    claimPendingFocus(focusRowId)
+    return true
+  }
   const renameRow = (row, name) => (row.isLabel ? renameLabel(row, name) : renameTag(row.renameTagId, name))
 
   // Which existing tags a row's title editor offers (replaceOptions()).
@@ -1454,7 +1472,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     if (active) gridApiRef.current?.refreshCells({ columns: ['rowTitle'], force: true })
   }, [tagById, active])
   const live = useRef({})
-  live.current = { persistBudgetMonth, renameRow, tagById, replaceOptionsFor, replaceBreakdownTag, percent: tolerancePercent }
+  live.current = { persistBudgetMonth, renameRow, tagToLabel, tagById, replaceOptionsFor, replaceBreakdownTag, percent: tolerancePercent }
   // Plan1's colours depend on bookings and plan figures, which change the row
   // data but not the cell value AG Grid compares — so those cells are redrawn
   // whenever the rows are rebuilt.
@@ -1780,6 +1798,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
           options: live.current.replaceOptionsFor(p.data),
           onRename: (name) => live.current.renameRow(p.data, name),
           onReplace: (tagId) => live.current.replaceBreakdownTag(p.data, tagId),
+          onToText: p.data.isLabel || p.data.rowLabel === 'Rollup' ? undefined : (text) => live.current.tagToLabel(p.data, text),
         }),
         valueSetter: (p) => {
           live.current.renameRow(p.data, p.newValue)
