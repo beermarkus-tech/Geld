@@ -25,7 +25,7 @@ export const MORE_ITEMS = [
   { id: 'importexport', label: 'Import/Export' },
   { id: 'settings', label: 'Settings' },
 ]
-// Sidebar order and Ctrl+1…0 hotkey order (Oct 2026, Markus: Quickview and
+// Sidebar order and Ctrl+1…9 hotkey order (Oct 2026, Markus: Quickview and
 // Planung swapped — Quickview now 4th/Ctrl+4, Planung 5th/Ctrl+5). Kept
 // separate from the PRIMARY/MORE split above, which is the *phone* layout
 // (bottom bar vs. "More" sheet) and was deliberately left as it was.

@@ -2198,3 +2198,7 @@ Markus: (1) clicking the holiday badge on a card should open Konten filtered to 
 ## Session 37, continued a hundred-and-twenty-fifth time — 2026-10-04 — Urlaube: child rows open Konten across all years
 
 Markus: clicking any child must filter Konten across all years too. **Done** (`Urlaube.jsx` `openRow`): child rows pass `allYears: true` like the badge; the app year is still the latest year of that child. Harness: "Unterkünfte" → the 2025 Ferienhaus booking and the 2024 Anzahlung together. The "(allgemein)" row opens the parent tag (so also its children, as before).
+
+## Session 37, continued a hundred-and-twenty-sixth time — 2026-10-04 — Ctrl+number check
+
+Markus: Ctrl+0 is no longer Settings — check the other Ctrl+numbers too. **Checked in the harness** (key events on the page): Ctrl+1 Dashboard, 2 Konten, 3 Verlauf, 4 Quickview, 5 Planung, 6 Urlaube, 7 Monatsabschluss, 8 Außenstände, 9 Import/Export — all go to the right screen and the app cancels the browser default for them; Ctrl+0 does nothing in the app (the browser's zoom reset). Settings, the 10th item, has no hotkey. The order matches the sidebar. Only a stale comment in `NavShell.jsx` ("1…0") corrected. **Still true (from the original note):** in an ordinary browser tab Chrome/Firefox/Edge keep Ctrl+1…9 for "go to tab N" before the page sees them; the hotkeys are reliable only in the installed app window.
