@@ -48,7 +48,9 @@ export function tagUsage({ transactions = [], budgets = [], yearSettings = [] })
         const e = at(id)
         if (tx.deletedAt) e.deletedLines += 1
         else e.lines += 1
-        e.bookings.push({ txId: tx.id, date: tx.date, label: tx.displayLabel, cents: l.amountCents ?? 0, deleted: Boolean(tx.deletedAt) })
+        // Details as in Konten: a split line's own detail, else the booking's.
+        const details = ((tx.lines.length > 1 && l.note) || tx.detail || '').trim()
+        e.bookings.push({ txId: tx.id, date: tx.date, label: tx.displayLabel, cents: l.amountCents ?? 0, details, deleted: Boolean(tx.deletedAt) })
       }
   for (const b of budgets) {
     if (!b.breakdownTagId) continue

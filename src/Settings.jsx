@@ -29,6 +29,23 @@ const euro = (cents) => `${Math.round(cents / 100).toLocaleString('de-DE')} €`
 // Where a tag is used (Oct 2026, Markus: tags that looked unused in Verlauf
 // weren't deleted — a plan value in a hidden Plan0 line or another year, or a
 // deleted booking, still holds them; see TagCleanup.jsx).
+// Small line icons for the row buttons (Oct 2026, Markus: cleaner, more visible).
+const ICONS = {
+  chevron: <path d="M6 4l4 4-4 4" />,
+  merge: <path d="M3 3v3a4 4 0 004 4h6M10 7l3 3-3 3" />,
+  archive: <path d="M2 3h12v3H2zM3 6v7h10V6M6.5 9h3" />,
+  restore: <path d="M3 8a5 5 0 105-5H5M5 1L3 3l2 2" />,
+}
+function Icon({ name, className = '' }) {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      {ICONS[name]}
+    </svg>
+  )
+}
+const iconButton =
+  'flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:border-[var(--color-computed)] hover:text-[var(--color-computed)]'
+
 function UsageDetails({ usage, depth, targetNames, onOpenPlan, onOpenBooking }) {
   // Clicking a plan line opens that line in Verlauf, a booking opens Konten
   // filtered to this tag with the cursor on it; Esc there comes back here
@@ -44,6 +61,7 @@ function UsageDetails({ usage, depth, targetNames, onOpenPlan, onOpenBooking }) 
       {usage.bookings.slice(0, 20).map((b, i) => (
         <button key={`${b.txId}-${i}`} type="button" className={link} onClick={() => onOpenBooking?.(b)} title="In Konten zeigen">
           Buchung: {b.date} · {b.label || '—'} · {euro(b.cents)}
+          {b.details && ` · ${b.details}`}
           {b.deleted && ' (gelöscht — zählt, bis sie endgültig entfernt ist)'}
         </button>
       ))}
@@ -106,12 +124,13 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
               type="button"
               onClick={onToggleFamily}
               aria-label={expanded ? 'Untertags einklappen' : 'Untertags aufklappen'}
-              className="-mr-2 w-4 shrink-0 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+              title={expanded ? 'Untertags einklappen' : 'Untertags aufklappen'}
+              className={`${iconButton} -mr-1`}
             >
-              {expanded ? '▾' : '▸'}
+              <Icon name="chevron" className={`transition-transform ${expanded ? 'rotate-90' : ''}`} />
             </button>
           ) : (
-            <span className="-mr-2 w-4 shrink-0" />
+            <span className="-mr-1 w-7 shrink-0" />
           ))}
         <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden whitespace-nowrap">
         {editing ? (
@@ -157,7 +176,7 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
             {twin && (
               <span
                 className="ml-2 rounded border border-[var(--color-alert)] px-1 text-xs text-[var(--color-alert)]"
-                title="Gleicher Name unter derselben Übergruppe — mit ⇢ (Zusammenführen) zu einem Tag machen."
+                title="Gleicher Name unter derselben Übergruppe — mit dem Zusammenführen-Knopf zu einem Tag machen."
               >
                 doppelt
               </span>
@@ -221,12 +240,12 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
             onClick={onMerge}
             title="In einen anderen Tag übernehmen (zusammenführen)"
             aria-label="Zusammenführen"
-            className="w-6 shrink-0 rounded text-[var(--color-text-muted)] hover:bg-[var(--color-bg)] hover:text-[var(--color-text)]"
+            className={iconButton}
           >
-            ⇢
+            <Icon name="merge" />
           </button>
         ) : (
-          <span className="w-6 shrink-0" />
+          <span className="w-7 shrink-0" />
         )}
         {/* Archive the whole family (or bring it back in the Archiv view). */}
         {!locked && depth === 0 ? (
@@ -235,22 +254,25 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
             onClick={onArchive}
             title={archivedView ? 'Aus dem Archiv zurückholen (ganze Familie)' : 'Archivieren (ganze Familie) — nur aus dieser Liste, Buchungen bleiben'}
             aria-label={archivedView ? 'Zurückholen' : 'Archivieren'}
-            className="w-6 shrink-0 rounded text-[var(--color-text-muted)] hover:bg-[var(--color-bg)] hover:text-[var(--color-text)]"
+            className={iconButton}
           >
-            {archivedView ? '↩' : '🗄'}
+            <Icon name={archivedView ? 'restore' : 'archive'} />
           </button>
         ) : (
-          <span className="w-6 shrink-0" />
+          <span className="w-7 shrink-0" />
         )}
         <button
           type="button"
           onClick={onToggle}
           title="Zeigen, wo dieser Tag verwendet wird"
-          className="w-72 shrink-0 whitespace-nowrap text-right text-sm tabular-nums text-[var(--color-text-muted)] hover:underline"
+          className={`flex w-72 shrink-0 items-center justify-end gap-1.5 whitespace-nowrap rounded-md px-2 py-0.5 text-sm tabular-nums hover:bg-[var(--color-bg)] hover:text-[var(--color-text)] ${open ? 'text-[var(--color-text)]' : 'text-[var(--color-text-muted)]'}`}
         >
-          {usage.lines} {usage.lines === 1 ? 'Buchungszeile' : 'Buchungszeilen'}
-          {usage.deletedLines > 0 && ` (+${usage.deletedLines} gelöscht)`}
-          {usage.planRows > 0 && ` · ${usage.planRows} Budget`} {open ? '▴' : '▾'}
+          <span>
+            {usage.lines} {usage.lines === 1 ? 'Buchungszeile' : 'Buchungszeilen'}
+            {usage.deletedLines > 0 && ` (+${usage.deletedLines} gelöscht)`}
+            {usage.planRows > 0 && ` · ${usage.planRows} Budget`}
+          </span>
+          <Icon name="chevron" className={`transition-transform ${open ? '-rotate-90' : 'rotate-90'}`} />
         </button>
       </div>
       {open && <UsageDetails usage={usage} depth={depth} targetNames={targetNames} onOpenPlan={(pl) => onOpenPlan(pl, pl.tagId ?? tag.id)} onOpenBooking={(b) => onOpenBooking(b, tag.id)} />}
@@ -665,7 +687,11 @@ export default function Settings({ year, onOpenInKonten, onOpenInVerlauf }) {
           {familyIds.length > 0 && (
             <button
               type="button"
-              onClick={() => setExpandedFamilies(allOpen ? new Set() : new Set(familyIds))}
+              onClick={() => {
+                // Zuklappen also closes every open usage list; Aufklappen only opens families.
+                if (allOpen) setOpenIds(new Set())
+                setExpandedFamilies(allOpen ? new Set() : new Set(familyIds))
+              }}
               className="rounded-md border border-[var(--color-border)] px-2 py-0.5 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg)] hover:text-[var(--color-text)]"
             >
               {allOpen ? '▾ Alle zuklappen' : '▸ Alle aufklappen'}
