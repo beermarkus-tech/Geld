@@ -59,6 +59,20 @@ describe('categoryActualIndex', () => {
     expect(i2.details('c', [7, 8], null, 2)).toEqual(['Groß', 'Mittel', '…'])
     expect(i2.details('none', [7])).toEqual([])
   })
+  it('txIds: the bookings behind a figure, once each', () => {
+    const i3 = categoryActualIndex(
+      [
+        { id: 'a', date: '2026-07-01', lines: [{ amountCents: -10, categoryId: 'c', tags: ['t'] }, { amountCents: -20, categoryId: 'c', tags: ['t'] }] },
+        { id: 'b', date: '2026-07-02', lines: [{ amountCents: -5, categoryId: 'c', tags: [] }] },
+        { id: 'c', date: '2026-08-02', lines: [{ amountCents: -5, categoryId: 'c', tags: ['t'] }] },
+      ],
+      2026,
+    )
+    expect(i3.txIds('c', [7])).toEqual(['a', 'b'])
+    expect(i3.txIds('c', [7], new Set(['t']))).toEqual(['a'])
+    expect(i3.txIds('c', [7, 8], new Set(['t']))).toEqual(['a', 'c'])
+    expect(i3.txIds('x', [7])).toEqual([])
+  })
   it('totals and tag sums per category and month; a line counts once', () => {
     expect(idx.total('urlaub', 7)).toBe(-157)
     expect(idx.total('urlaub', 8)).toBe(-1)

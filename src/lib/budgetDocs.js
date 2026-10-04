@@ -17,7 +17,8 @@ export function budgetDocId(year, planVersion, targetId, month, breakdownTagId) 
 // top-line/breakdown line is targeted — every write path (a plain month
 // edit, converting a category to breakdown mode, adding/removing a line)
 // goes through this one shape so they can't quietly drift apart.
-export function budgetDoc(yearNum, targetKey, targetId, planVersion, month, breakdownTagId, cents, note) {
+// `label` (lib/labels.js): the text of a plain-text split line, kept on its documents.
+export function budgetDoc(yearNum, targetKey, targetId, planVersion, month, breakdownTagId, cents, note, label) {
   const id = budgetDocId(yearNum, planVersion, targetId, month, breakdownTagId)
   return {
     id,
@@ -30,5 +31,6 @@ export function budgetDoc(yearNum, targetKey, targetId, planVersion, month, brea
     breakdownTagId: breakdownTagId ?? null,
     plannedAmountCents: cents,
     note,
+    ...(label ? { breakdownLabel: label } : {}),
   }
 }

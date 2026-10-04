@@ -23,7 +23,7 @@ import TagPill, { listRowClass, typeLook } from './TagPill'
 //   autoHighlight           highlight the first entry as you type (Konten, add line)
 //                           or nothing until ↓ (the name editor: Enter renames)
 //   getOptions(text)        → [{ key, tag, label, hint?, separatorBefore?, drillText? }]
-//   getCreateTypes(text)    → the "Neu" types to offer (CREATE_TYPES entries), or []
+//   getCreateTypes(text)    → the "Neu" types to offer (CREATE_TYPES entries; `plain: true` = a text, no pill), or []
 //   onPick(option) / onCreate(text, groupingType) / onEnterNone(text) / onClose()
 //   onKey(event, text)      other keys (Backspace, Tab …); return true when handled
 //   header / belowInput / footer   extra content (chips, a hint line, buttons)
@@ -163,7 +163,8 @@ export default function TagBox({
                   className={listRowClass(idx === shown)}
                 >
                   <span className="text-xs text-[var(--color-text-muted)]">Neu</span>
-                  <TagPill tag={typeLook(opt.groupingType)}>{text.trim()}</TagPill>
+                  {/* `plain`: not a tag at all — just the text (Verlauf's plain-text split lines). */}
+                  {opt.plain ? <span className="min-w-0 truncate px-1">{text.trim()}</span> : <TagPill tag={typeLook(opt.groupingType)}>{text.trim()}</TagPill>}
                   <span className="text-xs text-[var(--color-text-muted)]">— {opt.label}</span>
                 </button>
               </li>

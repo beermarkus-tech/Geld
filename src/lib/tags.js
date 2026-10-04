@@ -53,7 +53,7 @@ export function tagUsage({ transactions = [], budgets = [], yearSettings = [] })
         e.bookings.push({ txId: tx.id, date: tx.date, label: tx.displayLabel, cents: l.amountCents ?? 0, details, deleted: Boolean(tx.deletedAt) })
       }
   for (const b of budgets) {
-    if (!b.breakdownTagId) continue
+    if (!b.breakdownTagId || String(b.breakdownTagId).startsWith('lbl:')) continue // a plain-text label is no tag (lib/labels.js)
     const e = at(b.breakdownTagId)
     e.planRows += 1
     const targetId = b.categoryId ?? b.allocationTagId

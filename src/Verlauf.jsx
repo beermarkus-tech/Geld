@@ -28,6 +28,7 @@ import TagPill from './TagPill'
 import { CREATE_TYPES } from './lib/tagTypes'
 import { categoryActualIndex, checkMessage, planStatus } from './lib/planCheck'
 import { usePlanTolerance } from './lib/usePlanTolerance'
+import { isLabelId, labelIdFor, labelNames } from './lib/labels'
 
 // Ctrl/Cmd+Delete deletes a row (Oct 2026, Markus); the grid's own "Delete clears
 // the cell" must not run on it too — onCellKeyDown still sees the key.
@@ -386,6 +387,9 @@ const TagTitleEditor = forwardRef(function TagTitleEditor({ value, eventKey, api
 // a child under "Schottland" (reused when it exists; a new parent gets the type
 // too). Tags already a line in this block aren't offered. Esc clears the field,
 // then closes.
+// Besides tags, a split line can be a plain-text label (Oct 2026, Markus): the first "Neu" row,
+// "Nur Text — kein Tag", makes one — no tag anywhere, just a name for planning.
+const LABEL_TYPE = '__label'
 function AddBreakdownModal({ tags, excludeIds, onSubmit, onCancel }) {
   const usage = useTagUsage()
   const tagById = useMemo(() => Object.fromEntries(tags.map((t) => [t.id, t])), [tags])
@@ -395,7 +399,7 @@ function AddBreakdownModal({ tags, excludeIds, onSubmit, onCancel }) {
       <div className="relative flex w-full max-w-sm flex-col gap-3 rounded-lg bg-[var(--color-surface)] p-5" onClick={(e) => e.stopPropagation()}>
         <p className="text-sm font-medium">Neue Aufschlüsselungszeile</p>
         <TagBox
-          placeholder="Tag suchen oder neu erstellen… (z.B. Schottland:Hotels)"
+          placeholder="Tag suchen, neu erstellen — oder nur einen Text (z.B. Flug)"
           listClassName="max-h-60"
           getOptions={(text) => {
             const key = tagKey(text.trim())
@@ -407,9 +411,14 @@ function AddBreakdownModal({ tags, excludeIds, onSubmit, onCancel }) {
               .slice(0, 25)
               .map(({ t, label }) => ({ key: t.id, id: t.id, tag: t, label, hint: usageHint(usageOf(usage, t.id)), drillText: t.parentTag ? undefined : `${t.name}: ` }))
           }}
-          getCreateTypes={(text) => (text.trim() !== '' && !findTagByText(tags, text) ? createTypesFor(tags, text, CREATE_TYPES) : [])}
+          getCreateTypes={(text) => {
+            const t = text.trim()
+            if (t === '' || t.endsWith(':')) return []
+            const label = excludeIds.has(labelIdFor(t)) ? [] : [{ groupingType: LABEL_TYPE, label: 'Nur Text — kein Tag', plain: true }]
+            return [...label, ...(findTagByText(tags, text) ? [] : createTypesFor(tags, text, CREATE_TYPES))]
+          }}
           onPick={(o) => onSubmit({ tagId: o.id })}
-          onCreate={(text, groupingType) => onSubmit({ text, groupingType })}
+          onCreate={(text, groupingType) => onSubmit(groupingType === LABEL_TYPE ? { label: text.trim() } : { text, groupingType })}
           onClose={onCancel}
           footer={
             <div className="flex justify-end">
@@ -424,7 +433,7 @@ function AddBreakdownModal({ tags, excludeIds, onSubmit, onCancel }) {
   )
 }
 
-export default function Verlauf({ year, initialFocus, onFocusChange, active = true, onOpenQuickview, jump = null }) {
+export default function Verlauf({ year, initialFocus, onFocusChange, active = true, onOpenQuickview, onOpenInKonten, jump = null }) {
   // Whether this screen is the visible one — its window-level shortcuts only
   // work then (Oct 2026: Konten's Ctrl++ / Tab fired from other screens and
   // created empty bookings).
@@ -820,7 +829,9 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     else deleteDoc(doc(db, 'cellComments', id))
   }
 
-  const tagName = (id) => tagById.get(id)?.name ?? id
+  // The texts of plain-text split lines (lib/labels.js), from the budget documents.
+  const labelNameById = useMemo(() => labelNames(budgets), [budgets])
+  const tagName = (id) => tagById.get(id)?.name ?? labelNameById.get(id) ?? id
 
   // Prog (spec.md §3b) — shared with Planung via budget.js's own
   // progMonths(), so both screens compute it identically.
@@ -961,7 +972,9 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         breakdownLabel: tagName(tagId),
         months: line.months,
         yearTotal: line.yearTotal,
-        ...(isPlan0 ? {} : lineChecks(common, tagById.get(tagId)?.parentTag || byParent.has(tagId) ? new Set([tagId]) : familyOf(tagId).ids)),
+        // A plain-text label cannot have bookings: nothing to compare with.
+        isLabel: isLabelId(tagId),
+        ...(isPlan0 || isLabelId(tagId) ? {} : lineChecks(common, tagById.get(tagId)?.parentTag || byParent.has(tagId) ? new Set([tagId]) : familyOf(tagId).ids)),
       }
     }
 
@@ -1067,7 +1080,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     const existing = budgets.find((b) => b.id === id)
     setDoc(
       doc(db, 'budgets', id),
-      budgetDoc(yearNum, row.targetKey, row.targetId, row.planVersion, month, row.breakdownTagId, cents, existing?.note ?? ''),
+      budgetDoc(yearNum, row.targetKey, row.targetId, row.planVersion, month, row.breakdownTagId, cents, existing?.note ?? '', row.isLabel ? row.breakdownLabel : undefined),
     )
   }
 
@@ -1092,6 +1105,35 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     if (!result.ok && TAG_RENAME_MESSAGES[result.reason]) window.alert(TAG_RENAME_MESSAGES[result.reason])
     return result.ok
   }
+
+  // A plain-text label is renamed by moving its documents to the new label's id (this
+  // block and plan version only, like replacing a tag), or — when only case or
+  // punctuation changed — by rewriting the text on them.
+  function renameLabel(row, rawName) {
+    const text = String(rawName ?? '').trim()
+    if (!text) {
+      window.alert('Der Name darf nicht leer sein.')
+      return false
+    }
+    if (text === row.breakdownLabel) return true
+    const { targetKey, targetId, planVersion } = row
+    const newId = labelIdFor(text)
+    const lineIds = breakdownTagIdsFor(targetKey, targetId, planVersion)
+    if (newId === row.renameTagId) {
+      const batch = writeBatch(db)
+      for (const b of budgets) if (b.year === yearNum && b.planVersion === planVersion && b[targetKey] === targetId && b.breakdownTagId === newId) batch.set(doc(db, 'budgets', b.id), { ...b, breakdownLabel: text })
+      batch.commit()
+      return true
+    }
+    if (lineIds.includes(newId)) {
+      window.alert('Eine Zeile mit diesem Namen gibt es hier schon.')
+      return false
+    }
+    const { focusRowId } = tagActions.replaceInBlock({ year: yearNum, targetKey, targetId, planVersion, oldTagId: row.renameTagId, isHeader: false, lineTagIds: lineIds, newTagId: newId, newLabel: text })
+    claimPendingFocus(focusRowId)
+    return true
+  }
+  const renameRow = (row, name) => (row.isLabel ? renameLabel(row, name) : renameTag(row.renameTagId, name))
 
   // Which existing tags a row's title editor offers (replaceOptions()).
   function replaceOptionsFor(row) {
@@ -1153,7 +1195,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // version anyway, Plan1 and Plan0 fall out independent for free (each
   // plan version gets its own carry-over exactly once, the first time
   // *that version* gains a line, never touching the other).
-  async function commitAddBreakdownLine(targetKey, targetId, planVersion, tagId) {
+  async function commitAddBreakdownLine(targetKey, targetId, planVersion, tagId, label) {
     const existing = breakdownTagIdsFor(targetKey, targetId, planVersion)
     const isFirstLine = existing.length === 0
     const carryOver = isFirstLine ? budgetTopLineMonths(targetKey, targetId, planVersion, yearNum, budgets) : null
@@ -1161,7 +1203,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     for (let month = 1; month <= 12; month++) {
       const cents = carryOver ? carryOver.months[month - 1] : 0
       const id = budgetDocId(yearNum, planVersion, targetId, month, tagId)
-      batch.set(doc(db, 'budgets', id), budgetDoc(yearNum, targetKey, targetId, planVersion, month, tagId, cents, ''))
+      batch.set(doc(db, 'budgets', id), budgetDoc(yearNum, targetKey, targetId, planVersion, month, tagId, cents, '', label))
       if (isFirstLine) {
         const flatId = budgetDocId(yearNum, planVersion, targetId, month, null)
         if (budgets.some((b) => b.id === flatId)) batch.delete(doc(db, 'budgets', flatId))
@@ -1181,10 +1223,17 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // "I should be able to add a breakdown line without a parent") just
   // creates/reuses `name` itself as a standalone tag, same exact-match
   // reuse rule.
-  async function handleAddBreakdownSubmit({ tagId: pickedId, text, groupingType = null }) {
+  async function handleAddBreakdownSubmit({ tagId: pickedId, text, groupingType = null, label = null }) {
     const target = addModalTarget
     setAddModalTarget(null)
     if (!target) return
+    // A plain-text label: no tag is created or touched.
+    if (label) {
+      const id = labelIdFor(label)
+      claimPendingFocus(`${target.targetKey}:${target.targetId}:${target.planVersion}:${id}`)
+      await commitAddBreakdownLine(target.targetKey, target.targetId, target.planVersion, id, label)
+      return
+    }
     // An existing tag picked, or "Parent:Child" / a label created through the
     // shared tag actions (an existing tag of that name is reused; a new parent
     // takes the chosen type too).
@@ -1405,7 +1454,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     if (active) gridApiRef.current?.refreshCells({ columns: ['rowTitle'], force: true })
   }, [tagById, active])
   const live = useRef({})
-  live.current = { persistBudgetMonth, renameTag, tagById, replaceOptionsFor, replaceBreakdownTag, percent: tolerancePercent }
+  live.current = { persistBudgetMonth, renameRow, tagById, replaceOptionsFor, replaceBreakdownTag, percent: tolerancePercent }
   // Plan1's colours depend on bookings and plan figures, which change the row
   // data but not the cell value AG Grid compares — so those cells are redrawn
   // whenever the rows are rebuilt.
@@ -1729,11 +1778,11 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         cellEditorPopupPosition: 'under',
         cellEditorParams: (p) => ({
           options: live.current.replaceOptionsFor(p.data),
-          onRename: (name) => live.current.renameTag(p.data.renameTagId, name),
+          onRename: (name) => live.current.renameRow(p.data, name),
           onReplace: (tagId) => live.current.replaceBreakdownTag(p.data, tagId),
         }),
         valueSetter: (p) => {
-          live.current.renameTag(p.data.renameTagId, p.newValue)
+          live.current.renameRow(p.data, p.newValue)
           return false // the new name arrives with the tag's own snapshot
         },
         cellClass: (p) => `truncate${p.data.rowLabel?.includes('breakdown') || p.data.rowLabel === 'Rollup' ? ' text-xs' : ''}`,
@@ -1769,6 +1818,8 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
           // A breakdown line / Übergruppe *is* a tag: shown as the same pill as
           // every tag in Konten (Oct 2026, Markus) — coloured by the tag's type,
           // a dashed neutral outline when it has none yet.
+          // A plain-text label is no tag: just its text.
+          if (p.data.isLabel) return <span className="truncate">{p.value}</span>
           if (p.data.renameTagId) {
             return (
               <TagPill tag={live.current.tagById.get(p.data.renameTagId)} className={p.data.isChildLine ? 'ml-3' : ''}>
@@ -1951,13 +2002,16 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     if (colId === 'label') {
       if (closedMonths.length === 0) return null
       const { plan, actual } = yearSums(row, closedMonths)
-      return checkMessage({ plan, actual, status: planStatus({ plan, actual, closed: true, percent: tolerancePercent }), details: detailsOf(row, closedMonths) })
+      return withBookings(checkMessage({ plan, actual, status: planStatus({ plan, actual, closed: true, percent: tolerancePercent }), details: detailsOf(row, closedMonths) }), row, closedMonths)
     }
     const m = Number(colId.slice(1))
     const plan = row.months[m - 1]
     const actual = row.actuals[m - 1]
-    return checkMessage({ plan, actual, status: planStatus({ plan, actual, closed: closedMonths.includes(m), percent: tolerancePercent }), details: detailsOf(row, [m]) })
+    return withBookings(checkMessage({ plan, actual, status: planStatus({ plan, actual, closed: closedMonths.includes(m), percent: tolerancePercent }), details: detailsOf(row, [m]) }), row, [m])
   }
+  // The message links to the bookings behind "Gebucht" (categories only): a click opens Konten
+  // showing exactly those, Esc comes back (Oct 2026, Markus).
+  const withBookings = (info, row, months) => (info && row.targetKey === 'categoryId' ? { ...info, txIds: actualIndex.txIds(row.targetId, months, row.checkTagIds) } : info)
   // The Details of the bookings behind a row's "Gebucht" (categories only).
   const detailsOf = (row, months) => (row.targetKey === 'categoryId' ? actualIndex.details(row.targetId, months, row.checkTagIds) : [])
   const checkInfo = commentRow?.actuals ? buildCheck(commentRow, commentCell.colId) : null
@@ -2011,12 +2065,26 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         <div
           role="status"
           aria-live="polite"
-          title={checkInfo?.text}
           className={`flex h-8 w-[34rem] max-w-full items-center text-xs leading-4 ${
             checkInfo?.tone === 'ok' ? 'text-[var(--color-plan-ok)]' : checkInfo?.tone === 'off' ? 'text-[var(--color-plan-off)]' : 'text-[var(--color-text-muted)]'
           }`}
         >
-          <span className="line-clamp-2">{checkInfo?.text}</span>
+          {checkInfo?.txIds?.length > 0 ? (
+            <button
+              type="button"
+              tabIndex={-1}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => onOpenInKonten?.({ txIds: checkInfo.txIds, year: String(yearNum), from: 'verlauf' })}
+              title={`${checkInfo.text} — ${checkInfo.txIds.length} ${checkInfo.txIds.length === 1 ? 'Buchung' : 'Buchungen'} in Konten zeigen`}
+              className="line-clamp-2 text-left hover:underline"
+            >
+              {checkInfo.text}
+            </button>
+          ) : (
+            <span className="line-clamp-2" title={checkInfo?.text}>
+              {checkInfo?.text}
+            </span>
+          )}
         </div>
         <CellCommentField
           cell={activeCommentCell}

@@ -95,7 +95,8 @@ export function planSetType(tags, tagId, groupingType) {
 // block (year · plan version · category/allocation tag): its budget documents
 // and the rows' cell comments move to the new tag. Bookings are not touched.
 // @returns {{ creates: object[], sets: {col, id, data}[], deletes: {col, id}[], focusRowId: string }}
-export function planReplaceInBlock({ tags, budgets, cellComments, year, targetKey, targetId, planVersion, oldTagId, isHeader, lineTagIds, newTagId, now = Date.now() }) {
+// `newLabel`: the text when the new line is a plain-text label (lib/labels.js).
+export function planReplaceInBlock({ tags, budgets, cellComments, year, targetKey, targetId, planVersion, oldTagId, isHeader, lineTagIds, newTagId, newLabel, now = Date.now() }) {
   const rowBase = `${targetKey}:${targetId}:${planVersion}`
   const creates = []
   const commentRows = new Map()
@@ -121,7 +122,7 @@ export function planReplaceInBlock({ tags, budgets, cellComments, year, targetKe
   const deletes = []
   for (const b of budgets) {
     if (b.year !== year || b.planVersion !== planVersion || b[targetKey] !== targetId || !mapping.has(b.breakdownTagId)) continue
-    const next = budgetDoc(year, targetKey, targetId, planVersion, b.month, mapping.get(b.breakdownTagId), b.plannedAmountCents, b.note ?? '')
+    const next = budgetDoc(year, targetKey, targetId, planVersion, b.month, mapping.get(b.breakdownTagId), b.plannedAmountCents, b.note ?? '', newLabel)
     deletes.push({ col: 'budgets', id: b.id })
     sets.push({ col: 'budgets', id: next.id, data: next })
   }

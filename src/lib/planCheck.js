@@ -46,7 +46,7 @@ export function categoryActualIndex(transactions, year) {
       slot.total += line.amountCents ?? 0
       // Details as Konten shows them: a split line's own, else the booking's.
       const detail = String((tx.lines.length > 1 && line.note) || tx.detail || '').trim()
-      slot.lines.push({ cents: line.amountCents ?? 0, tags: line.tags ?? [], detail })
+      slot.lines.push({ cents: line.amountCents ?? 0, tags: line.tags ?? [], detail, txId: tx.id })
     }
   }
   const slotOf = (categoryId, month) => byCat.get(categoryId)?.[month - 1]
@@ -57,6 +57,14 @@ export function categoryActualIndex(transactions, year) {
       let sum = 0
       for (const l of slotOf(categoryId, month)?.lines ?? []) if (l.tags.some((t) => tagIds.has(t))) sum += l.cents
       return sum
+    },
+    // The ids of the bookings behind a figure (`tagIds` null = the whole category),
+    // over the given months — what "Gebucht" in Verlauf's top message links to.
+    txIds: (categoryId, months, tagIds = null) => {
+      const ids = new Set()
+      for (const m of months)
+        for (const l of slotOf(categoryId, m)?.lines ?? []) if (!tagIds || l.tags.some((t) => tagIds.has(t))) ids.add(l.txId)
+      return [...ids]
     },
     // The Details texts of the bookings behind a figure (`tagIds` null = the
     // whole category), over the given months: distinct, largest booking first,

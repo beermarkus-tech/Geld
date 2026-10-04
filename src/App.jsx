@@ -305,7 +305,7 @@ export default function App() {
           />
         </div>
         <div className={view === 'verlauf' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
-          <Verlauf year={verlaufYear} initialFocus={verlaufFocus} onFocusChange={setVerlaufFocus} active={view === 'verlauf'} onOpenQuickview={openQuickview} jump={verlaufJump} />
+          <Verlauf year={verlaufYear} initialFocus={verlaufFocus} onFocusChange={setVerlaufFocus} active={view === 'verlauf'} onOpenQuickview={openQuickview} jump={verlaufJump} onOpenInKonten={openInKonten} />
         </div>
         {/* Planung (spec.md §3c) mounts once and is only hidden, like Konten and
             Verlauf above (Oct 2026, Markus: "planung is being recalculated
