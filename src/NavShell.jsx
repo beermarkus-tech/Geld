@@ -178,7 +178,7 @@ export default function NavShell({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [signOutConfirmOpen])
 
-  // Ctrl/Cmd+1 through +9, then +0 for the 10th, jump straight to that nav
+  // Ctrl/Cmd+1 through +9 jump straight to that nav
   // item, in ALL_ITEMS' own order (Markus: "assign ctrl+1 to dashboard,
   // ctrl+2 to konten, ctrl+3 to verlauf, and so on"). **Real, near-certain
   // risk, flagged rather than assumed away** — Ctrl+1 through Ctrl+8 are
@@ -193,7 +193,10 @@ export default function NavShell({
   useEffect(() => {
     const onKeyDown = (e) => {
       if (!(e.ctrlKey || e.metaKey)) return
-      const index = e.key === '0' ? 9 : Number(e.key) - 1
+      // Ctrl+0 is the browser's zoom reset and stays that (Oct 2026, Markus: the
+      // app must not leave the page zoomed) — the 10th item, Settings, has no hotkey.
+      if (e.key === '0') return
+      const index = Number(e.key) - 1
       if (!(index >= 0 && index < ALL_ITEMS.length)) return
       e.preventDefault()
       onNavigate(ALL_ITEMS[index].id)
