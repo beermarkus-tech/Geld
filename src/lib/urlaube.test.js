@@ -92,7 +92,7 @@ describe('urlaubeOverview', () => {
   })
   it('only the holiday tag counts when a line carries several tags', () => {
     // "Rechnung offen" is first on the line, yet the booking is La Rochelle's
-    expect(h('lr').rows.find((r) => r.year === 2025).booked).toBe(-70000)
+    expect(h('lr').booked).toBe(-100000) // 2025's -70000 plus the 2024 Anzahlung, none lost to the Rechnung tag
     expect(o.holidays.map((x) => x.key)).not.toContain('rechn')
     // a line with only a non-holiday tag has no holiday: untagged
     expect(o.untagged).toBe(1300)
@@ -118,12 +118,18 @@ describe('urlaubeOverview', () => {
     expect(h('sco').outside).toBe(-400)
     expect(o.outside).toBe(400)
   })
-  it('rows per child and year, child-less bookings as (allgemein), Details and comments', () => {
+  it('rows per child tag over all years, child-less bookings as (allgemein), Details and comments', () => {
     const lr = h('lr')
-    expect(lr.rows.map((r) => `${r.label}|${r.year}`)).toEqual(['Hotel|2024', 'Hotel|2025'])
-    expect(lr.rows[0].details).toEqual(['Anzahlung'])
+    // Unterkünfte was booked in 2024 and 2025: one row, summed
+    expect(lr.rows.map((r) => [r.label, r.booked, r.lastYear])).toEqual([['Hotel', -100000, 2025]])
+    expect(lr.rows[0].details).toEqual(['Hotel', 'Anzahlung'])
+    expect(h('sco').rows.map((r) => r.label)).toEqual(['Flüge'])
     const r = urlaubeOverview({ ...base, cellComments: [{ rowId: 'categoryId:urlaube:plan1:sco-f', year: 2026, text: 'teurer?' }, { rowId: 'categoryId:other:plan1:sco-f', year: 2026, text: 'nein' }] })
-    expect(r.holidays.find((x) => x.key === 'sco').rows.find((x) => x.year === 2026).comments).toEqual(['teurer?'])
+    expect(r.holidays.find((x) => x.key === 'sco').rows[0].comments).toEqual(['teurer?'])
+  })
+  it('a parent-only booking next to child bookings is its own row "(allgemein)"', () => {
+    const r = urlaubeOverview({ ...base, transactions: [...transactions, tx('loose-sco', '2026-02-02', -700, ['sco'])] })
+    expect(r.holidays.find((x) => x.key === 'sco').rows.map((x) => x.label)).toEqual(['(allgemein)', 'Flüge'])
   })
   it('no category yet: nothing', () => {
     expect(urlaubeOverview({ ...base, categoryId: null })).toEqual({ holidays: [], years: [], untagged: 0, outside: 0 })

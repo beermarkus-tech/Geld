@@ -15,9 +15,11 @@ import { isAnchorTransaction } from './balance'
 //                without ticks counts as fully booked, a future year (and the
 //                current one without ticks) as fully planned; a booking after
 //                the split is not "gebucht" but reads "davon schon gebucht"
-//   rows         per child tag and year: Details of the bookings, Verlauf's
-//                comments on that line, booked and still to be booked, and the
-//                same as cost only / subventions + gifts
+//   rows         per child tag, over all years (Oct 2026, Markus: no year column):
+//                Details of the bookings, Verlauf's comments on that line,
+//                booked and still to be booked, and the same as cost only /
+//                subventions + gifts; `lastYear` is the latest year it was
+//                booked or planned in
 // Which tag on a line is the holiday tag (Oct 2026, Markus: a line may also
 // carry a Rechnung tag or other grouping tags, which are none of this screen's
 // business): a tag whose top-level tag starts with a year ("2025 La Rochelle")
@@ -176,8 +178,8 @@ export function urlaubeOverview({ categoryId, incomeIds = new Set(), tags = [], 
       childTag: c.child,
       label: c.child ? c.child.name : null,
       year: c.year,
-      details: distinct([...c.entries].sort((a, b) => Math.abs(b.cents) - Math.abs(a.cents)).map((e) => e.detail), 4),
-      comments: distinct(commentsOf.get(`${tagId}|${c.year}`) ?? [], 3),
+      _entries: c.entries,
+      _comments: commentsOf.get(`${tagId}|${c.year}`) ?? [],
       booked,
       planned,
       plannedBooked,
@@ -194,7 +196,24 @@ export function urlaubeOverview({ categoryId, incomeIds = new Set(), tags = [], 
 
   const holidays = [...byRoot.values()].map(({ root, rows }) => {
     const hasChildRows = rows.some((r) => r.childTag)
-    rows.sort((a, b) => (a.childTag ? a.childTag.name : '').localeCompare(b.childTag ? b.childTag.name : '', 'de') || a.year - b.year)
+    // One row per child tag, whichever year its bookings fall in (Oct 2026,
+    // Markus); `lastYear` is where a click on it opens Konten.
+    const merged = new Map()
+    for (const r of [...rows].sort((a, b) => a.year - b.year)) {
+      const m = merged.get(r.tagId) ?? { key: `${root.id}|${r.tagId}`, tagId: r.tagId, childTag: r.childTag, label: r.label, booked: 0, planned: 0, plannedBooked: 0, cost: 0, subvention: 0, count: 0, lastYear: r.year, entries: [], comments: [] }
+      for (const k of ['booked', 'planned', 'plannedBooked', 'cost', 'subvention', 'count']) m[k] += r[k]
+      m.lastYear = Math.max(m.lastYear, r.year)
+      m.entries.push(...r._entries)
+      m.comments.push(...r._comments)
+      merged.set(r.tagId, m)
+    }
+    const childRows = [...merged.values()]
+      .map(({ entries, comments, ...m }) => ({
+        ...m,
+        details: distinct([...entries].sort((a, b) => Math.abs(b.cents) - Math.abs(a.cents)).map((e) => e.detail), 4),
+        comments: distinct(comments, 3),
+      }))
+      .sort((a, b) => (a.childTag ? a.childTag.name : '').localeCompare(b.childTag ? b.childTag.name : '', 'de'))
     const last = rows.map((r) => r._last).sort().at(-1) ?? ''
     const fromName = /^\s*(\d{4})/.exec(root.name)
     const booked = sum(rows.map((r) => r.booked))
@@ -214,7 +233,7 @@ export function urlaubeOverview({ categoryId, incomeIds = new Set(), tags = [], 
       cost: sum(rows.map((r) => r.cost)),
       subvention: sum(rows.map((r) => r.subvention)),
       outside: outsideByRoot.get(root.id) ?? 0,
-      rows: rows.map(({ _budget, _prognose, _last, ...r }) => ({ ...r, label: r.label ?? (hasChildRows ? '(allgemein)' : null) })),
+      rows: childRows.map((r) => ({ ...r, label: r.label ?? (hasChildRows ? '(allgemein)' : null) })),
     }
   })
   holidays.sort((a, b) => b.tripYear - a.tripYear || a.tag.name.localeCompare(b.tag.name, 'de'))

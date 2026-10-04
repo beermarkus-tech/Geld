@@ -17,7 +17,7 @@ import { useTags } from './TagsProvider'
 // numbers. lib/urlaube.js has the rules. Nothing is stored here but the search
 // text and the archive switch.
 const euro = (cents) => `${centsToWholeEuro(cents)} €`
-const GRID = 'grid grid-cols-[minmax(7rem,12rem)_minmax(0,1fr)_7rem_8.5rem_3.5rem] items-baseline gap-x-4'
+const GRID = 'grid grid-cols-[minmax(7rem,12rem)_minmax(0,1fr)_7rem_8.5rem] items-baseline gap-x-4'
 const HEAD = 'text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]'
 
 function Amount({ cents }) {
@@ -81,13 +81,12 @@ function Card({ card, flash, onOpenRow, innerRef }) {
       </div>
 
       <div className="overflow-x-auto">
-        <div className="min-w-[40rem]">
+        <div className="min-w-[34rem]">
           <div className={`${GRID} border-b border-[var(--color-border)] pb-1 ${HEAD}`}>
             <span>Tag</span>
             <span>Details / Kommentar</span>
             <span className="text-right">Gebucht</span>
             <span className="text-right">Noch zu buchen</span>
-            <span className="text-right">Jahr</span>
           </div>
           {card.rows.map((r) => (
             <button
@@ -113,7 +112,6 @@ function Card({ card, flash, onOpenRow, innerRef }) {
                 <Amount cents={r.planned} />
                 {r.plannedBooked !== 0 && <span className="block text-xs text-[var(--color-text-muted)]">davon gebucht {euro(r.plannedBooked)}</span>}
               </span>
-              <span className="text-right tabular-nums text-[var(--color-text-muted)]">{r.year}</span>
             </button>
           ))}
         </div>
@@ -311,8 +309,8 @@ export default function Urlaube({ onOpenInKonten, active = true }) {
       (!needle || h.tag.name.toLowerCase().includes(needle) || h.rows.some((r) => (r.label ?? '').toLowerCase().includes(needle))),
   )
 
-  // A row opens Konten on that tag and year; Esc there comes back here.
-  const openRow = (r) => onOpenInKonten({ tagId: r.tagId, year: String(r.year), from: 'urlaube' })
+  // A row opens Konten on that tag, in the latest year it was booked or planned; Esc there comes back here.
+  const openRow = (r) => onOpenInKonten({ tagId: r.tagId, year: String(r.lastYear), from: 'urlaube' })
   // A holiday in the overview scrolls to its card (showing archive/search state as needed).
   function jumpTo(h) {
     if (Boolean(h.tag.archived) !== archive) setArchive(Boolean(h.tag.archived))
