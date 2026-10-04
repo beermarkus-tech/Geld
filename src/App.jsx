@@ -11,6 +11,7 @@ import { useValueWhileVisible } from './lib/useDeferWhileHidden'
 import NavShell, { ALL_ITEMS } from './NavShell'
 import PlaceholderScreen from './PlaceholderScreen'
 import Aussenstaende from './Aussenstaende'
+import Fortschritt from './Fortschritt'
 import Planung from './Planung'
 import Quickview from './Quickview'
 import Settings from './Settings'
@@ -43,6 +44,7 @@ export default function App() {
   const verlaufYear = useValueWhileVisible(year, view === 'verlauf')
   const planungYear = useValueWhileVisible(year, view === 'planung')
   const quickviewYear = useValueWhileVisible(year, view === 'quickview')
+  const fortschrittYear = useValueWhileVisible(year, view === 'fortschritt')
   // The cursor's last known position on each of these two grid screens
   // (Markus: "generally, save the cursor position both in konten and
   // verlauf, and place the cursor there again upon switching") — has to
@@ -310,14 +312,18 @@ export default function App() {
         <div className={view === 'aussenstaende' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
           <Aussenstaende onOpenInKonten={openInKonten} active={view === 'aussenstaende'} />
         </div>
+        {/* Mounted once, only hidden — like Quickview (Oct 2026). */}
+        <div className={view === 'fortschritt' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
+          <Fortschritt year={fortschrittYear} onOpenInKonten={openInKonten} active={view === 'fortschritt'} />
+        </div>
         {view === 'settings' && <Settings year={year} onOpenInKonten={openInKonten} onOpenInVerlauf={openInVerlauf} />}
         {view === 'importexport' && <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} />}
-        {/* Every other nav item (Dashboard, Quickview, Fortschritt,
+        {/* Every other nav item (Dashboard,
             Monatsabschluss, Außenstände, Settings) isn't built yet —
             resolved Sept 2026 (Markus): a real nav entry exists for each
             from the start anyway, landing on a plain placeholder rather than
             being left out until its own phase ships. */}
-        {!['konten', 'verlauf', 'planung', 'quickview', 'aussenstaende', 'importexport', 'settings'].includes(view) && (
+        {!['konten', 'verlauf', 'planung', 'quickview', 'fortschritt', 'aussenstaende', 'importexport', 'settings'].includes(view) && (
           <PlaceholderScreen title={ALL_ITEMS.find((i) => i.id === view)?.label ?? view} />
         )}
       </NavShell>
