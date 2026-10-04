@@ -4,7 +4,7 @@ import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from
 import { auth } from './firebase'
 import ImportExportScreen from './ImportExportScreen'
 import Konten from './Konten'
-import { waitForInitialAuthState } from './lib/authReady'
+import { AUTH_GIVE_UP_MS, waitForInitialAuthState } from './lib/authReady'
 import { focusScreenCursor } from './lib/screenCursor'
 import ui from './lib/uiState'
 import { useValueWhileVisible } from './lib/useDeferWhileHidden'
@@ -175,8 +175,20 @@ export default function App() {
   useEffect(() => {
     let active = true
 
+    let giveUp = null
     waitForInitialAuthState().then(({ user: initialUser, timedOut }) => {
       if (!active) return
+      // Timed out and still nobody: Firebase is just slow (the listener below
+      // ends the wait when it answers) — keep "Lädt…" instead of flashing the
+      // sign-in screen, and only offer it after AUTH_GIVE_UP_MS.
+      if (timedOut && !initialUser) {
+        giveUp = setTimeout(() => {
+          if (!active) return
+          setUser(null)
+          setCheckingAuth(false)
+        }, AUTH_GIVE_UP_MS)
+        return
+      }
       setUser(initialUser)
       setUsingCachedSession(timedOut)
       setCheckingAuth(false)
@@ -184,6 +196,7 @@ export default function App() {
 
     const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
       if (!active) return
+      clearTimeout(giveUp)
       setUser(nextUser)
       setUsingCachedSession(false)
       setCheckingAuth(false)
@@ -191,6 +204,7 @@ export default function App() {
 
     return () => {
       active = false
+      clearTimeout(giveUp)
       unsubscribe()
     }
   }, [])
