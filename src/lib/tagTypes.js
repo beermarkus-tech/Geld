@@ -9,4 +9,10 @@ export const CREATE_TYPES = [
   { groupingType: 'statement', label: 'Abrechnung' },
   { groupingType: 'claim', label: 'Anspruch' },
   { groupingType: 'business-trip', label: 'Dienstreise' },
+  { groupingType: 'health-insurance', label: 'Krankenkasse' },
 ]
+
+// The types that are claims (Außenstände). Krankenkasse (Oct 2026, Markus)
+// works exactly like Anspruch and Dienstreise — its own type only to keep
+// health-insurance claims apart in the lists.
+export const CLAIM_TYPES = new Set(['claim', 'business-trip', 'health-insurance'])

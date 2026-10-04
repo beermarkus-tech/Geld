@@ -1,3 +1,4 @@
+import { CLAIM_TYPES } from './tagTypes'
 import { claimLineContribution, tagFilterMatchIds } from './tagBalance'
 
 // Außenstände's lookups (spec.md §3g) — everything is a query over tagged
@@ -22,7 +23,7 @@ export const receivableAccountIds = (accounts) => new Set(accounts.filter((a) =>
 // @returns {string[]} tag ids
 export function claimTagIds(tags, transactions, receivableIds) {
   const byId = Object.fromEntries(tags.map((t) => [t.id, t]))
-  const isClaimType = (t) => t?.groupingType === 'claim' || t?.groupingType === 'business-trip'
+  const isClaimType = (t) => CLAIM_TYPES.has(t?.groupingType)
   // A child of a claim (e.g. "2024-05 HAM: Hotel") is part of its parent's
   // claim, never a claim of its own.
   const excluded = (id) => {
@@ -32,7 +33,7 @@ export function claimTagIds(tags, transactions, receivableIds) {
     if (t.parentTag && (isClaimType(byId[t.parentTag]) || ids.has(t.parentTag))) return true
     return Boolean(t.groupingType && !isClaimType(t))
   }
-  const ids = new Set(tags.filter((t) => (t.groupingType === 'claim' || t.groupingType === 'business-trip') && !t.parentTag).map((t) => t.id))
+  const ids = new Set(tags.filter((t) => CLAIM_TYPES.has(t.groupingType) && !t.parentTag).map((t) => t.id))
   for (const tx of transactions) {
     if (!receivableIds.has(tx.fromAccountId) && !receivableIds.has(tx.toAccountId)) continue
     for (const line of tx.lines ?? []) {

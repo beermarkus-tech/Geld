@@ -105,3 +105,13 @@ describe('Dienstreise', () => {
     expect(claimOverview(t, txs, REC).map((c) => [c.id, c.net, c.lines.length])).toEqual([['ham', 5000, 3]])
   })
 })
+
+describe('Krankenkasse', () => {
+  it('is a claim like Anspruch, even before any booking', () => {
+    const t = [
+      { id: 'zahn', name: '2026-03 Zahnarzt', parentTag: null, class: 'grouping', groupingType: 'health-insurance' },
+      { id: 'zahn-r', name: 'Rechnung', parentTag: 'zahn', class: 'grouping', groupingType: 'health-insurance' },
+    ]
+    expect(claimTagIds(t, [], REC)).toEqual(['zahn'])
+  })
+})

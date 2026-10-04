@@ -2126,3 +2126,7 @@ Markus: booking entries show Details; cleaner, more visible buttons; "Alle zukla
 ## Session 37, continued a hundred-and-seventh time — 2026-10-04 — Delete clears a booking's category
 
 Markus: Entf on Kategorie/Unterkategorie in Konten should delete the category. **Done** (`Konten.jsx`): plain Delete on those columns (not editing, cell editable) calls `clearCategoryDirect` / `clearCategoryToLine`; the grid's own Delete is suppressed there (`suppressGridDelete`). Harness: unsplit booking → categoryId null, shown "—"; split booking's own row unchanged; no editor opens, no delete armed.
+
+## Session 37, continued a hundred-and-eighth time — 2026-10-04 — Krankenkasse tag type
+
+Markus: a new type "Krankenkasse" that works like Anspruch/Dienstreise, only for ordering. **Done:** `health-insurance` in `CREATE_TYPES` (so every type picker and Settings' chips offer it), `CLAIM_TYPES` set in `lib/tagTypes.js` now used by `claimTagIds`, colour token `--color-tag-health` (sky, light/dark). +1 test (150).

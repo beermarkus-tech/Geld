@@ -42,6 +42,7 @@
   --color-tag-statement: #64748b; /* slate — statement-grouping tags, and unspecified grouping tags */
   --color-tag-claim: #4f46e5; /* indigo — claim tags (CPAM, Reisekosten, informal loans, §3g) */
   --color-tag-claim-category: #e11d48; /* rose — claim-category tags (Meal/Taxi/Hotel etc.), only ever offered alongside a claim tag */
+  --color-tag-health: #0284c7; /* sky — Krankenkasse claims (Oct 2026) */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -70,6 +71,7 @@
     --color-tag-statement: #94a3b8;
     --color-tag-claim: #818cf8;
     --color-tag-claim-category: #fb7185;
+    --color-tag-health: #38bdf8;
   }
 }
 
@@ -104,6 +106,7 @@
   --color-tag-statement: #94a3b8;
   --color-tag-claim: #818cf8;
   --color-tag-claim-category: #fb7185;
+  --color-tag-health: #38bdf8;
 }
 
 html,

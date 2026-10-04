@@ -20,6 +20,8 @@ export function tagColorVar(tag) {
       return '--color-tag-statement'
     case 'claim':
       return '--color-tag-claim'
+    case 'health-insurance':
+      return '--color-tag-health'
     case 'business-trip':
     case 'claim-category': // the old flat type, until converted
       return '--color-tag-claim-category'
