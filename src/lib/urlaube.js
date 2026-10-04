@@ -58,6 +58,16 @@ const sum = (xs) => xs.reduce((s, x) => s + x, 0)
 // The reduction a holiday got from subventions and gifts: total cost ÷ cost
 // only − 1, in whole percent (−20 for 800 € left of 1.000 €). Null without a
 // cost to compare to.
+// How far Verlauf's Prognose of a holiday (ticked month real, open month Plan1)
+// lies from its Gesamt (booked up to the last ticked month + Plan1 after it):
+// 0 within a few euros (Markus, Oct 2026), else the difference in cents. They
+// only differ when a month *before* the last ticked one is not ticked itself.
+export const PROGNOSE_HINT_CENTS = 500
+export function prognoseDeviation(holiday) {
+  const diff = holiday.prognose - (holiday.booked + holiday.planned)
+  return Math.abs(diff) > PROGNOSE_HINT_CENTS ? diff : 0
+}
+
 // A row that holds only money in — a Subvention, a Geschenk.
 export const isReductionRow = (r) => r.subvention > 0 && r.cost === 0
 

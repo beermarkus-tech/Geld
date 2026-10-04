@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { incomeCategoryIds, isReductionRow, reductionPercent, urlaubeCategoryId, urlaubeOverview } from './urlaube'
+import { incomeCategoryIds, isReductionRow, prognoseDeviation, reductionPercent, urlaubeCategoryId, urlaubeOverview } from './urlaube'
 
 const categories = [
   { id: 'sonst', name: 'Sonstiges', parentCategoryId: null },
@@ -135,6 +135,18 @@ describe('urlaubeOverview', () => {
   it('a planned subvention alone makes no holiday', () => {
     const r = urlaubeOverview({ ...base, transactions: [], budgets: [b(2026, 9, 20000, 'it-sub', { categoryId: 'sonst-einn' })] })
     expect(r.holidays).toEqual([])
+  })
+  it('Prognose and Gesamt agree, except when a month before the last ticked one is not ticked', () => {
+    expect(prognoseDeviation(h('it'))).toBe(0)
+    expect(prognoseDeviation(h('lr'))).toBe(0)
+    // April (4) not ticked although May is: the April booking counts as booked in Gesamt, but Prognose takes April's plan (none)
+    const gap = urlaubeOverview({ ...base, closedByYear: new Map([[2026, [1, 2, 3, 5, 6]]]), transactions: [...transactions, tx('apr', '2026-04-05', -15000, ['it'])] })
+    const it = gap.holidays.find((x) => x.key === 'it')
+    expect(prognoseDeviation(it)).toBe(it.prognose - (it.booked + it.planned))
+    expect(Math.abs(prognoseDeviation(it))).toBe(15000)
+    // a few euros do not count
+    expect(prognoseDeviation({ prognose: -10000, booked: -10300, planned: 0 })).toBe(0)
+    expect(prognoseDeviation({ prognose: -10000, booked: -10600, planned: 0 })).toBe(600)
   })
   it('rows of only subventions / gifts go to the bottom of a card, each group alphabetical', () => {
     const t2 = [...tags, { id: 'it-a', name: 'Aktivitäten', parentTag: 'it', class: 'grouping' }, { id: 'it-z', name: 'Zuschuss', parentTag: 'it', class: 'grouping' }]
