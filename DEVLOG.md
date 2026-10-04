@@ -2142,3 +2142,7 @@ Markus (after a design chat, no code first): Plan1 and Prog were mixed — the �
 ## Session 37, continued a hundred-and-eleventh time — 2026-10-04 — Verlauf message simplified
 
 Markus: the top-bar message should just be "Geplant: xxx € · Gebucht: xxx €". **Done:** `checkMessage` now only returns that text (tone from the status); the explanations, the "davon ohne eigene Plan-Zeile" / "keiner Plan-Zeile zugeordnet" parts and their helpers (`partsWithoutLine`, `unassignedCents`) and row fields were removed. Colours and tints are unchanged. The two "where did the difference come from" hints are gone — can come back if missed.
+
+## Session 37, continued a hundred-and-twelfth time — 2026-10-04 — Verlauf message: booking details
+
+Markus: add the bookings' Details to the message when available — "Geplant: … · Gebucht: … (Detail1, Detail2, Detail3)". **Done:** `categoryActualIndex(...).details(category, months, tagIds)` (distinct, largest first, max 3 then "…"; split line's own Details else the booking's); Plan1 rows carry `checkTagIds`; the message slot is wider again (two lines, full text in the tooltip). Not for Rücklagen rows. Harness: July sco-aus lists its three bookings' details; a booking without Details adds nothing.

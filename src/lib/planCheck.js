@@ -44,7 +44,9 @@ export function categoryActualIndex(transactions, year) {
       }
       const slot = months[month - 1]
       slot.total += line.amountCents ?? 0
-      slot.lines.push({ cents: line.amountCents ?? 0, tags: line.tags ?? [] })
+      // Details as Konten shows them: a split line's own, else the booking's.
+      const detail = String((tx.lines.length > 1 && line.note) || tx.detail || '').trim()
+      slot.lines.push({ cents: line.amountCents ?? 0, tags: line.tags ?? [], detail })
     }
   }
   const slotOf = (categoryId, month) => byCat.get(categoryId)?.[month - 1]
@@ -56,18 +58,38 @@ export function categoryActualIndex(transactions, year) {
       for (const l of slotOf(categoryId, month)?.lines ?? []) if (l.tags.some((t) => tagIds.has(t))) sum += l.cents
       return sum
     },
+    // The Details texts of the bookings behind a figure (`tagIds` null = the
+    // whole category), over the given months: distinct, largest booking first,
+    // at most `limit` — a trailing "…" when there are more.
+    details: (categoryId, months, tagIds = null, limit = 3) => {
+      const found = []
+      for (const m of months)
+        for (const l of slotOf(categoryId, m)?.lines ?? []) if (l.detail && (!tagIds || l.tags.some((t) => tagIds.has(t)))) found.push(l)
+      found.sort((a, b) => Math.abs(b.cents) - Math.abs(a.cents))
+      const seen = new Set()
+      const out = []
+      for (const l of found) {
+        const k = l.detail.toLowerCase()
+        if (!seen.has(k)) {
+          seen.add(k)
+          out.push(l.detail)
+        }
+      }
+      return out.length > limit ? [...out.slice(0, limit), '…'] : out
+    },
   }
 }
 
 const num = (c) => (Number.isInteger(c / 100) ? (c / 100).toLocaleString('de-DE') : (c / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
 const eur = (c) => `${num(c)} €`
 
-// The top-bar text for one cell (Oct 2026, Markus): just the two figures,
-// "Geplant: -500 € · Gebucht: -620 €"; the tone follows the cell's colour.
-// Null when there is nothing to say (no plan, nothing booked).
+// The top-bar text for one cell (Oct 2026, Markus): the two figures, plus the
+// Details of the bookings behind "Gebucht" when there are any —
+// "Geplant: -500 € · Gebucht: -620 € (Hotel Oban, Fähre)"; the tone follows
+// the cell's colour. Null when there is nothing to say.
 // @returns {{ text: string, tone: 'ok'|'off'|'info' } | null}
-export function checkMessage({ plan, actual, status }) {
-  if (!status && plan === 0 && actual === 0) return null
+export function checkMessage({ plan, actual, status, details = [] }) {
   if (!status && actual === 0) return null
-  return { text: `Geplant: ${eur(plan)} · Gebucht: ${eur(actual)}`, tone: status === 'ok' ? 'ok' : status ? 'off' : 'info' }
+  const tail = details.length > 0 ? ` (${details.join(', ').replace(', …', ' …')})` : ''
+  return { text: `Geplant: ${eur(plan)} · Gebucht: ${eur(actual)}${tail}`, tone: status === 'ok' ? 'ok' : status ? 'off' : 'info' }
 }

@@ -41,6 +41,24 @@ describe('categoryActualIndex', () => {
     ],
     2026,
   )
+  it('details: distinct, largest booking first, limited', () => {
+    const i2 = categoryActualIndex(
+      [
+        { id: 'a', date: '2026-07-01', detail: 'Klein', lines: [{ amountCents: -10, categoryId: 'c', tags: ['t'] }] },
+        { id: 'b', date: '2026-07-02', detail: 'Groß', lines: [{ amountCents: -900, categoryId: 'c', tags: ['t'] }] },
+        { id: 'c', date: '2026-08-02', detail: 'groß', lines: [{ amountCents: -50, categoryId: 'c', tags: [] }] },
+        { id: 'd', date: '2026-08-03', detail: 'Mittel', lines: [{ amountCents: -300, categoryId: 'c', tags: [] }] },
+        { id: 'e', date: '2026-08-04', detail: 'Extra', lines: [{ amountCents: -200, categoryId: 'c', tags: [] }] },
+        { id: 'f', date: '2026-07-05', detail: '', lines: [{ amountCents: -5000, categoryId: 'c', tags: [] }] },
+        { id: 'g', date: '2026-07-06', detail: 'Buchung', lines: [{ amountCents: -100, note: 'Zeile 1', categoryId: 'c', tags: [] }, { amountCents: -100, note: '', categoryId: 'c', tags: [] }] },
+      ],
+      2026,
+    )
+    expect(i2.details('c', [7], new Set(['t']))).toEqual(['Groß', 'Klein'])
+    expect(i2.details('c', [8])).toEqual(['Mittel', 'Extra', 'groß'])
+    expect(i2.details('c', [7, 8], null, 2)).toEqual(['Groß', 'Mittel', '…'])
+    expect(i2.details('none', [7])).toEqual([])
+  })
   it('totals and tag sums per category and month; a line counts once', () => {
     expect(idx.total('urlaub', 7)).toBe(-157)
     expect(idx.total('urlaub', 8)).toBe(-1)
@@ -60,6 +78,10 @@ describe('checkMessage', () => {
   })
   it('shows cents when there are some', () => {
     expect(checkMessage({ plan: -10000, actual: -10040, status: 'ok' }).text).toBe('Geplant: -100 € · Gebucht: -100,40 €')
+  })
+  it('adds the Details of the bookings, when there are any', () => {
+    expect(checkMessage({ plan: -100, actual: -300, status: 'off', details: ['Hotel Oban', 'Fähre'] }).text).toBe('Geplant: -1 € · Gebucht: -3 € (Hotel Oban, Fähre)')
+    expect(checkMessage({ plan: -100, actual: -300, status: 'off', details: ['A', 'B', 'C', '…'] }).text).toBe('Geplant: -1 € · Gebucht: -3 € (A, B, C …)')
   })
   it('says nothing when nothing is booked and the month is not judged', () => {
     expect(checkMessage({ plan: -50000, actual: 0, status: null })).toBeNull()

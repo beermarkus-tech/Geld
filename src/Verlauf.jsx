@@ -843,6 +843,12 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         : allocationMonthActual(common.targetId, yearNum, m, transactions, tags)
     })
   }
+  // What a Plan1 line or Übergruppe row carries for the colours and the message:
+  // a child counts its own tag; a line without Übergruppe also its real
+  // children, unless it is itself an Übergruppe; an Übergruppe its whole family.
+  function lineChecks(common, tagIds) {
+    return { actuals: monthlyActuals(common, tagIds), checkTagIds: tagIds }
+  }
   // A tag's family: its top-level tag and every real child (planned or not).
   function familyOf(tagId) {
     const root = tagById.get(tagId)?.parentTag ?? tagId
@@ -908,6 +914,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     // top-bar message (Oct 2026, Markus) — Plan0 and Prog never get any.
     if (!isPlan0) {
       topRow.actuals = monthlyActuals(common, null)
+      topRow.checkTagIds = null // the whole category
     }
     const out = [topRow]
     // Breakdown rows exist independent of the global "Aufschlüsselung
@@ -954,13 +961,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         breakdownLabel: tagName(tagId),
         months: line.months,
         yearTotal: line.yearTotal,
-        ...(isPlan0
-          ? {}
-          : {
-              // A child counts its own tag; a line without Übergruppe also its
-              // real children, unless it is itself an Übergruppe above.
-              actuals: monthlyActuals(common, tagById.get(tagId)?.parentTag || byParent.has(tagId) ? new Set([tagId]) : familyOf(tagId).ids),
-            }),
+        ...(isPlan0 ? {} : lineChecks(common, tagById.get(tagId)?.parentTag || byParent.has(tagId) ? new Set([tagId]) : familyOf(tagId).ids)),
       }
     }
 
@@ -996,7 +997,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         breakdownLabel: tagName(parentId),
         months: rollupMonths,
         yearTotal: rollupMonths.reduce((a, b) => a + b, 0),
-        ...(isPlan0 ? {} : { actuals: monthlyActuals(common, family) }),
+        ...(isPlan0 ? {} : lineChecks(common, family)),
       })
       childIds.forEach((tagId) => out.push(breakdownRow(tagId)))
     }
@@ -1947,13 +1948,15 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     if (colId === 'label') {
       if (closedMonths.length === 0) return null
       const { plan, actual } = yearSums(row, closedMonths)
-      return checkMessage({ plan, actual, status: planStatus({ plan, actual, closed: true, percent: tolerancePercent }) })
+      return checkMessage({ plan, actual, status: planStatus({ plan, actual, closed: true, percent: tolerancePercent }), details: detailsOf(row, closedMonths) })
     }
     const m = Number(colId.slice(1))
     const plan = row.months[m - 1]
     const actual = row.actuals[m - 1]
-    return checkMessage({ plan, actual, status: planStatus({ plan, actual, closed: closedMonths.includes(m), percent: tolerancePercent }) })
+    return checkMessage({ plan, actual, status: planStatus({ plan, actual, closed: closedMonths.includes(m), percent: tolerancePercent }), details: detailsOf(row, [m]) })
   }
+  // The Details of the bookings behind a row's "Gebucht" (categories only).
+  const detailsOf = (row, months) => (row.targetKey === 'categoryId' ? actualIndex.details(row.targetId, months, row.checkTagIds) : [])
   const checkInfo = commentRow?.actuals ? buildCheck(commentRow, commentCell.colId) : null
 
   return (
@@ -2006,11 +2009,11 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
           role="status"
           aria-live="polite"
           title={checkInfo?.text}
-          className={`flex h-8 w-[18rem] max-w-full items-center whitespace-nowrap text-sm ${
+          className={`flex h-8 w-[34rem] max-w-full items-center text-xs leading-4 ${
             checkInfo?.tone === 'ok' ? 'text-[var(--color-plan-ok)]' : checkInfo?.tone === 'off' ? 'text-[var(--color-plan-off)]' : 'text-[var(--color-text-muted)]'
           }`}
         >
-          <span>{checkInfo?.text}</span>
+          <span className="line-clamp-2">{checkInfo?.text}</span>
         </div>
         <CellCommentField
           cell={activeCommentCell}
