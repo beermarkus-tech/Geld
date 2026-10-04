@@ -2250,3 +2250,7 @@ Markus: transform an existing tag into a simple text tag inside the modal. **Don
 ## Session 37, continued a hundred-and-thirty-sixth time — 2026-10-04 — Tag box list scrolls
 
 Markus: the list inside the modal did not scroll. **Fixed** (`TagBox.jsx`, shared by Verlauf's add-line modal and name editor and Konten's tag editor): ↓/↑ now scroll the highlighted row into view, and the mouse wheel over the list no longer gets swallowed by AG Grid's popup. Harness: 13-row list, 14× ↓ scrolls to 144 px, wheel up returns to 0.
+
+## Session 37, continued a hundred-and-thirty-seventh time — 2026-10-04 — Shift+Enter makes a text line
+
+Markus: the "in Nur Text umwandeln" row sits at the end of a long list. **Done:** in Verlauf's name editor Shift+Enter converts the line to text at once (`TagBox` prop `onShiftEnter`); the hint line says so. Harness: "Hotelkosten" + Shift+Enter → `lbl:hotelkosten`, tag count unchanged.

@@ -10,6 +10,7 @@ import TagPill, { listRowClass, typeLook } from './TagPill'
 //   →        on a parent (an option with `drillText`): the field becomes
 //            "Parent: " and the list shows its children
 //   Enter    picks the highlighted entry; with nothing highlighted → onEnterNone
+//   Shift+Enter  onShiftEnter(text), when given (Verlauf's name editor: make it a text line)
 //   Esc      first puts the field back to how it started, then closes
 // Used by Konten's Tags column (several tags, chips above), Verlauf's "add
 // line" box and Verlauf's name editor (rename, or replace with a sibling).
@@ -37,6 +38,7 @@ export default function TagBox({
   onPick,
   onCreate,
   onEnterNone,
+  onShiftEnter,
   onClose,
   onKey,
   header,
@@ -75,7 +77,7 @@ export default function TagBox({
   }, [shown])
 
   const live = useRef({})
-  live.current = { text, shown, total, options, choose, onEnterNone, onClose, onKey, reset: resetText ?? startText }
+  live.current = { text, shown, total, options, choose, onEnterNone, onShiftEnter, onClose, onKey, reset: resetText ?? startText }
   useEffect(() => {
     const el = inputRef.current
     if (!el) return
@@ -93,7 +95,8 @@ export default function TagBox({
         setHighlight(Math.max(first, L.shown - 1))
       } else if (e.key === 'Enter') {
         stop()
-        if (L.shown >= 0 && L.shown < L.total) L.choose(L.shown)
+        if (e.shiftKey && L.onShiftEnter) L.onShiftEnter(L.text)
+        else if (L.shown >= 0 && L.shown < L.total) L.choose(L.shown)
         else L.onEnterNone?.(L.text)
       } else if (e.key === 'ArrowRight' && L.options[L.shown]?.drillText && el.selectionStart === L.text.length) {
         // → on a highlighted parent opens it: the field becomes "Parent: " and

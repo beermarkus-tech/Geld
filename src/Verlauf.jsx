@@ -375,9 +375,10 @@ const TagTitleEditor = forwardRef(function TagTitleEditor({ value, eventKey, api
         getCreateTypes={(text) => (onToText && text.trim() !== '' && !text.trim().endsWith(':') ? [{ groupingType: LABEL_TYPE, label: 'in Nur Text umwandeln — kein Tag mehr', plain: true }] : [])}
         onPick={(o) => finishWith(() => onReplace(o.id))}
         onCreate={(text) => finishWith(() => onToText(text))}
+        onShiftEnter={onToText ? (text) => text.trim() !== '' && !text.trim().endsWith(':') && finishWith(() => onToText(text)) : undefined}
         onEnterNone={(text) => finishWith(text.trim() !== original.trim() ? () => onRename(text) : null)}
         onClose={() => finishWith(null)}
-        belowInput={<div className="text-xs text-[var(--color-text-muted)]">Enter = umbenennen{options.length > 0 ? ' · oder ↓ ersetzen durch:' : ''}{onToText ? ' · ↓↓ Nur Text' : ''}</div>}
+        belowInput={<div className="text-xs text-[var(--color-text-muted)]">Enter = umbenennen{options.length > 0 ? ' · oder ↓ ersetzen durch:' : ''}{onToText ? ' · Umschalt+Enter = Nur Text' : ''}</div>}
       />
     </div>
   )
