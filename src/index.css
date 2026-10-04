@@ -204,3 +204,12 @@ body {
   border-color: transparent var(--color-computed) transparent transparent;
   pointer-events: none;
 }
+
+/* Konten's global search (Ctrl+F, Oct 2026): every hit tinted, the current row's stronger. */
+.ag-cell.konten-find-hit {
+  background-color: rgba(250, 204, 21, 0.4) !important;
+}
+.ag-cell.konten-find-current {
+  background-color: rgba(249, 115, 22, 0.55) !important;
+  box-shadow: inset 0 0 0 1px rgb(249, 115, 22);
+}

@@ -28,6 +28,13 @@ const isCtrlDelete = (p) => !p.editing && p.event.key === 'Delete' && (p.event.c
 // Plain Delete on Kategorie/Unterkategorie clears the category (onCellKeyDown
 // below) instead of the grid's own clear, which would refuse the empty value.
 const CATEGORY_COLS = new Set(['kategorie', 'unterkategorie'])
+// Global search (Ctrl+F, Oct 2026): comparing without case and diacritics, like Chrome's find.
+const FIND_COLS = ['date', 'konto', 'empfaenger', 'betrag', 'kategorie', 'unterkategorie', 'details', 'tags']
+const norm = (s) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+const cellText = (api, node, colId) => {
+  const v = api.getCellValue({ rowNode: node, colKey: colId, useFormatter: true })
+  return Array.isArray(v) ? v.join(' ') : String(v ?? '')
+}
 const suppressGridDelete = (p) => isCtrlDelete(p) || (!p.editing && p.event.key === 'Delete' && CATEGORY_COLS.has(p.column?.getColId()))
 
 ModuleRegistry.registerModules([AllCommunityModule])
@@ -1163,7 +1170,185 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [shortcutsOpen])
 
-  // Ctrl/Cmd+F opens AG Grid's own native filter popup for whichever column
+  // Global search (Ctrl+F, Oct 2026, Markus): like Chrome's find — nothing is filtered;
+  // the cursor jumps from hit to hit (Enter / Shift+Enter, F3 / Shift+F3), every hit is
+  // tinted and the current one stands out. The field sits in the header, left of the (i).
+  // Searched: the text of every cell as displayed, in display order; a split booking that
+  // is folded up is also searched through its lines — a hit there unfolds it.
+  const [find, setFind] = useState({ text: '', index: -1, total: 0 })
+  const findInputRef = useRef(null)
+  const findRef = useRef({ text: '', needle: '', entries: null, matches: [], current: -1, nodeId: null, timer: null, token: 0 })
+  const findApiRef = useRef({})
+
+  function buildFindEntries(api) {
+    const nodes = []
+    api.forEachNodeAfterFilterAndSort((n) => {
+      if (n.data && !n.data.__opening) nodes.push(n)
+    })
+    const unfolded = new Set(nodes.filter((n) => n.data.__isLine).map((n) => n.data.__parent.id))
+    const entries = []
+    const push = (e) => entries.push({ ...e, i: entries.length })
+    for (const node of nodes) {
+      const d = node.data
+      const cells = FIND_COLS.map((colId) => ({ colId, text: norm(cellText(api, node, colId)) }))
+      push({ nodeId: node.id, cells, text: cells.map((c) => c.text).join('\u0001') })
+      if (!d.__isLine && (d.lines?.length ?? 0) > 1 && !unfolded.has(d.id)) {
+        d.lines.forEach((l, lineIndex) => {
+          const cat = categoryById[l.categoryId]
+          const text = norm(
+            [l.note, (l.tags ?? []).map((id) => qualifiedTagName(tagById[id], tagById) || id).join(' '), cat?.name, categoryById[cat?.parentCategoryId]?.name, centsToEuro(l.amountCents ?? 0)].join('\u0001'),
+          )
+          push({ nodeId: node.id, txId: d.id, lineIndex, collapsedLine: true, cells: [], text })
+        })
+      }
+    }
+    return entries
+  }
+  function findCompute(api) {
+    const f = findRef.current
+    if (!f.entries) f.entries = buildFindEntries(api)
+    f.matches = f.needle ? f.entries.filter((e) => e.text.includes(f.needle)) : []
+  }
+  function findGoto(i) {
+    const api = gridRef.current?.api
+    const f = findRef.current
+    const m = f.matches[i]
+    if (!api || !m) return
+    f.current = i
+    f.nodeId = m.nodeId
+    const token = ++f.token // a late landing (unfolding takes a moment) must not override a newer jump
+    setFind({ text: f.text, index: i, total: f.matches.length })
+    const land = (node, colId) => {
+      // The grid pulls the browser focus along with its cursor — hand it back to the
+      // field when the jump came from there (so typing and Enter go on), also a tick later.
+      const input = findInputRef.current
+      const fromField = document.activeElement === input
+      const keepField = () => {
+        if (!fromField || !input) return
+        const end = input.value.length
+        input.focus({ preventScroll: true })
+        input.setSelectionRange(end, end)
+      }
+      api.ensureNodeVisible(node, 'middle')
+      node.setSelected(true, true)
+      api.setFocusedCell(node.rowIndex, colId)
+      api.refreshCells({ force: true })
+      keepField()
+      setTimeout(keepField, 0)
+    }
+    if (m.collapsedLine) {
+      // Unfold the booking, then land on the matching line.
+      setExpandedIds((prev) => new Set(prev).add(m.txId))
+      let tries = 0
+      const tick = () => {
+        let lineNode = null
+        api.forEachNode((n) => {
+          if (n.data?.__isLine && n.data.__parent.id === m.txId && n.data.__lineIndex === m.lineIndex) lineNode = n
+        })
+        if (f.token !== token) return
+        if (lineNode) {
+          f.nodeId = lineNode.id
+          land(lineNode, 'tags')
+        } else if (tries++ < 20) setTimeout(tick, 60)
+      }
+      setTimeout(tick, 30)
+      return
+    }
+    const node = api.getRowNode(m.nodeId)
+    if (node) land(node, m.cells.find((c) => c.text.includes(f.needle))?.colId ?? 'empfaenger')
+  }
+  // mode 'type': the first hit at or after the cursor row; 'next' / 'prev': step, wrapping.
+  function findRun(text, mode) {
+    const api = gridRef.current?.api
+    const f = findRef.current
+    if (!api) return
+    f.text = text
+    const needle = norm(text)
+    if (mode === 'type' || needle !== f.needle || !f.entries) {
+      f.needle = needle
+      findCompute(api)
+    }
+    const n = f.matches.length
+    if (!needle || n === 0) {
+      f.current = -1
+      f.nodeId = null
+      setFind({ text, index: -1, total: 0 })
+      api.refreshCells({ force: true })
+      return
+    }
+    let i
+    if (mode === 'type') {
+      const focused = api.getFocusedCell()
+      const fromId = focused ? api.getDisplayedRowAtIndex(focused.rowIndex)?.id : null
+      const from = fromId ? Math.max(0, f.entries.findIndex((e) => e.nodeId === fromId)) : 0
+      // While typing, hits in visible rows come first — a folded split booking is only
+      // opened when there is nothing else (stepping with Enter / F3 reaches them all).
+      const visible = f.matches.filter((m) => !m.collapsedLine)
+      const pool = visible.length > 0 ? visible : f.matches
+      const pick = pool.find((m) => m.i >= from) ?? pool[0]
+      i = f.matches.indexOf(pick)
+    } else if (f.current < 0) i = mode === 'prev' ? n - 1 : 0
+    else i = (f.current + (mode === 'prev' ? -1 : 1) + n) % n
+    findGoto(i)
+  }
+  // The grid's rows changed (edit, sort, filter, unfold): the hits are recomputed, the
+  // current one kept when it is still there.
+  function findRefresh() {
+    const f = findRef.current
+    f.entries = null
+    if (!f.needle) return
+    clearTimeout(f.timer)
+    f.timer = setTimeout(() => {
+      const api = gridRef.current?.api
+      if (!api) return
+      findCompute(api)
+      f.current = f.matches.findIndex((m) => m.nodeId === f.nodeId)
+      setFind({ text: f.text, index: f.current, total: f.matches.length })
+      api.refreshCells({ force: true })
+    }, 150)
+  }
+  // Esc in the field: back to the table, on the current hit; the hits stay (F3 goes on).
+  function findClose() {
+    findInputRef.current?.blur()
+    const api = gridRef.current?.api
+    const f = findRef.current
+    const node = (f.nodeId && api?.getRowNode(f.nodeId)) || api?.getSelectedNodes()[0]
+    const cell = api?.getFocusedCell()
+    if (node && node.rowIndex != null) api.setFocusedCell(node.rowIndex, cell?.column?.getColId() ?? 'empfaenger')
+    setTimeout(() => gridRef.current?.eGridDiv?.querySelector('.ag-cell-focus')?.focus({ preventScroll: true }), 0)
+  }
+  findApiRef.current = { run: findRun, refresh: findRefresh, close: findClose }
+  // Cell tints (cellClassRules, below): every hit, and the current row's hits stronger.
+  const findCellHit = (p) => {
+    const f = findRef.current
+    if (!f.needle || !p.node?.data || !FIND_COLS.includes(p.column?.getColId())) return false
+    return norm(cellText(p.api, p.node, p.column.getColId())).includes(f.needle)
+  }
+  const findCellCurrent = (p) => findRef.current.nodeId === p.node?.id && findCellHit(p)
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!activeRef.current) return // screen hidden (it stays mounted): its shortcuts are off
+      const api = gridRef.current?.api
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        // A cell being edited is finished (kept) first, so Ctrl+F always reaches the search
+        // instead of the browser's own find bar.
+        if (api?.getEditingCells().length > 0) api.stopEditing(false)
+        findInputRef.current?.focus()
+        findInputRef.current?.select()
+      } else if (e.key === 'F3' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (api?.getEditingCells().length > 0) return
+        e.preventDefault()
+        findApiRef.current.run(findRef.current.text, e.shiftKey ? 'prev' : 'next')
+      }
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [])
+
+  // Ctrl/Cmd+L (was Ctrl+F until Oct 2026, when Ctrl+F became the global search)
+  // opens AG Grid's own native filter popup for whichever column
   // currently holds the focus rectangle (Markus: "opens the filter modal
   // for the active column"), instead of the browser's own page-search —
   // same browser-reservation category as Ctrl+T/H above, accepted the same
@@ -1210,7 +1395,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       if (!activeRef.current) return // screen hidden (it stays mounted): its shortcuts are off
       const api = gridRef.current?.api
       if (!api) return
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'f') {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'l') {
         if (api.getEditingCells().length > 0) return
         const column = api.getFocusedCell()?.column
         if (!column || !column.isFilterAllowed()) return
@@ -1278,7 +1463,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // Ctrl/Cmd+Shift+F triggers the same "Filter zurücksetzen" the button
   // does (Markus) — clears both the account/tag filter and every AG Grid
   // column filter at once, keyboard-reachable without hunting for the
-  // button. Plain Ctrl/Cmd+F above explicitly excludes Shift so the two
+  // button. (Ctrl/Cmd+F is the global search, Ctrl/Cmd+L the column filter; both exclude Shift so the
   // never both fire off the same keypress.
   useEffect(() => {
     const onKeyDown = (e) => {
@@ -2720,6 +2905,58 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
             </button>
           )}
 
+          {/* The global search (Ctrl+F, Oct 2026): same look as Verlauf's comment field. */}
+          <div className="relative h-8 w-[20rem] max-w-full">
+            <input
+              ref={findInputRef}
+              type="text"
+              value={find.text}
+              onChange={(e) => findApiRef.current.run(e.target.value, 'type')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  findApiRef.current.run(find.text, e.shiftKey ? 'prev' : 'next')
+                } else if (e.key === 'Escape') {
+                  e.preventDefault()
+                  findApiRef.current.close()
+                }
+              }}
+              placeholder="Suchen (Strg+F)"
+              aria-label="In der Tabelle suchen"
+              title="Enter = nächster Treffer, Umschalt+Enter = voriger, Esc = zurück zur Tabelle"
+              className={`absolute left-0 top-0 h-8 w-full rounded-md border bg-[var(--color-surface)] py-1 pl-2 pr-24 text-sm leading-5 text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] placeholder:opacity-50 ${
+                find.text && find.total === 0 ? 'border-[var(--color-plan-off)]' : 'border-[var(--color-border)]'
+              }`}
+            />
+            {find.text && (
+              <span className={`pointer-events-none absolute right-14 top-1.5 text-xs tabular-nums ${find.total === 0 ? 'text-[var(--color-plan-off)]' : 'text-[var(--color-text-muted)]'}`}>
+                {find.total === 0 ? 'kein Treffer' : `${find.index + 1}/${find.total}`}
+              </span>
+            )}
+            <div className="absolute right-1 top-1 flex">
+              {[
+                { dir: 'prev', label: 'Voriger Treffer', path: 'M3 10l5-5 5 5' },
+                { dir: 'next', label: 'Nächster Treffer', path: 'M3 6l5 5 5-5' },
+              ].map((b) => (
+                <button
+                  key={b.dir}
+                  type="button"
+                  tabIndex={-1}
+                  aria-label={b.label}
+                  title={b.label}
+                  disabled={find.total === 0}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => findApiRef.current.run(find.text, b.dir)}
+                  className="flex h-6 w-6 items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-text)] disabled:opacity-30"
+                >
+                  <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d={b.path} />
+                  </svg>
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Keyboard-shortcuts help (Markus): hover shows the list; Ctrl+I
               toggles the same popover without needing the mouse; Escape (or
               Ctrl+I again) closes it — see the two effects above for the
@@ -2758,7 +2995,10 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
                     <b>Strg+D</b> — Positionen ein-/ausklappen
                   </li>
                   <li>
-                    <b>Strg+F</b> — Spalte filtern
+                    <b>Strg+F</b> — in der Tabelle suchen (Enter / Umschalt+Enter oder F3 / Umschalt+F3 = nächster / voriger Treffer, Esc = zurück zur Tabelle)
+                  </li>
+                  <li>
+                    <b>Strg+L</b> — Spalte filtern
                   </li>
                   <li>
                     <b>Strg+S</b> — Spalte sortieren
@@ -2902,7 +3142,10 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           // programmatically (the tag-chip-click sync effect above), not
           // just a header icon the user opened by hand, which is exactly
           // right: either way there's a real active filter to show/clear.
-          onModelUpdated={(e) => recomputeVisibleSum(e.api)}
+          onModelUpdated={(e) => {
+            recomputeVisibleSum(e.api)
+            findApiRef.current.refresh()
+          }}
           onFilterChanged={(e) => {
             setAnyColumnFilter(e.api.isAnyFilterPresent())
             const model = e.api.getFilterModel()
@@ -2925,7 +3168,12 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           // Markus's request: no accidental drag-reordering or hiding.
           // Plain Delete does nothing outside an edit (Oct 2026): AG Grid would
           // otherwise empty the cell and save it — deleting a row is Ctrl+Delete.
-          defaultColDef={{ suppressMovable: true, suppressKeyboardEvent: suppressGridDelete }}
+          defaultColDef={{
+            suppressMovable: true,
+            suppressKeyboardEvent: suppressGridDelete,
+            // the global search's tints (see findCellHit)
+            cellClassRules: { 'konten-find-hit': findCellHit, 'konten-find-current': findCellCurrent },
+          }}
           // Single-row selection just for "+ Neue Buchung"'s "insert below
           // the selected row" — not a bulk-actions feature.
           rowSelection={{ mode: 'singleRow', checkboxes: false, enableClickSelection: true }}
