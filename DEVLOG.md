@@ -2254,3 +2254,7 @@ Markus: the list inside the modal did not scroll. **Fixed** (`TagBox.jsx`, share
 ## Session 37, continued a hundred-and-thirty-seventh time — 2026-10-04 — Shift+Enter makes a text line
 
 Markus: the "in Nur Text umwandeln" row sits at the end of a long list. **Done:** in Verlauf's name editor Shift+Enter converts the line to text at once (`TagBox` prop `onShiftEnter`); the hint line says so. Harness: "Hotelkosten" + Shift+Enter → `lbl:hotelkosten`, tag count unchanged.
+
+## Session 37, continued a hundred-and-thirty-eighth time — 2026-10-05 — Settings › Tags: archive hides in place
+
+Markus: instead of a separate Archiv list, hide archived tags in their place and let the Archiv pill unhide them. **Done** (`Settings.jsx`): the "Archiv" type chip is replaced by a pill (shown when something is archived, state remembered as `settings › showArchived`; an old remembered Archiv chip turns the pill on); archived families stay in their type group, dimmed, with a restore button; search finds them; type counts skip them unless shown; the archive button now toggles per tag. Harness: archive → row gone, pill "Archiv 1"; pill on → row back dimmed with restore; off → hidden; restore → pill gone. **Noted, not done:** tag boxes in Konten/Verlauf still offer archived tags although SPEC says they should not; categories/accounts have no archive. **Open:** the year filter still applies to archived tags (switch "alle Jahre" to see old ones) — say if the pill should override it.

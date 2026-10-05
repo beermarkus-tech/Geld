@@ -116,7 +116,7 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
 
   return (
     <div className="flex flex-col border-b border-[var(--color-border)] last:border-b-0">
-      <div className={`flex items-center gap-3 px-3 py-1.5 text-sm ${dim ? 'opacity-50' : ''}`} style={{ paddingLeft: 12 + depth * 44 }}>
+      <div className={`flex items-center gap-3 px-3 py-1.5 text-sm ${dim || archivedView ? 'opacity-50' : ''}`} style={{ paddingLeft: 12 + depth * 44 }}>
         {/* A family is one line, its children small behind the parent; ▸
             opens it (children as their own lines, as before) (Oct 2026). */}
         {depth === 0 && !locked &&
@@ -253,7 +253,7 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
           <button
             type="button"
             onClick={onArchive}
-            title={archivedView ? 'Aus dem Archiv zurückholen (ganze Familie)' : 'Archivieren (ganze Familie) — nur aus dieser Liste, Buchungen bleiben'}
+            title={archivedView ? 'Aus dem Archiv zurückholen (ganze Familie)' : 'Archivieren (ganze Familie) — ausgeblendet, Buchungen bleiben'}
             aria-label={archivedView ? 'Zurückholen' : 'Archivieren'}
             className={iconButton}
           >
@@ -433,7 +433,13 @@ export default function Settings({ year, onOpenInKonten, onOpenInVerlauf }) {
   const [filter, setFilter] = useState(() => ui.get('settings', 'filter', '') || '')
   // Type chips above the list (Oct 2026, Markus): show only tags of one type.
   // null = all; 'none' = untyped; 'allocation' = the fixed Rücklagen tags.
-  const [typeFilter, setTypeFilter] = useState(() => ui.get('settings', 'typeFilter', null))
+  // The old "Archiv" chip was a type filter; it is now the separate pill below.
+  const [typeFilter, setTypeFilter] = useState(() => {
+    const t = ui.get('settings', 'typeFilter', null)
+    return t === 'archive' ? null : t
+  })
+  const [showArchived, setShowArchived] = useState(() => Boolean(ui.get('settings', 'showArchived', false)) || ui.get('settings', 'typeFilter', null) === 'archive')
+  useEffect(() => ui.set('settings', 'showArchived', showArchived), [showArchived])
   // Coming back (Esc from Konten/Verlauf, or any revisit): the list scrolled
   // where it was left, once the tags are there (Oct 2026, Markus).
   const scrollRef = useRef(null)
@@ -557,7 +563,6 @@ export default function Settings({ year, onOpenInKonten, onOpenInVerlauf }) {
 
   const needle = filter.trim().toLowerCase()
   const typeOf = (t) => (t.class === 'allocation' ? 'allocation' : (t.groupingType ?? 'none'))
-  const inArchive = typeFilter === 'archive'
   // Only tags used in the year chosen at the top (bookings or plan lines that
   // year; a tag without any use counts for its creation year), unless "alle
   // Jahre" — and searching always looks at all years (Oct 2026, Markus).
@@ -567,10 +572,12 @@ export default function Settings({ year, onOpenInKonten, onOpenInVerlauf }) {
     if (u.bookings.length === 0 && u.plans.length === 0) return !t.createdAt || new Date(t.createdAt).getFullYear() === Number(year)
     return false
   }
-  const yearScoped = !allYears && !needle && !inArchive && Boolean(year)
-  const visible = (t) => (inArchive ? Boolean(t.archived) : !t.archived)
+  const yearScoped = !allYears && !needle && Boolean(year)
+  // Archived tags stay in their place, hidden — unless the Archiv pill is on or
+  // a search is running (Oct 2026, Markus: hide/unhide instead of a separate list).
+  const visible = (t) => showArchived || Boolean(needle) || !t.archived
   const matches = (t) =>
-    visible(t) && (!needle || qualifiedName(t.id, tagById).toLowerCase().includes(needle)) && (!typeFilter || inArchive || typeOf(t) === typeFilter)
+    visible(t) && (!needle || qualifiedName(t.id, tagById).toLowerCase().includes(needle)) && (!typeFilter || typeOf(t) === typeFilter)
   // One entry per family: the parent (dimmed when only a child matches), the
   // children that pass, shown small behind the parent or — opened — as their
   // own lines. A search opens the families it finds children in.
@@ -595,17 +602,17 @@ export default function Settings({ year, onOpenInKonten, onOpenInVerlauf }) {
   const typeCounts = useMemo(() => {
     const c = {}
     for (const t of tags) {
-      const k = t.archived ? 'archive' : typeOf(t)
-      c[k] = (c[k] ?? 0) + 1
+      if (t.archived && !showArchived) continue
+      c[typeOf(t)] = (c[typeOf(t)] ?? 0) + 1
     }
     return c
     // eslint-disable-next-line react-hooks/exhaustive-deps -- typeOf is pure
-  }, [tags])
+  }, [tags, showArchived])
+  const archivedCount = tags.filter((t) => t.archived && !tagById[t.parentTag]?.archived).length
   const chips = [
-    { key: null, label: 'Alle', count: tags.length - (typeCounts.archive ?? 0), look: null },
+    { key: null, label: 'Alle', count: Object.values(typeCounts).reduce((n, v) => n + v, 0), look: null },
     ...CREATE_TYPES.map((o) => ({ key: o.groupingType ?? 'none', label: o.label, count: typeCounts[o.groupingType ?? 'none'] ?? 0, look: typeLook(o.groupingType) })),
     { key: 'allocation', label: 'Rücklage', count: typeCounts.allocation ?? 0, look: { class: 'allocation' } },
-    { key: 'archive', label: 'Archiv', count: typeCounts.archive ?? 0, look: null },
   ]
   const shownPlain = needle ? plainTextTags.filter((id) => id.toLowerCase().includes(needle)) : plainTextTags
   // A parent's figures cover its whole family (Oct 2026, Markus): its own use
@@ -650,8 +657,8 @@ export default function Settings({ year, onOpenInKonten, onOpenInVerlauf }) {
     onOpenPlan: openPlan,
     onOpenBooking: openBooking,
     onToggleFamily: () => toggleFamily(tag.id),
-    onArchive: () => tagActions.setArchived(tag.id, !inArchive),
-    archivedView: inArchive,
+    onArchive: () => tagActions.setArchived(tag.id, !tag.archived),
+    archivedView: Boolean(tag.archived),
   })
 
   return (
@@ -729,6 +736,18 @@ export default function Settings({ year, onOpenInKonten, onOpenInVerlauf }) {
               {c.label} <span className="text-xs opacity-70">{c.count}</span>
             </TagPill>
             ),
+          )}
+          {/* Show the archived tags in place, or hide them again (Oct 2026, Markus). */}
+          {archivedCount > 0 && (
+            <button
+              type="button"
+              aria-pressed={showArchived}
+              onClick={() => setShowArchived((v) => !v)}
+              title="Archivierte Tags in der Liste ein-/ausblenden"
+              className={`rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-sm ${showArchived ? 'ring-2 ring-[var(--color-computed)] ring-offset-1 ring-offset-[var(--color-bg)]' : 'opacity-80 hover:opacity-100'}`}
+            >
+              Archiv <span className="text-xs opacity-70">{archivedCount}</span>
+            </button>
           )}
           {/* Open or close every family at once (Oct 2026, Markus). */}
           <div className="ml-auto flex items-center gap-3">
