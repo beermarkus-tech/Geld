@@ -296,6 +296,7 @@ lines: [
   { amountCents: integer, categoryId: <id>, note: string, tags: [<tagId>] }   // SIGNED, same convention as the parent — a line can be positive or negative independent of the parent's own sign (e.g. an Airbus salary deposit splitting into a positive Gehalt line and a negative Steuern line). categoryId points to the leaf subcategory (e.g. "Lebensmittel & Haushalt"); its parent group ("Lebenshaltung") is derived via parentCategoryId, not stored redundantly. tags live here, not on the transaction root, so a claim/category/allocation tag can apply to just one line of a split (e.g. only the claimable portion of a grocery run)
 ]
 detail: string
+bankDate: "YYYY-MM-DD" | null    // imported bookings only: the bank's own booking date when `date` was taken from the text (§3k) 
 importBatchId: <id> | null       // set on bookings that came from a CSV import (§3k "Import staging") — lets one whole import be undone; null/absent for manual entries
 createdAt
 ```
@@ -409,7 +410,7 @@ batchId: <id>
 include: boolean                // ticked = goes into Konten on commit
 status: "new" | "duplicate?"    // duplicate? starts unticked; never dropped silently
 duplicateOfTxId: <id> | null    // the Konten booking (or staged row) it resembles
-date, amountCents               // editable; originalDate / originalAmountCents keep the file's values
+date, amountCents               // editable; bankDate = the file's booking date; originalDate / originalAmountCents keep the file's values
 rawDescription: string          // the file's text — never editable
 displayLabel, categoryId, detail  // editable; categoryId pre-filled by categorizationRules (§2.7b) once those exist
 edited: boolean
@@ -936,7 +937,11 @@ Colors reuse the app's own green/amber/purple semantics (confirmed fine). Orient
 - **Transfer matching (§3a)** runs on commit, so its suggestions appear in Konten.
 - **Not in the first version:** splits/tags in staging; editing the keyword rules (the first version only reads them); other banks' formats (the design allows them, only BNP is built).
 - **Build order:** (1) read the BNP file into staging — screen, totals bar, editing; (2) duplicate flags; (3) commit, jump to Konten, undo; (4) keyword rules / auto-categorization; (5) transfer-match suggestions. After step 3 real imports are possible with manual categorization.
-- **Still needed from Markus:** a real BNP export (decides the parsing and whether the balance comes from the file); the old keyword list, if it exists (step 4).
+- **The BNP file (seen Oct 2026, a real export):** an Excel file (`.xls`), not a CSV — read directly in the app, no conversion. Top row: account name, masked number (`****0048` → BNP Konto is pre-selected, confirmed by Markus), the balance date and, top right, the **balance** — the totals bar takes it from there. Then a header row and one row per booking: Date operation · Libelle court · Type operation · Libelle operation (→ `rawDescription`) · Montant.
+- **Real purchase date instead of BNP's booking date (decided Oct 2026, Markus):** BNP books every card payment at the month's end; the real date is in the text. The app uses it for exactly three patterns — card payments "FACTURE CARTE DU ddmmyy", card refunds "REMBOURST CB DU ddmmyy", cash withdrawals "RETRAIT DAB dd/mm/yy". Everything else keeps the bank's date (a direct debit's "ECH/ddmmyy" is its due date, which BNP already books on; fee texts like "DU 01/09/26 AU 30/09/26" are periods). The bank's own date stays visible in staging ("Bankdatum") and is kept on the booking (`bankDate`). Moving a date never changes the balance check (it only moves bookings earlier inside the same file).
+- **Closed months:** a row whose (real) date falls into a month already ticked as closed in Verlauf is marked "fällt in einen abgeschlossenen Monat (…)" — a warning, never a block.
+- **Empfänger (`displayLabel`) on import:** the friendly label comes from the predefined list (keyword rules, step 4). Without a match it is the full bank text, minus the part that only carried the date: "FACTURE CARTE DU 090926 " is dropped entirely; for refunds and withdrawals only the date goes ("REMBOURST CB BOOKING.COM …", "RETRAIT DAB VR BANK …"), so they still read as what they are. `rawDescription` always stays the untouched original. No card-owner details.
+- **Still needed from Markus:** the old keyword list, if it exists (step 4).
 
 ### Export
 

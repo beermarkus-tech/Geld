@@ -2266,3 +2266,7 @@ Markus asked whether everything is documented well enough to switch chats. Check
 ## Session 37, continued a hundred-and-fortieth time — 2026-10-29 — Phase 3 design: import staging (SPEC only)
 
 Markus proposed a staging step before imports reach Konten; worked out in chat, he agreed to all four pushbacks (no 11th menu item — it lives in Import/Export; Konten's look but not a Konten copy, no splits/tags; totals checked against the real bank balance *before* commit; all-or-nothing commit). **Written down:** SPEC §3k "Import staging", §2.7e (`importBatches`, `stagedRows`), `importBatchId` on transactions (§2.6); PLAN Phase 3 gets the five-step order. No code. **Waiting on Markus:** a real BNP CSV export (parsing, and whether the balance is in the file); the old keyword list, if any (step 4). **Next:** step 1 once the file is here.
+
+## Session 37, continued a hundred-and-forty-first time — 2026-10-29 — BNP file seen; date and label rules decided (SPEC only)
+
+Markus sent a real BNP export: an `.xls` (not CSV), balance and date in the top row, 150 rows. **Decided and written to SPEC §3k:** real purchase date from "FACTURE CARTE DU / REMBOURST CB DU / RETRAIT DAB" texts (bank date kept as `bankDate`); warning for rows landing in a closed month; Empfänger = full bank text minus the date part until keyword rules exist; no card-owner details. No code yet. **Next:** step 1 (read the file into staging, totals bar, editing). The file itself is not in the repo.
