@@ -296,6 +296,7 @@ lines: [
   { amountCents: integer, categoryId: <id>, note: string, tags: [<tagId>] }   // SIGNED, same convention as the parent — a line can be positive or negative independent of the parent's own sign (e.g. an Airbus salary deposit splitting into a positive Gehalt line and a negative Steuern line). categoryId points to the leaf subcategory (e.g. "Lebensmittel & Haushalt"); its parent group ("Lebenshaltung") is derived via parentCategoryId, not stored redundantly. tags live here, not on the transaction root, so a claim/category/allocation tag can apply to just one line of a split (e.g. only the claimable portion of a grocery run)
 ]
 detail: string
+importBatchId: <id> | null       // set on bookings that came from a CSV import (§3k "Import staging") — lets one whole import be undone; null/absent for manual entries
 createdAt
 ```
 **`status` ("settled" | "open") is not a stored field — computed in-memory per §2.8**, not written to the document. Earlier drafts of this spec stored it, which is exactly the denormalized-snapshot bug §1a warns against, applied to itself.
@@ -390,6 +391,28 @@ keyword: string        // matched against rawDescription, e.g. "REWE"
 categoryId: <id>        // the leaf subcategory this keyword maps to
 source: "seed" | "user-confirmed"   // seed = the original fixed keyword list this project started from; user-confirmed = accepted from a suggested-candidate prompt
 createdAt
+```
+
+### 2.7e `importBatches` and `stagedRows` collections — the import staging area (decided Oct 2026, Markus; §3k)
+Staged rows are **not** transactions: no other screen reads these collections, so nothing staged counts anywhere until it is committed. Stored in Firestore (not the browser) so a staging survives screen switches, reloads and device changes, and works offline like everything else.
+```
+importBatches/{id}
+accountId: <id>                 // the account the file belongs to — at most one open batch per account
+status: "open" | "committed" | "discarded"
+fileName: string
+bankBalanceCents: integer | null  // the real bank balance: from the file if the bank's export carries it, else typed in
+balanceDate: "YYYY-MM-DD"       // the date that balance refers to (the last date in the file unless the file says otherwise)
+createdAt, committedAt
+
+stagedRows/{id}
+batchId: <id>
+include: boolean                // ticked = goes into Konten on commit
+status: "new" | "duplicate?"    // duplicate? starts unticked; never dropped silently
+duplicateOfTxId: <id> | null    // the Konten booking (or staged row) it resembles
+date, amountCents               // editable; originalDate / originalAmountCents keep the file's values
+rawDescription: string          // the file's text — never editable
+displayLabel, categoryId, detail  // editable; categoryId pre-filled by categorizationRules (§2.7b) once those exist
+edited: boolean
 ```
 
 ### 2.8 Derived / computed (never stored) — computed in-memory from the loaded year, not via Firestore aggregation queries
@@ -896,7 +919,26 @@ Colors reuse the app's own green/amber/purple semantics (confirmed fine). Orient
 
 ## 3k. Import/Export — detailed spec
 
-**Scope note:** *Import* is already fully specified — it's the CSV bank-import pipeline living inside Konten (§3a), not a separate mechanism. This section covers **Export only**, which had a nav slot reserved since early on (§1b.2) but was never actually designed.
+**Scope note (revised Oct 2026):** the import pipeline's rules are in §3a; **its staging area is a screen of its own, right here** — see "Import staging" below. The rest of this section covers Export.
+
+### Import staging (decided Oct 2026, Markus — worked out in chat, not built yet)
+
+**In plain words:** a bank file first lands in a holding area that no other screen sees. Markus checks it there, fixes what's wrong, checks that the account total matches the real bank balance, and only then moves everything into Konten with one click. This is also §3a's "quick review screen".
+
+- **Where:** the existing Import/Export screen — Import first, Export/Sicherung below. Deliberately **no 11th menu item**: Ctrl+1…9/0 cover exactly the 10 entries.
+- **Persistent:** stored in Firestore (§2.7e), so leaving the screen, reloading or switching device never loses a staging. Staged rows are invisible to every other screen and count nowhere until committed.
+- **One open import per account** (BNP and, later, DKB can wait side by side). A second file for the same account is refused until the first is committed or discarded ("Verwerfen").
+- **The grid — Konten's look and keyboard, not a copy of Konten.** Columns: ☑ include · Status (Neu / Duplikat? orange / geändert) · Datum · Betrag · Bank-Text (`rawDescription`, never editable) · Empfänger · Kategorie / Unterkategorie · Details. Date, amount, Empfänger, category and Details are editable; an edited date or amount keeps the file's value visible (tooltip) and marks the row "geändert" — the bank file is the truth, a change must stand out. **No splits and no tags here:** those happen in Konten after the commit.
+- **The totals bar (Markus's fool-proof check), fixed at the top, for the import account:** "in Konten jetzt" + "Import (ticked rows)" = "nach Import", next to the **real bank balance** (from the file when the bank's export has it, else typed once) with ✓ stimmt / ✗ Differenz. The check happens **before** the commit, while fixing is still easy; after the commit Konten's account card shows the same figure again as the second check. The total updates live as rows are ticked/unticked. "in Konten jetzt" counts only up to the balance date; Konten bookings for that account dated later are shown separately, so a hand-entered future booking can't make a correct import look wrong.
+- **Duplicates (§3a step 4):** a row that resembles a Konten booking of that account (same date and amount — manual entries included) or another row of the same file is marked **Duplikat?** and starts **unticked**; it stays visible, and opening it shows the booking it resembles. Never skipped or added silently.
+- **Commit — "In Konten übernehmen":** enabled when the totals match (overridable with a confirm when Markus knows why they differ). **All or nothing:** every ticked row goes in one step, no partial commit. The rows leave the staging grid and Konten opens filtered on exactly those bookings (the existing "Nur diese n Buchungen" chip); Esc returns. Unticked rows are dropped with the batch. Each booking carries `importBatchId`.
+- **Undo — "Import rückgängig":** removes all bookings of one import (into "Kürzlich gelöscht", like any delete) — next to PITR (§2.9a) as a cheap, targeted safety net.
+- **Transfer matching (§3a)** runs on commit, so its suggestions appear in Konten.
+- **Not in the first version:** splits/tags in staging; editing the keyword rules (the first version only reads them); other banks' formats (the design allows them, only BNP is built).
+- **Build order:** (1) read the BNP file into staging — screen, totals bar, editing; (2) duplicate flags; (3) commit, jump to Konten, undo; (4) keyword rules / auto-categorization; (5) transfer-match suggestions. After step 3 real imports are possible with manual categorization.
+- **Still needed from Markus:** a real BNP export (decides the parsing and whether the balance comes from the file); the old keyword list, if it exists (step 4).
+
+### Export
 
 **Purpose — disaster recovery only, nothing else.** Not a re-import-elsewhere format, not an analysis/reporting export, not something aimed at opening in another tool day-to-day. The only job this serves: if Firebase itself is ever lost, corrupted, or needs to be rebuilt, this is what makes the data recoverable rather than gone. That single purpose is what decides every format choice below — faithful and complete beats convenient or pretty.
 

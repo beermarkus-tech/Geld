@@ -2262,3 +2262,7 @@ Markus: instead of a separate Archiv list, hide archived tags in their place and
 ## Session 37, continued a hundred-and-thirty-ninth time — 2026-10-29 — Documentation check
 
 Markus asked whether everything is documented well enough to switch chats. Checked SPEC, CODEMAP, DEVLOG against the last builds (251–255): SPEC and DEVLOG were current; CODEMAP lacked the TagBox scrolling/Shift+Enter/`plain` notes and the Settings archive pill — **added** now. No code change. **Open (carried):** tag boxes in Konten/Verlauf still offer archived tags (SPEC says they should not); the year filter also applies to archived tags in Settings.
+
+## Session 37, continued a hundred-and-fortieth time — 2026-10-29 — Phase 3 design: import staging (SPEC only)
+
+Markus proposed a staging step before imports reach Konten; worked out in chat, he agreed to all four pushbacks (no 11th menu item — it lives in Import/Export; Konten's look but not a Konten copy, no splits/tags; totals checked against the real bank balance *before* commit; all-or-nothing commit). **Written down:** SPEC §3k "Import staging", §2.7e (`importBatches`, `stagedRows`), `importBatchId` on transactions (§2.6); PLAN Phase 3 gets the five-step order. No code. **Waiting on Markus:** a real BNP CSV export (parsing, and whether the balance is in the file); the old keyword list, if any (step 4). **Next:** step 1 once the file is here.

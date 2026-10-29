@@ -61,6 +61,7 @@ See `CLAUDE.md` for how this fits alongside `spec.md` and `DEVLOG.md`.
 
 ## Phase 3 — Konten import & automation
 
+- **Import staging screen first (decided Oct 2026, spec §3k "Import staging")**, built in five steps: BNP file → staging with totals bar and editing; duplicate flags; commit + jump to Konten + undo; keyword rules; transfer-match suggestions.
 - CSV import pipeline, auto-categorization by keyword (~70% target, `categorizationRules` collection, §2.7b), duplicate detection.
 - Automatic transfer-leg matching (§3a) — the suggest-and-confirm mechanism.
 - Konten's filter/search bar (quick-filter, per-field filters, date presets, saved filters) — largely already built (Sept 2026, during Phase 1b's real-usage feedback rounds): account/tag filtering, header filters on every column but Konto, and the "Kürzlich gelöscht" toggle all exist. Date-range presets and saved filters are what's actually left here.
