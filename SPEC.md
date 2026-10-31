@@ -393,6 +393,7 @@ categoryId: <id>        // the leaf subcategory this keyword maps to
 source: "seed" | "user-confirmed"   // seed = the original fixed keyword list this project started from; user-confirmed = accepted from a suggested-candidate prompt
 createdAt
 ```
+**Extended Oct 2026 when Markus's real list ("Geld 2026 - Autofill.csv", 117 usable keywords) arrived:** a rule carries the friendly **`label`** (the Empfänger) as well, and `categoryId` may be **null** — many entries only set an Empfänger (Paypal, Airbus Gehalt, Geldautomat) or name a Gruppe/Kategorie that is not a real category (Außenstände › Geld verliehen, Rücklagen › Für Sparen Sophia — those are claim/allocation tags, assigned in Konten). `groupName`/`categoryName` keep the list's original wording. Matching: the keyword is searched case-blind inside `rawDescription`; **if several match, the longest keyword wins** ("LIDL4352" over "LIDL"). The list holds personal names, so it is **never committed to the repo** — Markus loads the CSV in the app (Bank-Import tab); lines without a keyword and the Farbe column are ignored. Reloading the same CSV overwrites rules with the same keyword.
 
 ### 2.7e `importBatches` and `stagedRows` collections — the import staging area (decided Oct 2026, Markus; §3k)
 Staged rows are **not** transactions: no other screen reads these collections, so nothing staged counts anywhere until it is committed. Stored in Firestore (not the browser) so a staging survives screen switches, reloads and device changes, and works offline like everything else.
@@ -922,7 +923,7 @@ Colors reuse the app's own green/amber/purple semantics (confirmed fine). Orient
 
 **Scope note (revised Oct 2026):** the import pipeline's rules are in §3a; **its staging area is a screen of its own, right here** — see "Import staging" below. The rest of this section covers Export.
 
-### Import staging (decided Oct 2026, Markus — worked out in chat, not built yet)
+### Import staging (decided Oct 2026, Markus — worked out in chat; **step 1 built Oct 2026**: file → staging → totals bar → editing, with the keyword rules applied; duplicates, commit/undo and transfer matching still to come)
 
 **In plain words:** a bank file first lands in a holding area that no other screen sees. Markus checks it there, fixes what's wrong, checks that the account total matches the real bank balance, and only then moves everything into Konten with one click. This is also §3a's "quick review screen".
 

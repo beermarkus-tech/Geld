@@ -2,19 +2,21 @@ import { useState } from 'react'
 
 import BackupScreen from './BackupScreen'
 import ImportScreen from './ImportScreen'
+import ImportStaging from './ImportStaging'
 
 // Consolidates the two previously-independent header toggles
 // (Datenimport/Sicherung) under spec.md §1b.2's one "Import/Export" nav
 // destination — same two screens, just reached as tabs under one entry
 // instead of two separate always-visible buttons.
 export default function ImportExportScreen({ userEmail, usingCachedSession }) {
-  const [tab, setTab] = useState('import')
+  const [tab, setTab] = useState('staging')
 
   return (
     <div className="flex flex-1 flex-col">
       <div className="flex gap-2 border-b border-[var(--color-border)] px-4 pt-3">
         {[
-          { id: 'import', label: 'Datenimport' },
+          { id: 'staging', label: 'Bank-Import' },
+        { id: 'import', label: 'Datenimport' },
           { id: 'backup', label: 'Sicherung' },
         ].map((t) => (
           <button
@@ -32,6 +34,7 @@ export default function ImportExportScreen({ userEmail, usingCachedSession }) {
           </button>
         ))}
       </div>
+      {tab === 'staging' && <ImportStaging />}
       {tab === 'import' && (
         <div>
           <p className="px-6 pt-4 text-center text-sm text-[var(--color-text-muted)]">
