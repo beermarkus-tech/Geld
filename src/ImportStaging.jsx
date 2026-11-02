@@ -1,9 +1,10 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { collection, doc, onSnapshot, setDoc, writeBatch } from 'firebase/firestore'
 import { AgGridReact } from 'ag-grid-react'
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community'
 
 import CategoryEditor from './CategoryEditor'
+import { registerScreenCursor } from './lib/screenCursor'
 import { db } from './firebase'
 import {
   buildStagedRows,
@@ -52,22 +53,20 @@ function parseEuro(s) {
   return Number.isNaN(f) ? null : Math.round(f * 100)
 }
 
-// Read-only popup with the complete bank text, wrapped; Esc, click outside or the button closes it.
-const FullTextPopup = forwardRef(function FullTextPopup({ data, api }, ref) {
-  useImperativeHandle(ref, () => ({ getValue: () => data.rawDescription, isCancelBeforeStart: () => false }))
+// The bank text with the matched keyword in light yellow (Oct 2026, Markus) – in the cell and in the full-text window.
+function highlighted(text, kw) {
+  const at = kw ? text.toUpperCase().indexOf(kw.toUpperCase()) : -1
+  if (at < 0) return text
   return (
-    <div className="flex max-w-[480px] flex-col gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-sm shadow-lg" style={{ minWidth: 280 }}>
-      <div className="whitespace-pre-wrap break-words select-text">{data.rawDescription}</div>
-      <div className="flex justify-end">
-        <button type="button" onClick={() => api.stopEditing(true)} className="rounded px-2 py-1 text-xs text-[var(--color-text-muted)]">
-          Schließen
-        </button>
-      </div>
-    </div>
+    <>
+      {text.slice(0, at)}
+      <mark style={{ background: 'var(--color-breakdown-tint)', color: 'inherit' }}>{text.slice(at, at + kw.length)}</mark>
+      {text.slice(at + kw.length)}
+    </>
   )
-})
+}
 
-export default function ImportStaging() {
+export default function ImportStaging({ active = true }) {
   const { tags, tagById } = useTags()
   const [categories, setCategories] = useState([])
   const [transactions, setTransactions] = useState([])
@@ -78,6 +77,34 @@ export default function ImportStaging() {
   const [message, setMessage] = useState(null)
   const [busy, setBusy] = useState(false)
   const gridRef = useRef(null)
+  // Remembered cursor cell; Tab with nothing focused puts the cursor back there (lib/screenCursor.js).
+  const lastCell = useRef(null)
+  useEffect(() => {
+    if (!active) return undefined
+    return registerScreenCursor('importexport', () => {
+      const api = gridRef.current?.api
+      const row = lastCell.current?.rowIndex ?? api?.getFirstDisplayedRowIndex()
+      if (!api || row == null || row < 0) return false
+      api.setFocusedCell(row, lastCell.current?.colId ?? 'bankDate')
+      return true
+    })
+  }, [active])
+  // Full text of a bank text / Empfänger that does not fit its cell: a small window below the cell.
+  const [peek, setPeek] = useState(null)
+  useEffect(() => {
+    if (!peek) return undefined
+    const close = (e) => {
+      if (e.type === 'keydown' && e.key !== 'Escape') return
+      if (e.type === 'pointerdown' && e.target.closest?.('[data-peek]')) return
+      setPeek(null)
+    }
+    window.addEventListener('pointerdown', close, true)
+    window.addEventListener('keydown', close, true)
+    return () => {
+      window.removeEventListener('pointerdown', close, true)
+      window.removeEventListener('keydown', close, true)
+    }
+  }, [peek])
 
   useEffect(() => {
     const subs = [
@@ -227,6 +254,11 @@ export default function ImportStaging() {
   }
 
   // --- grid ---------------------------------------------------------------------
+  // A row whose details come from a keyword rule (nothing typed over): grey text (Nov 2026, Markus).
+  const GREY = 'text-[var(--color-text-muted)]'
+  const isAuto = (row) => Boolean(matchRule(rules, row.rawDescription)) && !row.manual?.displayLabel && !row.manual?.categoryId
+  const grey = (p) => (isAuto(p.data) ? GREY : '')
+
   const columnDefs = useMemo(
     () => [
       {
@@ -252,26 +284,8 @@ export default function ImportStaging() {
         minWidth: 200,
         valueGetter: (p) => p.data.rawDescription,
         tooltipValueGetter: (p) => p.data.rawDescription,
-        // The matched keyword in light yellow (Oct 2026, Markus).
-        cellRenderer: (p) => {
-          const text = p.data.rawDescription
-          const kw = matchRule(rules, text)?.keyword
-          const at = kw ? text.toUpperCase().indexOf(kw.toUpperCase()) : -1
-          if (at < 0) return text
-          return (
-            <>
-              {text.slice(0, at)}
-              <mark style={{ background: 'var(--color-breakdown-tint)', color: 'inherit' }}>{text.slice(at, at + kw.length)}</mark>
-              {text.slice(at + kw.length)}
-            </>
-          )
-        },
+        cellRenderer: (p) => highlighted(p.data.rawDescription, matchRule(rules, p.data.rawDescription)?.keyword),
         cellClass: 'text-[var(--color-text-muted)]',
-        // Click (or Enter) shows the whole text in a small read-only popup (Nov 2026, Markus).
-        editable: true,
-        valueSetter: () => false,
-        cellEditor: FullTextPopup,
-        cellEditorPopup: true,
       },
       {
         colId: 'amount',
@@ -287,7 +301,7 @@ export default function ImportStaging() {
         },
         tooltipValueGetter: (p) =>
           p.data.amountCents !== p.data.originalAmountCents ? `Datei: ${centsToEuro(p.data.originalAmountCents)}` : undefined,
-        cellClass: (p) => 'text-right tabular-figure' + (p.data.amountCents !== p.data.originalAmountCents ? ' font-semibold' : ''),
+        cellClass: (p) => 'text-right tabular-figure ' + grey(p) + (p.data.amountCents !== p.data.originalAmountCents ? ' font-semibold' : ''),
       },
       {
         colId: 'date',
@@ -303,7 +317,7 @@ export default function ImportStaging() {
         },
         tooltipValueGetter: (p) =>
           p.data.date !== p.data.originalDate ? `Datei: ${fmtDate(p.data.originalDate)}` : undefined,
-        cellClass: (p) => (p.data.date !== p.data.originalDate ? 'font-semibold' : undefined),
+        cellClass: (p) => grey(p) + (p.data.date !== p.data.originalDate ? ' font-semibold' : ''),
       },
       {
         colId: 'konto',
@@ -323,7 +337,7 @@ export default function ImportStaging() {
         editable: true,
         valueGetter: (p) => effectiveRow(p.data, rules).displayLabel,
         // Not matched by any keyword rule: blue (Oct 2026, Markus) — still the plain bank text.
-        cellClass: (p) => (p.data.manual?.displayLabel || matchRule(rules, p.data.rawDescription) ? undefined : 'text-[var(--color-computed)]'),
+        cellClass: (p) => (p.data.manual?.displayLabel || matchRule(rules, p.data.rawDescription) ? grey(p) : 'text-[var(--color-computed)]'),
         valueSetter: (p) => {
           patchRow(p.data, { displayLabel: String(p.newValue ?? '').trim() })
           return false
@@ -336,10 +350,10 @@ export default function ImportStaging() {
         valueGetter: (p) => {
           const e = effectiveRow(p.data, rules)
           const c = categoryById[e.categoryId]
-          if (c) return categoryById[c.parentCategoryId]?.name ?? ''
+          if (c) return categoryById[c.parentCategoryId]?.name ?? '—'
           // A rule with only a Kategorie (no Unterkategorie): show the Kategorie anyway.
           const g = p.data.manual?.categoryId ? null : e.rule?.groupName
-          return g && categories.some((x) => !x.parentCategoryId && x.name === g) ? g : ''
+          return g && categories.some((x) => !x.parentCategoryId && x.name === g) ? g : '—'
         },
       },
       {
@@ -465,10 +479,28 @@ export default function ImportStaging() {
               theme={themeQuartz}
               rowData={batchRows}
               columnDefs={columnDefs}
-              defaultColDef={{ suppressMovable: true, resizable: true }}
+              defaultColDef={{ suppressMovable: true, resizable: true, cellClass: grey }}
               getRowId={(p) => p.data.id}
               tooltipShowDelay={400}
-              onCellClicked={(p) => p.column.getColId() === 'raw' && p.api.startEditingCell({ rowIndex: p.rowIndex, colKey: 'raw' })}
+              onCellClicked={(p) => {
+                const col = p.column.getColId()
+                if (col !== 'raw' && col !== 'label') return
+                const cell = p.event.target.closest?.('.ag-cell')
+                const inner = cell?.querySelector('.ag-cell-value') ?? cell
+                if (!cell || !(inner.scrollWidth > inner.clientWidth + 1 || cell.scrollWidth > cell.clientWidth + 1)) return
+                const r = cell.getBoundingClientRect()
+                const e = effectiveRow(p.data, rules)
+                setPeek({
+                  left: Math.min(r.left, window.innerWidth - 500),
+                  top: r.bottom + 2,
+                  content: col === 'raw' ? highlighted(p.data.rawDescription, e.rule?.keyword) : e.displayLabel,
+                })
+              }}
+              onCellFocused={(e) => {
+                if (e.column && e.rowIndex != null) lastCell.current = { rowIndex: e.rowIndex, colId: e.column.getColId() }
+              }}
+              onCellEditingStarted={() => setPeek(null)}
+              onBodyScroll={() => setPeek(null)}
               suppressRowHoverHighlight
               getRowStyle={(p) => (p.data.include ? undefined : { opacity: 0.5 })}
               onCellKeyDown={(p) => {
@@ -480,6 +512,15 @@ export default function ImportStaging() {
             />
           </div>
         </>
+      )}
+      {peek && (
+        <div
+          data-peek
+          className="fixed z-50 max-w-[480px] whitespace-pre-wrap break-words rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-sm shadow-lg select-text"
+          style={{ left: Math.max(8, peek.left), top: peek.top, minWidth: 240 }}
+        >
+          {peek.content}
+        </div>
       )}
     </div>
   )

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import BackupScreen from './BackupScreen'
 import ImportScreen from './ImportScreen'
@@ -9,8 +9,11 @@ import ImportStaging from './ImportStaging'
 // (Datenimport/Sicherung) under spec.md §1b.2's one "Import/Export" nav
 // destination — same two screens, just reached as tabs under one entry
 // instead of two separate always-visible buttons.
-export default function ImportExportScreen({ userEmail, usingCachedSession }) {
+export default function ImportExportScreen({ userEmail, usingCachedSession, active = true }) {
   const [tab, setTab] = useState('staging')
+  // Bank-Import and Regeln stay mounted once opened (only hidden), so cursor and scroll position survive a tab switch.
+  const [seen, setSeen] = useState(() => new Set(['staging']))
+  useEffect(() => setSeen((s) => (s.has(tab) ? s : new Set(s).add(tab))), [tab])
 
   return (
     <div className="flex flex-1 flex-col">
@@ -36,8 +39,14 @@ export default function ImportExportScreen({ userEmail, usingCachedSession }) {
           </button>
         ))}
       </div>
-      {tab === 'staging' && <ImportStaging />}
-      {tab === 'rules' && <ImportRules />}
+      <div className={tab === 'staging' ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}>
+        <ImportStaging active={active && tab === 'staging'} />
+      </div>
+      {seen.has('rules') && (
+        <div className={tab === 'rules' ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}>
+          <ImportRules active={active && tab === 'rules'} />
+        </div>
+      )}
       {tab === 'import' && (
         <div>
           <p className="px-6 pt-4 text-center text-sm text-[var(--color-text-muted)]">

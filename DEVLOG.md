@@ -2310,3 +2310,7 @@ Markus: use the same dropdowns/modals as Konten. Regeln columns Gegenkonto (List
 ## Session 37, continued a hundred-and-fifty-first time — 2026-11-02 — Full bank text on click
 
 Staging: clicking a Bank-Text cell opens a small read-only popup with the complete, wrapped text (Schließen / Esc / click outside closes); the hover tooltip stays. Lint/tests/build only, not click-tested in a browser.
+
+## Session 37, continued a hundred-and-fifty-second time — 2026-11-02 — Staging/Regeln polish, screens keep their state
+
+Staging: empty Kategorie shows "—" like Unterkategorie. The full-text window (no "Schließen" any more; click elsewhere/Esc/scroll closes it) now appears for Bank-Text *and* Empfänger, only when the text really overflows its cell; it carries the yellow keyword highlight. It is a plain floating window (not a grid editor), so Empfänger stays editable by double-click. Rows whose details come from a rule (nothing typed over) show grey text; unmatched Empfänger stays blue. Import/Export screen is now mounted on first visit and only hidden afterwards (like Konten etc.); Bank-Import and Regeln stay mounted inside it too, so cursor, scroll and grid state survive leaving and returning, and Tab places the cursor back (registered as 'importexport' in lib/screenCursor.js). Regeln: rows are sorted by keyword once; new/loaded rules go to the very top and stay there (no re-sort while typing) until the table is sorted by hand. Lint/tests/build only; not click-tested in a browser this round.

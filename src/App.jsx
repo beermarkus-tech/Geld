@@ -55,6 +55,10 @@ export default function App() {
   const [kontenFocus, setKontenFocus] = useState(() => ui.get('konten', 'focus'))
   const [verlaufFocus, setVerlaufFocus] = useState(() => ui.get('verlauf', 'focus'))
   useEffect(() => ui.set('app', 'view', view), [view])
+  const [importExportSeen, setImportExportSeen] = useState(view === 'importexport')
+  useEffect(() => {
+    if (view === 'importexport') setImportExportSeen(true)
+  }, [view])
   useEffect(() => {
     if (year) ui.set('app', 'year', year)
   }, [year])
@@ -330,7 +334,13 @@ export default function App() {
           <Urlaube onOpenInKonten={openInKonten} onOpenInVerlauf={openInVerlauf} active={view === 'urlaube'} />
         </div>
         {view === 'settings' && <Settings year={year} onOpenInKonten={openInKonten} onOpenInVerlauf={openInVerlauf} />}
-        {view === 'importexport' && <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} />}
+        {/* Mounted on first visit, then only hidden – Bank-Import and Regeln keep their cursor, scroll
+            position and unsaved state when you come back (Nov 2026, Markus). */}
+        {importExportSeen && (
+          <div className={view === 'importexport' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
+            <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} active={view === 'importexport'} />
+          </div>
+        )}
         {/* Every other nav item (Dashboard,
             Monatsabschluss, Außenstände, Settings) isn't built yet —
             resolved Sept 2026 (Markus): a real nav entry exists for each

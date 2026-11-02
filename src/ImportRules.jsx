@@ -8,6 +8,7 @@ import { defaultTagIdsFor, effectiveRule, matchRule } from './lib/bankImport'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { qualifiedTagName } from './lib/tagStyle'
 import CategoryEditor from './CategoryEditor'
+import { registerScreenCursor } from './lib/screenCursor'
 import Listbox from './Listbox'
 import TagEditor from './TagEditor'
 import TagPill from './TagPill'
@@ -63,7 +64,7 @@ const GegenkontoEditor = forwardRef(function GegenkontoEditor({ accounts, initia
 // here before anything is hard-coded into the import). Same grid look as Konten; every
 // change is saved at once. Matching is case-blind and the longest keyword wins
 // (lib/bankImport.js), so the "Test" field shows exactly what the import would do.
-export default function ImportRules() {
+export default function ImportRules({ active = true }) {
   const { tags, tagById } = useTags()
   const tagActions = useTagActions()
   const [rules, setRules] = useState([])
@@ -72,6 +73,20 @@ export default function ImportRules() {
   const [filter, setFilter] = useState('')
   const [testText, setTestText] = useState('')
   const gridRef = useRef(null)
+  const lastCell = useRef(null)
+  useEffect(() => {
+    if (!active) return undefined
+    return registerScreenCursor('importexport', () => {
+      const api = gridRef.current?.api
+      const row = lastCell.current?.rowIndex ?? api?.getFirstDisplayedRowIndex()
+      if (!api || row == null || row < 0) return false
+      api.setFocusedCell(row, lastCell.current?.colId ?? 'keyword')
+      return true
+    })
+  }, [active])
+  // Row order: sorted by keyword once; rules added later (new or loaded) go to the very top and stay
+  // there until the table is sorted by hand (Nov 2026, Markus).
+  const orderRef = useRef([])
 
   useEffect(() => {
     const subs = [
@@ -90,7 +105,18 @@ export default function ImportRules() {
   )
   const accountByName = useMemo(() => Object.fromEntries(accountsSorted.map((a) => [a.name, a.id])), [accountsSorted])
   const accountName = useMemo(() => Object.fromEntries(accountsSorted.map((a) => [a.id, a.name])), [accountsSorted])
-  const eff = useMemo(() => rules.map(effectiveRule).sort((a, b) => a.keyword.localeCompare(b.keyword)), [rules])
+  const eff = useMemo(() => {
+    const all = rules.map(effectiveRule)
+    const byId = new Map(all.map((r) => [r.id, r]))
+    const known = orderRef.current.filter((id) => byId.has(id))
+    const fresh = all.filter((r) => !known.includes(r.id))
+    const first = orderRef.current.length === 0
+    const ids = first
+      ? fresh.sort((a, b) => a.keyword.localeCompare(b.keyword)).map((r) => r.id)
+      : [...fresh.sort((a, b) => b.createdAt - a.createdAt).map((r) => r.id), ...known]
+    orderRef.current = ids
+    return ids.map((id) => byId.get(id))
+  }, [rules])
   const shown = useMemo(() => {
     const q = filter.trim().toLowerCase()
     return eff.filter((r) => !q || [r.keyword, r.label, r.groupName, r.categoryName].some((v) => (v ?? '').toLowerCase().includes(q)))
@@ -306,6 +332,9 @@ export default function ImportRules() {
           getRowId={(p) => p.data.id}
           suppressRowHoverHighlight
           stopEditingWhenCellsLoseFocus
+          onCellFocused={(e) => {
+            if (e.column && e.rowIndex != null) lastCell.current = { rowIndex: e.rowIndex, colId: e.column.getColId() }
+          }}
         />
       </div>
     </div>
