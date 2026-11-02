@@ -94,7 +94,7 @@ export default function ImportRules() {
         <table className="w-full min-w-[1100px] text-sm">
           <thead className="sticky top-0 bg-[var(--color-surface)] text-left">
             <tr>
-              {['Keyword', 'Empfänger', 'Kategorie', 'Unterkategorie', 'Gegenkonto', 'Tags', ''].map((h) => (
+              {['Keyword', 'Empfänger', 'Gegenkonto', 'Kategorie', 'Unterkategorie', 'Tags', ''].map((h) => (
                 <th key={h} className="px-2 py-2 font-medium">
                   {h}
                 </th>
@@ -104,11 +104,21 @@ export default function ImportRules() {
           <tbody>
             {shown.map((r) => (
               <tr key={r.id} className="border-t border-[var(--color-border)] align-top">
-                <td className="w-48 p-1">
+                <td className="w-44 p-1">
                   <input className={input} defaultValue={r.keyword} onBlur={(e) => e.target.value.trim() !== r.keyword && patch(r, { keyword: e.target.value.trim() })} />
                 </td>
-                <td className="w-56 p-1">
+                <td className="min-w-64 p-1">
                   <input className={input} defaultValue={r.label} onBlur={(e) => e.target.value.trim() !== r.label && patch(r, { label: e.target.value.trim() })} />
+                </td>
+                <td className="w-48 p-1">
+                  <select className={input} value={r.counterAccountId ?? ''} onChange={(e) => patch(r, { counterAccountId: e.target.value || null })}>
+                    <option value="">— keins (einseitig) —</option>
+                    {accountsSorted.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </select>
                 </td>
                 <td className="w-44 p-1">
                   <select
@@ -126,9 +136,6 @@ export default function ImportRules() {
                       </option>
                     ))}
                   </select>
-                  {!groupOf(r) && r.groupName && (
-                    <div className="px-1 text-xs text-[var(--color-text-muted)]">Liste: {r.groupName}</div>
-                  )}
                 </td>
                 <td className="w-52 p-1">
                   <select
@@ -149,21 +156,8 @@ export default function ImportRules() {
                         </option>
                       ))}
                   </select>
-                  {!r.categoryId && r.categoryName && (
-                    <div className="px-1 text-xs text-[var(--color-text-muted)]">Liste: {r.categoryName}</div>
-                  )}
                 </td>
-                <td className="w-48 p-1">
-                  <select className={input} value={r.counterAccountId ?? ''} onChange={(e) => patch(r, { counterAccountId: e.target.value || null })}>
-                    <option value="">— keins (einseitig) —</option>
-                    {accountsSorted.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td className="relative p-1">
+                <td className="relative w-60 p-1">
                   <div className="flex flex-wrap items-center gap-1">
                     {r.tagIds.map((id) => (
                       <span key={id} className="inline-flex items-center gap-1">

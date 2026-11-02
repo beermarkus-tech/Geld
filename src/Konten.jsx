@@ -2068,7 +2068,8 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         cellEditor: KontoEditor,
         cellEditorParams: { accounts, filteredAccountId, onApply: applyKontoDirect },
         cellEditorPopup: true,
-        flex: 1.6,
+        flex: 1.2,
+        minWidth: 200,
       },
       {
         headerName: 'Empfänger',
@@ -2095,7 +2096,8 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         },
         ...QUICK_FILTER,
         editable: (p) => !p.data.__isLine && !isRowDeleted(p.data),
-        flex: 1.4,
+        flex: 1.7,
+        minWidth: 170,
       },
       {
         headerName: 'Betrag',

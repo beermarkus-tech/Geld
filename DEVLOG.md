@@ -2294,3 +2294,7 @@ Markus: edit the rules first so the right tags are in them before any import rul
 ## Session 37, continued a hundred-and-forty-seventh time — 2026-11-02 — Kategorie and Unterkategorie shown separately
 
 Markus: rules sometimes have only a Kategorie. Regeln tab now has separate Kategorie and Unterkategorie dropdowns (Unterkategorie filtered by the Kategorie, may stay empty); staging shows the rule's Kategorie even without an Unterkategorie. **Open for Markus:** a group-only rule cannot categorize a booking at commit (bookings store a leaf subcategory only, §2.6) — say if the commit should treat that differently.
+
+## Session 37, continued a hundred-and-forty-eighth time — 2026-11-02 — Layout fixes, "Regeln anwenden" back
+
+Regeln tab: Gegenkonto moved between Empfänger and Kategorie, the "Liste:" hints removed, Empfänger wider and Tags narrower. Konten grid: Konto narrower, Empfänger wider. Staging: "Regeln anwenden" button back — resets Empfänger/Kategorie of rows with a rule hit to the rule's values, with a confirm if that overwrites typed changes (my reading of what it should do now that rows follow rules live; Markus to say if he meant something else).
