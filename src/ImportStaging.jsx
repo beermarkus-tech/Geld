@@ -8,17 +8,13 @@ import { registerScreenCursor } from './lib/screenCursor'
 import { db } from './firebase'
 import {
   buildStagedRows,
-  counterAccountFor,
   accountPair,
   importTotals,
   matchRule,
   matchShare,
   parseBnpRows,
-  parseKeywordCsv,
   parseTypedDate,
-  defaultTagIdsFor,
   effectiveRow,
-  resolveCategoryId,
 } from './lib/bankImport'
 import { centsToEuro } from './lib/format'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
@@ -35,7 +31,6 @@ const ACCOUNT_BY_MASK = { '****0048': 'bnp-konto' }
 const ACCOUNT_NAME = { 'bnp-konto': 'BNP Konto' }
 
 const fmtDate = (iso) => (iso ? iso.split('-').reverse().join('.') : '')
-const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'x'
 
 // Firestore batches hold 500 writes at most.
 async function commitInChunks(ops) {
@@ -67,7 +62,7 @@ function highlighted(text, kw) {
 }
 
 export default function ImportStaging({ active = true }) {
-  const { tags, tagById } = useTags()
+  const { tagById } = useTags()
   const [categories, setCategories] = useState([])
   const [transactions, setTransactions] = useState([])
   const [rules, setRules] = useState([])
@@ -138,48 +133,6 @@ export default function ImportStaging({ active = true }) {
       })
     : null
 
-  // --- keyword list -> categorizationRules ------------------------------------
-  async function loadRules(file) {
-    setBusy(true)
-    setMessage(null)
-    try {
-      const text = await file.text()
-      const parsed = parseKeywordCsv(text)
-      const lineCount = Math.max(0, text.split(/\r?\n/).filter((l) => l.trim()).length - 1)
-      const unresolved = []
-      const known = new Set(rules.map((r) => r.id))
-      const docs = parsed.map((r) => {
-        const categoryId = resolveCategoryId(categories, r.groupName, r.categoryName)
-        if (r.categoryName && !categoryId) unresolved.push(`${r.keyword}: ${r.groupName} › ${r.categoryName}`)
-        return {
-          id: `rule-${slug(r.keyword)}`,
-          ...r,
-          categoryId,
-          counterAccountId: counterAccountFor(r.groupName),
-          tagIds: defaultTagIdsFor(tags, r.groupName, r.categoryName),
-          source: 'seed',
-          createdAt: Date.now(),
-        }
-      })
-      // Rules that already exist are left alone — Markus may have edited them (Regeln tab).
-      const fresh = docs.filter((d) => !known.has(d.id))
-      await commitInChunks(fresh.map((d) => (batch) => batch.set(doc(db, 'categorizationRules', d.id), d)))
-      setMessage({
-        ok: true,
-        text:
-          `${docs.length} Regeln aus ${lineCount} Datenzeilen gelesen (ohne Keyword übersprungen, doppelte Keywords nur einmal): ` +
-          `${fresh.length} neu gespeichert, ${docs.length - fresh.length} existierten schon und blieben unverändert. ` +
-          (unresolved.length
-            ? `${unresolved.length} ohne passende Kategorie: ${unresolved.slice(0, 12).join('; ')}${unresolved.length > 12 ? ' …' : ''}`
-            : 'Alle Kategorien gefunden.'),
-      })
-    } catch (e) {
-      setMessage({ ok: false, text: `Regeln konnten nicht geladen werden: ${e.message}` })
-    }
-    setBusy(false)
-  }
-
-  // --- BNP file -> importBatches / stagedRows ----------------------------------
   async function loadBankFile(file) {
     setBusy(true)
     setMessage(null)
@@ -433,17 +386,10 @@ export default function ImportStaging({ active = true }) {
           <div className="flex flex-wrap items-center gap-3">
             {fileInput('.xls,.xlsx', loadBankFile, 'BNP-Datei (.xls) einlesen')}
             {rules.length === 0 && (
-              <span className="text-sm text-[var(--color-text-muted)]">Ohne Regeln bleibt alles unkategorisiert — erst die Regeln laden.</span>
+              <span className="text-sm text-[var(--color-text-muted)]">Ohne Regeln bleibt alles unkategorisiert — Regeln im Tab „Regeln“ anlegen.</span>
             )}
           </div>
         )}
-        <div className="flex flex-wrap items-center gap-3">
-          {fileInput('.csv', loadRules, rules.length ? 'Regeln neu laden (CSV)' : 'Regeln laden (CSV)')}
-          <span className="text-sm text-[var(--color-text-muted)]">
-            {rules.length} Regeln gespeichert — das Laden ist nur einmal nötig, sie bleiben in der Datenbank
-            (neu laden nur, wenn die Liste neue Keywords hat — vorhandene Regeln bleiben unverändert; bearbeiten im Tab „Regeln“).
-          </span>
-        </div>
       </div>
 
       {openBatch && totals && (

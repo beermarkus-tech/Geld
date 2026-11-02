@@ -2322,3 +2322,7 @@ Markus: Details must be auto-assigned too and later carried into Konten. New rul
 ## Session 37, continued a hundred-and-fifty-fourth time — 2026-11-02 — Staging header "Tags"
 
 Markus: staging column header "Tags (aus der Regel)" is now just "Tags". Behaviour unchanged (still read-only, from the rule).
+
+## Session 37, continued a hundred-and-fifty-fifth time — 2026-11-02 — "Regeln (neu) laden (CSV)" removed
+
+Markus: remove the reload button completely (reloading would bring back deleted rules and re-add renamed keywords). The CSV loader (`loadRules`) and its note are gone from the Bank-Import tab; rules are now maintained only in the Regeln tab. `parseKeywordCsv` stays in `lib/bankImport.js` (tested) in case a one-off bulk load is ever needed again. With no rules at all the hint now points to the Regeln tab.
