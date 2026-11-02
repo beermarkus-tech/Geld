@@ -24,7 +24,7 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
   // which line (or none) it's editing and passes the right id directly,
   // rather than this component guessing from a `data` shape that differs
   // between the two cases.
-  const { data, categories, onApply, onClear, api, startField = 'group', initialCategoryId = null } = props
+  const { data, categories, onApply, onClear, api, startField = 'group', initialCategoryId = null, allowGroupOnly = false } = props
   const currentGroupId = initialCategoryId
     ? (categories.find((c) => c.id === initialCategoryId)?.parentCategoryId ?? initialCategoryId)
     : null
@@ -178,7 +178,8 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
   // *after*, so it's the one that wins over whatever `stopEditing` itself
   // would otherwise have restored focus to.
   const apply = (finalCategoryId) => {
-    const catId = finalCategoryId !== undefined ? finalCategoryId : categoryId
+    // allowGroupOnly (keyword rules): a Kategorie without Unterkategorie may be applied; the group's id is passed.
+    const catId = (finalCategoryId !== undefined ? finalCategoryId : categoryId) || (allowGroupOnly ? groupId : '')
     onApply(data, catId)
     const rowIndex = api.getFocusedCell()?.rowIndex
     api.stopEditing(true)
@@ -244,7 +245,7 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
         <button
           type="button"
           onClick={() => apply()}
-          disabled={!categoryId}
+          disabled={!categoryId && !(allowGroupOnly && groupId)}
           className="rounded bg-[var(--color-computed)] px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
         >
           Übernehmen

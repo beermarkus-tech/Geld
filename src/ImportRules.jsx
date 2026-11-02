@@ -7,59 +7,54 @@ import { db } from './firebase'
 import { defaultTagIdsFor, effectiveRule, matchRule } from './lib/bankImport'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { qualifiedTagName } from './lib/tagStyle'
-import TagBox from './TagBox'
+import CategoryEditor from './CategoryEditor'
+import Listbox from './Listbox'
+import TagEditor from './TagEditor'
 import TagPill from './TagPill'
-import { useTags } from './TagsProvider'
+import { useTagActions, useTags } from './TagsProvider'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 syncAgGridColorScheme()
 
 const NONE = '–'
 
-// Tag popup for one rule: the chips with ×, and the tag box to add one (existing tags only).
-const RuleTagEditor = forwardRef(function RuleTagEditor({ rule, tags, tagById, onChange, api }, ref) {
-  const [ids, setIds] = useState(rule.tagIds)
-  useImperativeHandle(ref, () => ({ getValue: () => ids, isCancelBeforeStart: () => false }))
-  const name = (t) => qualifiedTagName(t, tagById) || t.id
+// Gegenkonto popup for one rule: the same Listbox dropdown as the Konto editor in Konten, one account only.
+const GegenkontoEditor = forwardRef(function GegenkontoEditor({ accounts, initialId, onApply, api }, ref) {
+  const [id, setId] = useState(initialId ?? '')
+  const listRef = useRef(null)
+  useImperativeHandle(ref, () => ({ getValue: () => id, isCancelBeforeStart: () => false }))
+  useEffect(() => {
+    listRef.current?.focus()
+  }, [])
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      e.stopPropagation()
+      api.stopEditing(true)
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [api])
+  const apply = (override) => {
+    onApply(override !== undefined ? override || null : id || null)
+    api.stopEditing(true)
+  }
+  const options = [{ id: '', name: '– keins –' }, ...accounts.map((a) => ({ id: a.id, name: a.name }))]
   return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-2 shadow-lg" style={{ minWidth: 300 }}>
-      <TagBox
-        placeholder="Tag suchen…"
-        getOptions={(text) => {
-          const q = text.trim().toLowerCase()
-          return tags
-            .filter((t) => !t.archived && !ids.includes(t.id) && (!q || name(t).toLowerCase().includes(q)))
-            .slice(0, 30)
-            .map((t) => ({ key: t.id, id: t.id, tag: t, label: name(t) }))
-        }}
-        onPick={(o) => {
-          onChange([...ids, o.id])
-          api.stopEditing(true)
-        }}
-        onEnterNone={() => api.stopEditing(true)}
-        onClose={() => api.stopEditing(true)}
-        header={
-          <div className="flex flex-wrap gap-1">
-            {ids.map((id) => (
-              <span key={id} className="inline-flex items-center gap-1">
-                <TagPill tag={tagById[id]}>{tagById[id] ? name(tagById[id]) : id}</TagPill>
-                <button
-                  type="button"
-                  aria-label="Tag entfernen"
-                  onClick={() => {
-                    const next = ids.filter((x) => x !== id)
-                    setIds(next)
-                    onChange(next)
-                  }}
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-            {ids.length === 0 && <span className="text-xs text-[var(--color-text-muted)]">Keine Tags</span>}
-          </div>
-        }
-      />
+    <div className="flex flex-col gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-2 shadow-lg" style={{ minWidth: 260 }}>
+      <label className="text-xs text-[var(--color-text-muted)]">
+        Gegenkonto
+        <Listbox ref={listRef} value={id} onChange={setId} onEnter={(v) => apply(v)} options={options} placeholder="– keins –" />
+      </label>
+      <div className="mt-1 flex justify-end gap-2">
+        <button type="button" onClick={() => api.stopEditing(true)} className="rounded px-2 py-1 text-xs text-[var(--color-text-muted)]">
+          Abbrechen
+        </button>
+        <button type="button" onClick={() => apply()} className="rounded bg-[var(--color-computed)] px-2 py-1 text-xs font-medium text-white">
+          Übernehmen
+        </button>
+      </div>
     </div>
   )
 })
@@ -70,6 +65,7 @@ const RuleTagEditor = forwardRef(function RuleTagEditor({ rule, tags, tagById, o
 // (lib/bankImport.js), so the "Test" field shows exactly what the import would do.
 export default function ImportRules() {
   const { tags, tagById } = useTags()
+  const tagActions = useTagActions()
   const [rules, setRules] = useState([])
   const [categories, setCategories] = useState([])
   const [accounts, setAccounts] = useState([])
@@ -114,6 +110,21 @@ export default function ImportRules() {
     await batch.commit()
   }
 
+  // The same Kategorie → Unterkategorie dropdown as Konten. A rule may stop at the Kategorie
+  // (the editor then hands back the group's id); clearing (Entf) empties both.
+  const categoryParams = (startField) => (p) => ({
+    categories,
+    initialCategoryId: p.data.categoryId ?? groupOf(p.data)?.id ?? null,
+    allowGroupOnly: true,
+    startField,
+    onApply: (_d, id) => {
+      const c = categoryById[id]
+      if (c?.parentCategoryId) patch(p.data, { categoryId: c.id, categoryName: c.name, groupName: categoryById[c.parentCategoryId]?.name ?? '' })
+      else patch(p.data, { categoryId: null, categoryName: '', groupName: c?.name ?? '' })
+    },
+    onClear: () => patch(p.data, { categoryId: null, categoryName: '', groupName: '' }),
+  })
+
   const columnDefs = useMemo(
     () => [
       {
@@ -149,8 +160,13 @@ export default function ImportRules() {
           patch(p.data, { counterAccountId: accountByName[p.newValue] ?? null })
           return false
         },
-        cellEditor: 'agSelectCellEditor',
-        cellEditorParams: { values: [NONE, ...accountsSorted.map((a) => a.name)] },
+        cellEditor: GegenkontoEditor,
+        cellEditorParams: (p) => ({
+          accounts: accountsSorted,
+          initialId: p.data.counterAccountId,
+          onApply: (counterAccountId) => patch(p.data, { counterAccountId }),
+        }),
+        cellEditorPopup: true,
         cellClass: (p) => (p.value === NONE ? 'text-[var(--color-text-muted)]' : undefined),
       },
       {
@@ -164,15 +180,16 @@ export default function ImportRules() {
           patch(p.data, { groupName: g?.name ?? '', categoryName: '', categoryId: null })
           return false
         },
-        cellEditor: 'agSelectCellEditor',
-        cellEditorParams: { values: [NONE, ...groups.map((g) => g.name)] },
+        cellEditor: CategoryEditor,
+        cellEditorParams: categoryParams('group'),
+        cellEditorPopup: true,
         cellClass: (p) => (p.value === NONE ? 'text-[var(--color-text-muted)]' : undefined),
       },
       {
-        colId: 'sub',
+        colId: 'unterkategorie',
         headerName: 'Unterkategorie',
         width: 190,
-        editable: (p) => Boolean(groupOf(p.data)),
+        editable: true,
         valueGetter: (p) => categoryById[p.data.categoryId]?.name ?? NONE,
         valueSetter: (p) => {
           const g = groupOf(p.data)
@@ -180,10 +197,9 @@ export default function ImportRules() {
           patch(p.data, { categoryId: c?.id ?? null, categoryName: c?.name ?? '' })
           return false
         },
-        cellEditor: 'agSelectCellEditor',
-        cellEditorParams: (p) => ({
-          values: [NONE, ...categories.filter((c) => c.parentCategoryId === groupOf(p.data)?.id && c.name !== 'Erstattungen').map((c) => c.name)],
-        }),
+        cellEditor: CategoryEditor,
+        cellEditorParams: categoryParams('category'),
+        cellEditorPopup: true,
         cellClass: (p) => (p.value === NONE ? 'text-[var(--color-text-muted)]' : undefined),
       },
       {
@@ -203,8 +219,15 @@ export default function ImportRules() {
           ) : (
             <span className="text-[var(--color-text-muted)]">{NONE}</span>
           ),
-        cellEditor: RuleTagEditor,
-        cellEditorParams: (p) => ({ rule: p.data, tags, tagById, onChange: (tagIds) => patch(p.data, { tagIds }) }),
+        cellEditor: TagEditor,
+        cellEditorParams: (p) => ({
+          tags,
+          recentTagValues: [],
+          initialTagIds: p.data.tagIds,
+          onApply: (_d, tagIds) => patch(p.data, { tagIds }),
+          onCreateTag: (name, groupingType = null) => tagActions.findOrCreate(name, groupingType),
+          onTabAddRow: () => {},
+        }),
         cellEditorPopup: true,
       },
       {
