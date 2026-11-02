@@ -7,7 +7,9 @@ import {
   fallbackLabel,
   importTotals,
   matchShare,
-  ruleFillFor,
+  defaultTagIdsFor,
+  effectiveRow,
+  effectiveRule,
   matchRule,
   parseBnpRows,
   parseKeywordCsv,
@@ -149,19 +151,30 @@ describe('parseTypedDate', () => {
   })
 })
 
-describe('rules on an already staged row', () => {
+describe('rule share and effective rows', () => {
   const rules = [{ keyword: 'LIDL', label: 'Lidl', categoryId: 'food' }, { keyword: 'PAYPAL', label: 'Paypal', categoryId: null }]
-  const row = (raw, extra = {}) => ({ rawDescription: raw, displayLabel: fallbackLabel(raw), categoryId: null, ...extra })
-  it('fills untouched rows only', () => {
-    expect(ruleFillFor(row('FACTURE CARTE DU 010926 LIDL CARTE   4974XXXXXXXX3562'), rules)).toEqual({ displayLabel: 'Lidl', categoryId: 'food' })
-    expect(ruleFillFor(row('PRLV PAYPAL'), rules)).toEqual({ displayLabel: 'Paypal' })
-    expect(ruleFillFor(row('LIDL', { displayLabel: 'Mein Lidl' }), rules)).toBeNull()
-    expect(ruleFillFor(row('LIDL', { categoryId: 'x' }), rules)).toBeNull()
-    expect(ruleFillFor(row('OTHER'), rules)).toBeNull()
-  })
   it('counts the share of hits', () => {
     const rows = [{ rawDescription: 'LIDL A' }, { rawDescription: 'PAYPAL' }, { rawDescription: 'x' }, { rawDescription: 'y' }]
     expect(matchShare(rows, rules)).toEqual({ empfaenger: 2, kategorie: 1, total: 4, empfaengerPct: 50, kategoriePct: 25 })
+  })
+  it('follows the rule unless Markus typed over the field', () => {
+    const raw = 'FACTURE CARTE DU 010926 LIDL CARTE   4974XXXXXXXX3562'
+    expect(effectiveRow({ rawDescription: raw }, rules)).toMatchObject({ displayLabel: 'Lidl', categoryId: 'food', counterAccountId: null, tagIds: [] })
+    expect(effectiveRow({ rawDescription: raw, displayLabel: 'Mein Lidl', categoryId: 'x', manual: { displayLabel: true } }, rules)).toMatchObject({
+      displayLabel: 'Mein Lidl',
+      categoryId: 'food',
+    })
+    expect(effectiveRow({ rawDescription: 'ROSTOCK 1' }, rules)).toMatchObject({ displayLabel: 'ROSTOCK 1', categoryId: null, rule: null })
+  })
+  it('old rules get the Gruppe account, new fields win', () => {
+    expect(effectiveRule({ groupName: 'Rücklagen' })).toMatchObject({ counterAccountId: 'livret-a-sparen', tagIds: [] })
+    expect(effectiveRule({ groupName: 'Rücklagen', counterAccountId: null, tagIds: ['t'] })).toMatchObject({ counterAccountId: null, tagIds: ['t'] })
+  })
+  it('suggests the allocation tag for a Rücklagen line', () => {
+    const tags = [{ id: 'a', class: 'allocation', name: 'Rücklagen Steuern' }, { id: 'b', class: 'allocation', name: 'Sparen Sophia' }]
+    expect(defaultTagIdsFor(tags, 'Rücklagen', 'Für Steuern')).toEqual(['a'])
+    expect(defaultTagIdsFor(tags, 'Rücklagen', 'Für Sparen Sophia')).toEqual(['b'])
+    expect(defaultTagIdsFor(tags, 'Wohnen', 'Garten')).toEqual([])
   })
 })
 describe('csv separators', () => {

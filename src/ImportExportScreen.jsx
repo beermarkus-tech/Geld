@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 import BackupScreen from './BackupScreen'
 import ImportScreen from './ImportScreen'
+import ImportRules from './ImportRules'
 import ImportStaging from './ImportStaging'
 
 // Consolidates the two previously-independent header toggles
@@ -16,6 +17,7 @@ export default function ImportExportScreen({ userEmail, usingCachedSession }) {
       <div className="flex gap-2 border-b border-[var(--color-border)] px-4 pt-3">
         {[
           { id: 'staging', label: 'Bank-Import' },
+        { id: 'rules', label: 'Regeln' },
         { id: 'import', label: 'Datenimport' },
           { id: 'backup', label: 'Sicherung' },
         ].map((t) => (
@@ -35,6 +37,7 @@ export default function ImportExportScreen({ userEmail, usingCachedSession }) {
         ))}
       </div>
       {tab === 'staging' && <ImportStaging />}
+      {tab === 'rules' && <ImportRules />}
       {tab === 'import' && (
         <div>
           <p className="px-6 pt-4 text-center text-sm text-[var(--color-text-muted)]">

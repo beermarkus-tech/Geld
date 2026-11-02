@@ -140,7 +140,7 @@ export function matchRule(rules, rawDescription) {
   const text = rawDescription.toUpperCase()
   let best = null
   for (const r of rules) {
-    if (!text.includes(r.keyword.toUpperCase())) continue
+    if (!r.keyword?.trim() || !text.includes(r.keyword.toUpperCase())) continue
     if (!best || r.keyword.length > best.keyword.length) best = r
   }
   return best
@@ -201,18 +201,6 @@ export function parseTypedDate(text, fallbackIso) {
   return validDate(y, m, d) ? `${y}-${pad(m)}-${pad(d)}` : null
 }
 
-/** Fills Empfänger/Kategorie from the rules for a staged row nobody has touched yet
- *  (no category, label still the plain bank-text fallback). Returns the patch, or null. */
-export function ruleFillFor(row, rules) {
-  if (row.categoryId || row.displayLabel !== fallbackLabel(row.rawDescription)) return null
-  const rule = matchRule(rules, row.rawDescription)
-  if (!rule) return null
-  const patch = {}
-  if (rule.label && rule.label !== row.displayLabel) patch.displayLabel = rule.label
-  if (rule.categoryId) patch.categoryId = rule.categoryId
-  return Object.keys(patch).length ? patch : null
-}
-
 /** Top-bar figure: share of lines whose bank text hits a rule (Empfänger); the
  *  category share is still returned but no longer shown. */
 export function matchShare(rows, rules) {
@@ -245,4 +233,40 @@ export function accountPair(accountId, amountCents, counterAccountId) {
   return out
     ? { fromAccountId: accountId, toAccountId: counterAccountId }
     : { fromAccountId: counterAccountId, toAccountId: accountId }
+}
+
+/** A stored rule with the newer fields filled in: rules loaded before Gegenkonto and
+ *  tags existed get the Gruppe-based default account and no tags. */
+export function effectiveRule(rule) {
+  return {
+    ...rule,
+    counterAccountId: rule.counterAccountId !== undefined ? rule.counterAccountId : counterAccountFor(rule.groupName),
+    tagIds: rule.tagIds ?? [],
+  }
+}
+
+/** Starting tags for a rule loaded from the CSV: a Rücklagen line "Für Steuern" gets the
+ *  allocation tag whose name ends with "Steuern" (Rücklagen Steuern); "Für Sparen
+ *  Sophia" gets Sparen Sophia. Only when exactly one allocation tag fits. */
+export function defaultTagIdsFor(tags, groupName, categoryName) {
+  if (groupName !== 'Rücklagen' || !categoryName) return []
+  const want = categoryName.replace(/^Für\s+/i, '').trim().toLowerCase()
+  const hits = tags.filter((t) => t.class === 'allocation' && t.name.toLowerCase().endsWith(want))
+  return hits.length === 1 ? [hits[0].id] : []
+}
+
+/** What a staged row currently is: the rule's values for every field Markus has not
+ *  typed over himself (`row.manual`), so editing a rule shows up in the open import at
+ *  once. Konto and tags always come from the rule — they are not editable in staging. */
+export function effectiveRow(row, rules) {
+  const rule = matchRule(rules, row.rawDescription)
+  const r = rule ? effectiveRule(rule) : null
+  const manual = row.manual ?? {}
+  return {
+    rule: r,
+    displayLabel: manual.displayLabel ? row.displayLabel : (r?.label || fallbackLabel(row.rawDescription)),
+    categoryId: manual.categoryId ? row.categoryId : (r?.categoryId ?? null),
+    counterAccountId: r?.counterAccountId ?? null,
+    tagIds: r?.tagIds ?? [],
+  }
 }

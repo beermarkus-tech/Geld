@@ -7,19 +7,23 @@ import CategoryEditor from './CategoryEditor'
 import { db } from './firebase'
 import {
   buildStagedRows,
-  accountPair,
   counterAccountFor,
+  accountPair,
   importTotals,
   matchRule,
   matchShare,
   parseBnpRows,
   parseKeywordCsv,
   parseTypedDate,
-  ruleFillFor,
+  defaultTagIdsFor,
+  effectiveRow,
   resolveCategoryId,
 } from './lib/bankImport'
 import { centsToEuro } from './lib/format'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
+import { qualifiedTagName } from './lib/tagStyle'
+import TagPill from './TagPill'
+import { useTags } from './TagsProvider'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 syncAgGridColorScheme()
@@ -49,6 +53,7 @@ function parseEuro(s) {
 }
 
 export default function ImportStaging() {
+  const { tags, tagById } = useTags()
   const [categories, setCategories] = useState([])
   const [transactions, setTransactions] = useState([])
   const [rules, setRules] = useState([])
@@ -100,22 +105,30 @@ export default function ImportStaging() {
       const parsed = parseKeywordCsv(text)
       const lineCount = Math.max(0, text.split(/\r?\n/).filter((l) => l.trim()).length - 1)
       const unresolved = []
+      const known = new Set(rules.map((r) => r.id))
       const docs = parsed.map((r) => {
         const categoryId = resolveCategoryId(categories, r.groupName, r.categoryName)
         if (r.categoryName && !categoryId) unresolved.push(`${r.keyword}: ${r.groupName} › ${r.categoryName}`)
-        return { id: `rule-${slug(r.keyword)}`, ...r, categoryId, source: 'seed', createdAt: Date.now() }
+        return {
+          id: `rule-${slug(r.keyword)}`,
+          ...r,
+          categoryId,
+          counterAccountId: counterAccountFor(r.groupName),
+          tagIds: defaultTagIdsFor(tags, r.groupName, r.categoryName),
+          source: 'seed',
+          createdAt: Date.now(),
+        }
       })
-      await commitInChunks(docs.map((d) => (batch) => batch.set(doc(db, 'categorizationRules', d.id), d)))
-      const loaded = docs.map(({ id: _id, createdAt: _c, source: _s, ...r }) => r)
-      const fills = batchRows.map((r) => [r, ruleFillFor(r, loaded)]).filter(([, p]) => p)
-      await commitInChunks(fills.map(([r, p]) => (batch) => batch.set(doc(db, 'stagedRows', r.id), p, { merge: true })))
+      // Rules that already exist are left alone — Markus may have edited them (Regeln tab).
+      const fresh = docs.filter((d) => !known.has(d.id))
+      await commitInChunks(fresh.map((d) => (batch) => batch.set(doc(db, 'categorizationRules', d.id), d)))
       setMessage({
         ok: true,
         text:
-          `${docs.length} Regeln aus ${lineCount} Datenzeilen geladen (ohne Keyword übersprungen, doppelte Keywords nur einmal)` +
-          (openBatch ? `; ${fills.length} Zeilen des offenen Imports ergänzt. ` : '. ') +
+          `${docs.length} Regeln aus ${lineCount} Datenzeilen gelesen (ohne Keyword übersprungen, doppelte Keywords nur einmal): ` +
+          `${fresh.length} neu gespeichert, ${docs.length - fresh.length} existierten schon und blieben unverändert. ` +
           (unresolved.length
-            ? `${unresolved.length} ohne passende Kategorie (nur Empfänger wird gesetzt): ${unresolved.slice(0, 12).join('; ')}${unresolved.length > 12 ? ' …' : ''}`
+            ? `${unresolved.length} ohne passende Kategorie: ${unresolved.slice(0, 12).join('; ')}${unresolved.length > 12 ? ' …' : ''}`
             : 'Alle Kategorien gefunden.'),
       })
     } catch (e) {
@@ -175,7 +188,10 @@ export default function ImportStaging() {
   const patchRow = (row, patch) => {
     const next = { ...row, ...patch }
     next.edited = next.date !== next.originalDate || next.amountCents !== next.originalAmountCents
-    return setDoc(doc(db, 'stagedRows', row.id), { ...patch, edited: next.edited }, { merge: true })
+    const manual = {}
+    if ('displayLabel' in patch) manual.displayLabel = true
+    if ('categoryId' in patch) manual.categoryId = true
+    return setDoc(doc(db, 'stagedRows', row.id), { ...patch, ...(Object.keys(manual).length ? { manual } : {}), edited: next.edited }, { merge: true })
   }
 
   // --- grid ---------------------------------------------------------------------
@@ -255,10 +271,9 @@ export default function ImportStaging() {
       {
         colId: 'konto',
         headerName: 'Konto',
-        width: 200,
+        width: 240,
         valueGetter: (p) => {
-          const rule = matchRule(rules, p.data.rawDescription)
-          const { fromAccountId, toAccountId } = accountPair(openBatch.accountId, p.data.amountCents, counterAccountFor(rule?.groupName))
+          const { fromAccountId, toAccountId } = accountPair(openBatch.accountId, p.data.amountCents, effectiveRow(p.data, rules).counterAccountId)
           const n = (id) => accountName[id] ?? id
           return fromAccountId && toAccountId ? `${n(fromAccountId)} → ${n(toAccountId)}` : n(fromAccountId ?? toAccountId)
         },
@@ -269,9 +284,9 @@ export default function ImportStaging() {
         flex: 1,
         minWidth: 150,
         editable: true,
-        valueGetter: (p) => p.data.displayLabel,
+        valueGetter: (p) => effectiveRow(p.data, rules).displayLabel,
         // Not matched by any keyword rule: blue (Oct 2026, Markus) — still the plain bank text.
-        cellClass: (p) => (matchRule(rules, p.data.rawDescription) ? undefined : 'text-[var(--color-computed)]'),
+        cellClass: (p) => (p.data.manual?.displayLabel || matchRule(rules, p.data.rawDescription) ? undefined : 'text-[var(--color-computed)]'),
         valueSetter: (p) => {
           patchRow(p.data, { displayLabel: String(p.newValue ?? '').trim() })
           return false
@@ -282,7 +297,7 @@ export default function ImportStaging() {
         headerName: 'Kategorie',
         width: 140,
         valueGetter: (p) => {
-          const c = categoryById[p.data.categoryId]
+          const c = categoryById[effectiveRow(p.data, rules).categoryId]
           return c ? (categoryById[c.parentCategoryId]?.name ?? '') : ''
         },
       },
@@ -292,21 +307,34 @@ export default function ImportStaging() {
         flex: 1,
         minWidth: 200,
         editable: true,
-        valueGetter: (p) => categoryById[p.data.categoryId]?.name ?? '—',
+        valueGetter: (p) => categoryById[effectiveRow(p.data, rules).categoryId]?.name ?? '—',
         valueSetter: () => false,
         cellEditor: CategoryEditor,
         cellEditorParams: (p) => ({
           categories,
-          initialCategoryId: p.data.categoryId,
+          initialCategoryId: effectiveRow(p.data, rules).categoryId,
           onApply: (_d, categoryId) => patchRow(p.data, { categoryId }),
           onClear: () => patchRow(p.data, { categoryId: null }),
           startField: 'group',
         }),
         cellEditorPopup: true,
       },
+      {
+        colId: 'tags',
+        headerName: 'Tags (aus der Regel)',
+        flex: 0.8,
+        minWidth: 150,
+        valueGetter: (p) => effectiveRow(p.data, rules).tagIds.map((id) => qualifiedTagName(tagById[id], tagById) || id).join(', '),
+        cellRenderer: (p) =>
+          effectiveRow(p.data, rules).tagIds.map((id) => (
+            <TagPill key={id} tag={tagById[id]} className="mr-1">
+              {qualifiedTagName(tagById[id] ?? { id, name: id }, tagById) || id}
+            </TagPill>
+          )),
+      },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps -- callbacks read rules/accounts each render; patchRow only needs db
-    [categories, categoryById, rules, openBatch, accountName],
+    [categories, categoryById, rules, openBatch, accountName, tagById],
   )
 
   const fileInput = (accept, onFile, label) => (
@@ -345,7 +373,7 @@ export default function ImportStaging() {
           {fileInput('.csv', loadRules, rules.length ? 'Regeln neu laden (CSV)' : 'Regeln laden (CSV)')}
           <span className="text-sm text-[var(--color-text-muted)]">
             {rules.length} Regeln gespeichert — das Laden ist nur einmal nötig, sie bleiben in der Datenbank
-            (neu laden nur, wenn sich die Liste ändert; gleiche Keywords werden überschrieben).
+            (neu laden nur, wenn die Liste neue Keywords hat — vorhandene Regeln bleiben unverändert; bearbeiten im Tab „Regeln“).
           </span>
         </div>
       </div>

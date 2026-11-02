@@ -2286,3 +2286,7 @@ Markus: Empfänger not matched by a rule → blue; columns in two groups (input:
 ## Session 37, continued a hundred-and-forty-fifth time — 2026-11-02 — Import staging: simpler hit share, no apply button, keyword highlight
 
 Markus: top bar counts only rule hits ("Regeltreffer x %"); "Regeln anwenden" button removed (rules apply automatically); matched keyword highlighted light yellow in Bank-Text. Done; SPEC §3k updated.
+
+## Session 37, continued a hundred-and-forty-sixth time — 2026-11-02 — Rules editor; Gegenkonto and tags live in the rules
+
+Markus: edit the rules first so the right tags are in them before any import rule is hard-coded; tags from a rule visible (not editable) in staging; one Gegenkonto per rule; allocation tag in the rule; case-blind. **Built:** tab "Regeln" (`ImportRules.jsx`): editable table + search + "+ Neue Regel" + delete + Test field; rule fields `counterAccountId`, `tagIds` (SPEC §2.7b); a button proposes the allocation tag for existing Rücklagen rules. Staging now takes Konto, Tags (new read-only column), and — unless typed over (`manual`) — Empfänger/Kategorie live from the rule. CSV reload no longer overwrites existing rules (and reports 117 of 136 data lines → the 19 without keyword). Checked in a browser with the real files and a fake database (the Rules tab itself only built/linted, not clicked through). **Open:** the Außenstände rules need a claim tag — Markus to set in the editor; commit step comes next.
