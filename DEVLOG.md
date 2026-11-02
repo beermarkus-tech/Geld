@@ -2298,3 +2298,7 @@ Markus: rules sometimes have only a Kategorie. Regeln tab now has separate Kateg
 ## Session 37, continued a hundred-and-forty-eighth time — 2026-11-02 — Layout fixes, "Regeln anwenden" back
 
 Regeln tab: Gegenkonto moved between Empfänger and Kategorie, the "Liste:" hints removed, Empfänger wider and Tags narrower. Konten grid: Konto narrower, Empfänger wider. Staging: "Regeln anwenden" button back — resets Empfänger/Kategorie of rows with a rule hit to the rule's values, with a confirm if that overwrites typed changes (my reading of what it should do now that rows follow rules live; Markus to say if he meant something else).
+
+## Session 37, continued a hundred-and-forty-ninth time — 2026-11-02 — Regeln tab now looks like Konten
+
+The Regeln tab is now a grid like Konten (same look, columns Keyword | Empfänger | Gegenkonto | Kategorie | Unterkategorie | Tags | 🗑). Empty values show a plain dash "–" instead of "— keine (einseitig) —" / "— keine —". Keyword column is wider, Empfänger narrower. Bug found and fixed on the way: the grid showed dashes for Kategorie/Gegenkonto because its columns were built before categories/accounts finished loading; the grid now rebuilds once they have loaded. Checked in a browser harness with three sample rules (harness files removed again). Lint, tests, build green. Still open for Markus: see the previous entries (meaning of "Livret A Fa…", claim tag for Außenstände rules, 15 rules naming non-existent categories, origin of -22,30 / 287,30). **Next:** duplicate flags (step 2), then commit to Konten.
