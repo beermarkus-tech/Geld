@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { collection, doc, getDocs, writeBatch } from 'firebase/firestore'
 
 import { db } from './firebase'
+import { CHUNK_SIZE, COLLECTIONS, exportWarnings, planRestore, unknownCollections } from './lib/backup'
 
 // The basic safety net PLAN.md's Phase 1b calls for: "a rough, unpolished
 // raw JSON dump of every collection, plus a rough script that reads it
@@ -28,9 +29,6 @@ import { db } from './firebase'
 // has one. Deliberately doesn't delete anything not present in the backup
 // file (an upsert, not a wipe-and-replace) — restoring is for getting lost
 // data back, not for pruning what's already there.
-const COLLECTIONS = ['accounts', 'categories', 'tags', 'transactions', 'budgets', 'categoryYearSettings', 'settings', 'cellComments']
-const CHUNK_SIZE = 400 // Firestore's batch limit is 500 writes; leave headroom
-
 function downloadJson(filename, data) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
@@ -45,6 +43,7 @@ export default function BackupScreen() {
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState(null)
   const [exportCounts, setExportCounts] = useState(null)
+  const [exportWarn, setExportWarn] = useState([])
 
   const [file, setFile] = useState(null)
   const [parseError, setParseError] = useState(null)
@@ -57,6 +56,7 @@ export default function BackupScreen() {
     setExporting(true)
     setExportError(null)
     setExportCounts(null)
+    setExportWarn([])
     try {
       const data = {}
       const counts = {}
@@ -68,6 +68,7 @@ export default function BackupScreen() {
       const date = new Date().toISOString().slice(0, 10)
       downloadJson(`geld-sicherung-${date}.json`, data)
       setExportCounts(counts)
+      setExportWarn(exportWarnings(counts))
     } catch (err) {
       setExportError(err.message)
     } finally {
@@ -100,10 +101,10 @@ export default function BackupScreen() {
     setDone(false)
     setProgress({})
     try {
+      const plan = planRestore(file.data)
       for (const name of COLLECTIONS) {
-        const docs = file.data[name]
-        if (!Array.isArray(docs) || docs.length === 0) continue
-        const usable = docs.filter((d) => d && typeof d.id === 'string')
+        const usable = plan[name]
+        if (!usable) continue
         setProgress((prev) => ({ ...prev, [name]: { done: 0, total: usable.length } }))
         for (let i = 0; i < usable.length; i += CHUNK_SIZE) {
           const slice = usable.slice(i, i + CHUNK_SIZE)
@@ -126,7 +127,7 @@ export default function BackupScreen() {
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">Sicherung herunterladen</h2>
         <p className="text-sm text-[var(--color-text-muted)]">
-          Lädt alle deine Daten (Konten, Kategorien, Tags, Buchungen, Budgets) als eine einzelne Datei herunter — für
+          Lädt alle deine Daten (Konten, Kategorien, Tags, Buchungen, Budgets, Einstellungen, Kommentare, Import-Regeln und den offenen Bank-Import) als eine einzelne Datei herunter — für
           den Fall, dass mal etwas schiefgeht und du zu einem früheren Stand zurückwillst. Kein Ersatz für die
           eingebaute 7-Tage-Wiederherstellung von Firestore selbst, sondern ein zusätzliches Sicherheitsnetz.
         </p>
@@ -139,6 +140,11 @@ export default function BackupScreen() {
           {exporting ? 'Lädt herunter…' : 'Sicherung herunterladen'}
         </button>
         {exportError && <p className="text-sm text-[var(--color-alert)]">Fehler: {exportError}</p>}
+        {exportWarn.map((w) => (
+          <p key={w} className="text-sm font-medium text-[var(--color-alert)]">
+            ⚠ {w}
+          </p>
+        ))}
         {exportCounts && !exportError && (
           <ul className="text-sm text-[var(--color-text-muted)]">
             {COLLECTIONS.map((c) => (
@@ -164,6 +170,11 @@ export default function BackupScreen() {
           className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-2 text-sm"
         />
         {parseError && <p className="text-sm text-[var(--color-alert)]">{parseError}</p>}
+        {file && !parseError && unknownCollections(file.data).length > 0 && (
+          <p className="text-sm text-[var(--color-alert)]">
+            Diese Sammlungen in der Datei kennt die App nicht und lässt sie aus: {unknownCollections(file.data).join(', ')}
+          </p>
+        )}
         {file && !parseError && (
           <p className="text-sm text-[var(--color-text-muted)]">
             {file.name}:{' '}

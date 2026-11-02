@@ -2330,3 +2330,7 @@ Markus: remove the reload button completely (reloading would bring back deleted 
 ## Session 37, continued a hundred-and-fifty-sixth time — 2026-11-02 — "Regeln anwenden" removed again
 
 Markus: the button is not needed – rules apply live (`effectiveRow`). Removed from the staging top bar together with `applyRules`. A field typed over in a row stays typed over (no way back to the rule value except retyping); say if a reset is ever wanted.
+
+## Session 37, continued a hundred-and-fifty-seventh time — 2026-11-02 — Sicherung now complete
+
+Review of "Sicherung herunterladen" found it missed `categorizationRules` (the keyword rules – no CSV reload exists any more), `importBatches` and `stagedRows`. Now all 11 collections are exported and restored; the list lives in `src/lib/backup.js`. New safety nets: `backup.test.js` scans the source for every collection the app uses and fails if one is not in the list; export warns if accounts/categories/transactions come back empty; restore tells about collections in the file this app doesn't know; hint text corrected; round-trip tests for the restore plan (documents keep their ids, id-less ones skipped). Restore is still an upsert (deletes nothing). **Not yet tried:** a real download + restore against the live database – Markus may want to do one download now and keep the file.
