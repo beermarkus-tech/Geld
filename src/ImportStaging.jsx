@@ -171,23 +171,6 @@ export default function ImportStaging({ active = true }) {
     setBusy(false)
   }
 
-  // Puts the rules' Empfänger/Kategorie back into every row (also rows Markus typed over —
-  // he is asked first). Rows without a rule hit stay as they are.
-  async function applyRules() {
-    const hit = batchRows.filter((r) => matchRule(rules, r.rawDescription))
-    const overridden = hit.filter((r) => r.manual?.displayLabel || r.manual?.categoryId || r.manual?.detail)
-    if (overridden.length && !window.confirm(`${overridden.length} Zeilen haben eigene Änderungen an Empfänger/Kategorie. Mit den Regeln überschreiben?`)) return
-    setBusy(true)
-    await commitInChunks(
-      hit.map((r) => {
-        const e = effectiveRow({ ...r, manual: null }, rules)
-        return (batch) => batch.set(doc(db, 'stagedRows', r.id), { displayLabel: e.displayLabel, categoryId: e.categoryId, detail: e.detail, manual: { displayLabel: false, categoryId: false, detail: false } }, { merge: true })
-      }),
-    )
-    setMessage({ ok: true, text: `Regeln auf ${hit.length} Zeilen angewendet.` })
-    setBusy(false)
-  }
-
   async function discard() {
     if (!openBatch || !window.confirm('Diesen Import verwerfen? Alle Zeilen hier gehen verloren (Konten bleibt unberührt).')) return
     setBusy(true)
@@ -425,10 +408,7 @@ export default function ImportStaging({ active = true }) {
                 Regeltreffer <b>{share.empfaengerPct} %</b> ({share.empfaenger}/{share.total})
               </span>
             )}
-            <button type="button" onClick={applyRules} disabled={busy} className="ml-auto rounded-md border border-[var(--color-border)] px-3 py-1">
-              Regeln anwenden
-            </button>
-            <button type="button" onClick={discard} disabled={busy} className="rounded-md border border-[var(--color-border)] px-3 py-1">
+            <button type="button" onClick={discard} disabled={busy} className="ml-auto rounded-md border border-[var(--color-border)] px-3 py-1">
               Verwerfen
             </button>
           </div>

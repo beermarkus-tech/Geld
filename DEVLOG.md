@@ -2326,3 +2326,7 @@ Markus: staging column header "Tags (aus der Regel)" is now just "Tags". Behavio
 ## Session 37, continued a hundred-and-fifty-fifth time — 2026-11-02 — "Regeln (neu) laden (CSV)" removed
 
 Markus: remove the reload button completely (reloading would bring back deleted rules and re-add renamed keywords). The CSV loader (`loadRules`) and its note are gone from the Bank-Import tab; rules are now maintained only in the Regeln tab. `parseKeywordCsv` stays in `lib/bankImport.js` (tested) in case a one-off bulk load is ever needed again. With no rules at all the hint now points to the Regeln tab.
+
+## Session 37, continued a hundred-and-fifty-sixth time — 2026-11-02 — "Regeln anwenden" removed again
+
+Markus: the button is not needed – rules apply live (`effectiveRow`). Removed from the staging top bar together with `applyRules`. A field typed over in a row stays typed over (no way back to the rule value except retyping); say if a reset is ever wanted.
