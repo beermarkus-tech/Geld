@@ -51,6 +51,8 @@ export default function ImportRules() {
     await batch.commit()
   }
 
+  // The rule's Kategorie: the group of its Unterkategorie, else the group named in the list.
+  const groupOf = (r) => (r.categoryId ? groups.find((g) => g.id === categoryById[r.categoryId]?.parentCategoryId) : groups.find((g) => g.name === r.groupName)) ?? null
   const input = 'w-full rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-sm'
   const catName = (id) => (categoryById[id] ? `${categoryById[categoryById[id].parentCategoryId]?.name ?? ''} › ${categoryById[id].name}` : '')
 
@@ -89,10 +91,10 @@ export default function ImportRules() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto rounded-md border border-[var(--color-border)]">
-        <table className="w-full min-w-[980px] text-sm">
+        <table className="w-full min-w-[1100px] text-sm">
           <thead className="sticky top-0 bg-[var(--color-surface)] text-left">
             <tr>
-              {['Keyword', 'Empfänger', 'Kategorie', 'Gegenkonto', 'Tags', ''].map((h) => (
+              {['Keyword', 'Empfänger', 'Kategorie', 'Unterkategorie', 'Gegenkonto', 'Tags', ''].map((h) => (
                 <th key={h} className="px-2 py-2 font-medium">
                   {h}
                 </th>
@@ -108,23 +110,47 @@ export default function ImportRules() {
                 <td className="w-56 p-1">
                   <input className={input} defaultValue={r.label} onBlur={(e) => e.target.value.trim() !== r.label && patch(r, { label: e.target.value.trim() })} />
                 </td>
-                <td className="w-64 p-1">
-                  <select className={input} value={r.categoryId ?? ''} onChange={(e) => patch(r, { categoryId: e.target.value || null })}>
+                <td className="w-44 p-1">
+                  <select
+                    className={input}
+                    value={groupOf(r)?.id ?? ''}
+                    onChange={(e) => {
+                      const g = groups.find((x) => x.id === e.target.value)
+                      patch(r, { groupName: g?.name ?? '', categoryName: '', categoryId: null })
+                    }}
+                  >
                     <option value="">— keine —</option>
                     {groups.map((g) => (
-                      <optgroup key={g.id} label={g.name}>
-                        {categories
-                          .filter((c) => c.parentCategoryId === g.id && c.name !== 'Erstattungen')
-                          .map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                      </optgroup>
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
                     ))}
                   </select>
+                  {!groupOf(r) && r.groupName && (
+                    <div className="px-1 text-xs text-[var(--color-text-muted)]">Liste: {r.groupName}</div>
+                  )}
+                </td>
+                <td className="w-52 p-1">
+                  <select
+                    className={input}
+                    value={r.categoryId ?? ''}
+                    disabled={!groupOf(r)}
+                    onChange={(e) => {
+                      const c = categoryById[e.target.value]
+                      patch(r, { categoryId: c?.id ?? null, categoryName: c?.name ?? '' })
+                    }}
+                  >
+                    <option value="">— keine —</option>
+                    {categories
+                      .filter((c) => c.parentCategoryId === groupOf(r)?.id && c.name !== 'Erstattungen')
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                  </select>
                   {!r.categoryId && r.categoryName && (
-                    <div className="px-1 text-xs text-[var(--color-text-muted)]">Liste: {r.groupName} › {r.categoryName}</div>
+                    <div className="px-1 text-xs text-[var(--color-text-muted)]">Liste: {r.categoryName}</div>
                   )}
                 </td>
                 <td className="w-48 p-1">

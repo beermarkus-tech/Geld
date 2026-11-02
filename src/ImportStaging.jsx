@@ -297,8 +297,12 @@ export default function ImportStaging() {
         headerName: 'Kategorie',
         width: 140,
         valueGetter: (p) => {
-          const c = categoryById[effectiveRow(p.data, rules).categoryId]
-          return c ? (categoryById[c.parentCategoryId]?.name ?? '') : ''
+          const e = effectiveRow(p.data, rules)
+          const c = categoryById[e.categoryId]
+          if (c) return categoryById[c.parentCategoryId]?.name ?? ''
+          // A rule with only a Kategorie (no Unterkategorie): show the Kategorie anyway.
+          const g = p.data.manual?.categoryId ? null : e.rule?.groupName
+          return g && categories.some((x) => !x.parentCategoryId && x.name === g) ? g : ''
         },
       },
       {
