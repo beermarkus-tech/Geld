@@ -389,7 +389,7 @@ export default function ImportStaging({ active = true }) {
       },
       {
         colId: 'tags',
-        headerName: 'Tags (aus der Regel)',
+        headerName: 'Tags',
         flex: 0.8,
         minWidth: 150,
         valueGetter: (p) => effectiveRow(p.data, rules).tagIds.map((id) => qualifiedTagName(tagById[id], tagById) || id).join(', '),

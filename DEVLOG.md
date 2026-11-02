@@ -2318,3 +2318,7 @@ Staging: empty Kategorie shows "—" like Unterkategorie. The full-text window (
 ## Session 37, continued a hundred-and-fifty-third time — 2026-11-02 — Details column in Regeln and staging
 
 Markus: Details must be auto-assigned too and later carried into Konten. New rule field `detail` (free text, Regeln column "Details" before Tags, searchable); staged rows show it as editable column "Details" before Tags, taken live from the rule unless typed over (`manual.detail`; "Regeln anwenden" resets it, a typed-over Details also makes the row non-grey). Committing it into the booking's `detail` field (Konten "Details") belongs to build step 3, not yet built. Test added; lint/tests/build green, not click-tested.
+
+## Session 37, continued a hundred-and-fifty-fourth time — 2026-11-02 — Staging header "Tags"
+
+Markus: staging column header "Tags (aus der Regel)" is now just "Tags". Behaviour unchanged (still read-only, from the rule).
