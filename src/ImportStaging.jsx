@@ -222,13 +222,13 @@ export default function ImportStaging({ active = true }) {
   // he is asked first). Rows without a rule hit stay as they are.
   async function applyRules() {
     const hit = batchRows.filter((r) => matchRule(rules, r.rawDescription))
-    const overridden = hit.filter((r) => r.manual?.displayLabel || r.manual?.categoryId)
+    const overridden = hit.filter((r) => r.manual?.displayLabel || r.manual?.categoryId || r.manual?.detail)
     if (overridden.length && !window.confirm(`${overridden.length} Zeilen haben eigene Änderungen an Empfänger/Kategorie. Mit den Regeln überschreiben?`)) return
     setBusy(true)
     await commitInChunks(
       hit.map((r) => {
         const e = effectiveRow({ ...r, manual: null }, rules)
-        return (batch) => batch.set(doc(db, 'stagedRows', r.id), { displayLabel: e.displayLabel, categoryId: e.categoryId, manual: { displayLabel: false, categoryId: false } }, { merge: true })
+        return (batch) => batch.set(doc(db, 'stagedRows', r.id), { displayLabel: e.displayLabel, categoryId: e.categoryId, detail: e.detail, manual: { displayLabel: false, categoryId: false, detail: false } }, { merge: true })
       }),
     )
     setMessage({ ok: true, text: `Regeln auf ${hit.length} Zeilen angewendet.` })
@@ -250,13 +250,14 @@ export default function ImportStaging({ active = true }) {
     const manual = {}
     if ('displayLabel' in patch) manual.displayLabel = true
     if ('categoryId' in patch) manual.categoryId = true
+    if ('detail' in patch) manual.detail = true
     return setDoc(doc(db, 'stagedRows', row.id), { ...patch, ...(Object.keys(manual).length ? { manual } : {}), edited: next.edited }, { merge: true })
   }
 
   // --- grid ---------------------------------------------------------------------
   // A row whose details come from a keyword rule (nothing typed over): grey text (Nov 2026, Markus).
   const GREY = 'text-[var(--color-text-muted)]'
-  const isAuto = (row) => Boolean(matchRule(rules, row.rawDescription)) && !row.manual?.displayLabel && !row.manual?.categoryId
+  const isAuto = (row) => Boolean(matchRule(rules, row.rawDescription)) && !row.manual?.displayLabel && !row.manual?.categoryId && !row.manual?.detail
   const grey = (p) => (isAuto(p.data) ? GREY : '')
 
   const columnDefs = useMemo(
@@ -373,6 +374,18 @@ export default function ImportStaging({ active = true }) {
           startField: 'group',
         }),
         cellEditorPopup: true,
+      },
+      {
+        colId: 'detail',
+        headerName: 'Details',
+        flex: 1,
+        minWidth: 150,
+        editable: true,
+        valueGetter: (p) => effectiveRow(p.data, rules).detail,
+        valueSetter: (p) => {
+          patchRow(p.data, { detail: String(p.newValue ?? '').trim() })
+          return false
+        },
       },
       {
         colId: 'tags',

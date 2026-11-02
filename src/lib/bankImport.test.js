@@ -166,6 +166,12 @@ describe('rule share and effective rows', () => {
     })
     expect(effectiveRow({ rawDescription: 'ROSTOCK 1' }, rules)).toMatchObject({ displayLabel: 'ROSTOCK 1', categoryId: null, rule: null })
   })
+  it('Details come from the rule unless typed over', () => {
+    const rs = [{ keyword: 'LIDL', label: 'Lidl', detail: 'Wocheneinkauf' }]
+    expect(effectiveRow({ rawDescription: 'LIDL 1' }, rs).detail).toBe('Wocheneinkauf')
+    expect(effectiveRow({ rawDescription: 'LIDL 1', detail: 'Party', manual: { detail: true } }, rs).detail).toBe('Party')
+    expect(effectiveRow({ rawDescription: 'XYZ' }, rs).detail).toBe('')
+  })
   it('old rules get the Gruppe account, new fields win', () => {
     expect(effectiveRule({ groupName: 'Rücklagen' })).toMatchObject({ counterAccountId: 'livret-a-sparen', tagIds: [] })
     expect(effectiveRule({ groupName: 'Rücklagen', counterAccountId: null, tagIds: ['t'] })).toMatchObject({ counterAccountId: null, tagIds: ['t'] })

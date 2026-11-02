@@ -242,6 +242,7 @@ export function effectiveRule(rule) {
     ...rule,
     counterAccountId: rule.counterAccountId !== undefined ? rule.counterAccountId : counterAccountFor(rule.groupName),
     tagIds: rule.tagIds ?? [],
+    detail: rule.detail ?? '',
   }
 }
 
@@ -267,6 +268,7 @@ export function effectiveRow(row, rules) {
     displayLabel: manual.displayLabel ? row.displayLabel : (r?.label || fallbackLabel(row.rawDescription)),
     categoryId: manual.categoryId ? row.categoryId : (r?.categoryId ?? null),
     counterAccountId: r?.counterAccountId ?? null,
+    detail: manual.detail ? (row.detail ?? '') : (r?.detail ?? ''),
     tagIds: r?.tagIds ?? [],
   }
 }

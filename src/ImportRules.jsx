@@ -119,7 +119,7 @@ export default function ImportRules({ active = true }) {
   }, [rules])
   const shown = useMemo(() => {
     const q = filter.trim().toLowerCase()
-    return eff.filter((r) => !q || [r.keyword, r.label, r.groupName, r.categoryName].some((v) => (v ?? '').toLowerCase().includes(q)))
+    return eff.filter((r) => !q || [r.keyword, r.label, r.detail, r.groupName, r.categoryName].some((v) => (v ?? '').toLowerCase().includes(q)))
   }, [eff, filter])
   const hit = testText.trim() ? matchRule(eff, testText) : null
   const patch = (r, p) => setDoc(doc(db, 'categorizationRules', r.id), p, { merge: true })
@@ -229,6 +229,18 @@ export default function ImportRules({ active = true }) {
         cellClass: (p) => (p.value === NONE ? 'text-[var(--color-text-muted)]' : undefined),
       },
       {
+        colId: 'detail',
+        headerName: 'Details',
+        flex: 1,
+        minWidth: 160,
+        editable: true,
+        valueGetter: (p) => p.data.detail,
+        valueSetter: (p) => {
+          patch(p.data, { detail: String(p.newValue ?? '').trim() })
+          return false
+        },
+      },
+      {
         colId: 'tags',
         headerName: 'Tags',
         width: 230,
@@ -294,7 +306,7 @@ export default function ImportRules({ active = true }) {
           className="rounded-md bg-[var(--color-computed)] px-3 py-1.5 text-sm font-medium text-white"
           onClick={() => {
             const id = `rule-new-${Date.now()}`
-            setDoc(doc(db, 'categorizationRules', id), { id, keyword: '', label: '', groupName: '', categoryName: '', categoryId: null, counterAccountId: null, tagIds: [], source: 'user-confirmed', createdAt: Date.now() })
+            setDoc(doc(db, 'categorizationRules', id), { id, keyword: '', label: '', groupName: '', categoryName: '', categoryId: null, counterAccountId: null, tagIds: [], detail: '', source: 'user-confirmed', createdAt: Date.now() })
           }}
         >
           + Neue Regel
