@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  accountPair,
   buildStagedRows,
+  counterAccountFor,
   fallbackLabel,
   importTotals,
   matchShare,
@@ -167,5 +169,17 @@ describe('csv separators', () => {
     const r = parseKeywordCsv('Keyword;Empfänger;Gruppe;Kategorie\r\nLIDL;Lidl;Lebenshaltung;X\r\nDR;Dr. "Z";A;B\r\n')
     expect(r.map((x) => x.keyword)).toEqual(['LIDL', 'DR'])
     expect(r[1].label).toBe('Dr. "Z"')
+  })
+})
+
+describe('account pair', () => {
+  it('maps Gruppe to a counter account and builds the direction from the sign', () => {
+    expect(counterAccountFor('Rücklagen')).toBe('livret-a-sparen')
+    expect(counterAccountFor('Außenstände')).toBe('aussenstaende')
+    expect(counterAccountFor('Wohnen')).toBeNull()
+    expect(accountPair('bnp', -17000, 'livret-a-sparen')).toEqual({ fromAccountId: 'bnp', toAccountId: 'livret-a-sparen' })
+    expect(accountPair('bnp', 5000, 'aussenstaende')).toEqual({ fromAccountId: 'aussenstaende', toAccountId: 'bnp' })
+    expect(accountPair('bnp', -500, null)).toEqual({ fromAccountId: 'bnp', toAccountId: null })
+    expect(accountPair('bnp', 500, null)).toEqual({ fromAccountId: null, toAccountId: 'bnp' })
   })
 })

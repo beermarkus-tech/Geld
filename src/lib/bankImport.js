@@ -226,3 +226,23 @@ export function matchShare(rows, rules) {
   const pct = (n) => (rows.length ? Math.round((n / rows.length) * 100) : 0)
   return { empfaenger, kategorie, total: rows.length, empfaengerPct: pct(empfaenger), kategoriePct: pct(kategorie) }
 }
+
+/** The other account of a booking, from the rule's Gruppe (Oct 2026, Markus: a keyword
+ *  like STEUERN must produce the pair BNP -> Livret A): Rücklagen lines are transfers
+ *  into the savings account, Außenstände lines go to/from the claims account. */
+export function counterAccountFor(groupName) {
+  if (groupName === 'Rücklagen') return 'livret-a-sparen'
+  if (groupName === 'Außenstände') return 'aussenstaende'
+  return null
+}
+
+/** { fromAccountId, toAccountId } of a staged row on `accountId`: money out of the bank
+ *  account goes from it to the counter account, money in comes from the counter account.
+ *  Without a counter account the booking is single-sided. */
+export function accountPair(accountId, amountCents, counterAccountId) {
+  const out = amountCents < 0
+  if (!counterAccountId) return out ? { fromAccountId: accountId, toAccountId: null } : { fromAccountId: null, toAccountId: accountId }
+  return out
+    ? { fromAccountId: accountId, toAccountId: counterAccountId }
+    : { fromAccountId: counterAccountId, toAccountId: accountId }
+}

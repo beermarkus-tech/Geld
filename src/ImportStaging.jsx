@@ -7,7 +7,10 @@ import CategoryEditor from './CategoryEditor'
 import { db } from './firebase'
 import {
   buildStagedRows,
+  accountPair,
+  counterAccountFor,
   importTotals,
+  matchRule,
   matchShare,
   parseBnpRows,
   parseKeywordCsv,
@@ -51,6 +54,7 @@ export default function ImportStaging() {
   const [rules, setRules] = useState([])
   const [batches, setBatches] = useState([])
   const [rows, setRows] = useState([])
+  const [accounts, setAccounts] = useState([])
   const [message, setMessage] = useState(null)
   const [busy, setBusy] = useState(false)
   const gridRef = useRef(null)
@@ -58,6 +62,7 @@ export default function ImportStaging() {
   useEffect(() => {
     const subs = [
       ['categories', setCategories],
+      ['accounts', setAccounts],
       ['transactions', setTransactions],
       ['categorizationRules', setRules],
       ['importBatches', setBatches],
@@ -71,6 +76,7 @@ export default function ImportStaging() {
     () => rows.filter((r) => r.batchId === openBatch?.id).sort((a, b) => a.idx - b.idx),
     [rows, openBatch],
   )
+  const accountName = useMemo(() => Object.fromEntries(accounts.map((a) => [a.id, a.name])), [accounts])
   const categoryById = useMemo(() => Object.fromEntries(categories.map((c) => [c.id, c])), [categories])
   const liveTxs = useMemo(() => transactions.filter((t) => !t.deletedAt), [transactions])
 
@@ -196,23 +202,16 @@ export default function ImportStaging() {
           />
         ),
       },
-      {
-        colId: 'date',
-        headerName: 'Datum',
-        width: 110,
-        editable: true,
-        valueGetter: (p) => fmtDate(p.data.date),
-        valueSetter: (p) => {
-          const iso = parseTypedDate(p.newValue, p.data.bankDate)
-          if (!iso) return false
-          patchRow(p.data, { date: iso })
-          return false
-        },
-        tooltipValueGetter: (p) =>
-          p.data.date !== p.data.originalDate ? `Datei: ${fmtDate(p.data.originalDate)}` : undefined,
-        cellClass: (p) => (p.data.date !== p.data.originalDate ? 'font-semibold' : undefined),
-      },
       { colId: 'bankDate', headerName: 'Bankdatum', width: 110, valueGetter: (p) => fmtDate(p.data.bankDate) },
+      {
+        colId: 'raw',
+        headerName: 'Bank-Text',
+        flex: 1.2,
+        minWidth: 200,
+        valueGetter: (p) => p.data.rawDescription,
+        tooltipValueGetter: (p) => p.data.rawDescription,
+        cellClass: 'text-[var(--color-text-muted)]',
+      },
       {
         colId: 'amount',
         headerName: 'Betrag',
@@ -230,13 +229,32 @@ export default function ImportStaging() {
         cellClass: (p) => 'text-right tabular-figure' + (p.data.amountCents !== p.data.originalAmountCents ? ' font-semibold' : ''),
       },
       {
-        colId: 'raw',
-        headerName: 'Bank-Text',
-        flex: 1.4,
-        minWidth: 180,
-        valueGetter: (p) => p.data.rawDescription,
-        tooltipValueGetter: (p) => p.data.rawDescription,
-        cellClass: 'text-[var(--color-text-muted)]',
+        colId: 'date',
+        headerName: 'Datum',
+        width: 110,
+        editable: true,
+        valueGetter: (p) => fmtDate(p.data.date),
+        valueSetter: (p) => {
+          const iso = parseTypedDate(p.newValue, p.data.bankDate)
+          if (!iso) return false
+          patchRow(p.data, { date: iso })
+          return false
+        },
+        tooltipValueGetter: (p) =>
+          p.data.date !== p.data.originalDate ? `Datei: ${fmtDate(p.data.originalDate)}` : undefined,
+        cellClass: (p) => (p.data.date !== p.data.originalDate ? 'font-semibold' : undefined),
+      },
+      {
+        colId: 'konto',
+        headerName: 'Konto',
+        flex: 1,
+        minWidth: 190,
+        valueGetter: (p) => {
+          const rule = matchRule(rules, p.data.rawDescription)
+          const { fromAccountId, toAccountId } = accountPair(openBatch.accountId, p.data.amountCents, counterAccountFor(rule?.groupName))
+          const n = (id) => accountName[id] ?? id
+          return fromAccountId && toAccountId ? `${n(fromAccountId)} → ${n(toAccountId)}` : n(fromAccountId ?? toAccountId)
+        },
       },
       {
         colId: 'label',
@@ -245,6 +263,8 @@ export default function ImportStaging() {
         minWidth: 150,
         editable: true,
         valueGetter: (p) => p.data.displayLabel,
+        // Not matched by any keyword rule: blue (Oct 2026, Markus) — still the plain bank text.
+        cellClass: (p) => (matchRule(rules, p.data.rawDescription) ? undefined : 'text-[var(--color-computed)]'),
         valueSetter: (p) => {
           patchRow(p.data, { displayLabel: String(p.newValue ?? '').trim() })
           return false
@@ -276,21 +296,9 @@ export default function ImportStaging() {
         }),
         cellEditorPopup: true,
       },
-      {
-        colId: 'detail',
-        headerName: 'Details',
-        flex: 0.8,
-        minWidth: 120,
-        editable: true,
-        valueGetter: (p) => p.data.detail,
-        valueSetter: (p) => {
-          patchRow(p.data, { detail: String(p.newValue ?? '') })
-          return false
-        },
-      },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- callbacks read categories each render; patchRow only needs db
-    [categories, categoryById],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- callbacks read rules/accounts each render; patchRow only needs db
+    [categories, categoryById, rules, openBatch, accountName],
   )
 
   const fileInput = (accept, onFile, label) => (
