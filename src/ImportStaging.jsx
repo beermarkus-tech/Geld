@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { collection, doc, onSnapshot, setDoc, writeBatch } from 'firebase/firestore'
 import { AgGridReact } from 'ag-grid-react'
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community'
@@ -51,6 +51,21 @@ function parseEuro(s) {
   const f = Number(cleaned)
   return Number.isNaN(f) ? null : Math.round(f * 100)
 }
+
+// Read-only popup with the complete bank text, wrapped; Esc, click outside or the button closes it.
+const FullTextPopup = forwardRef(function FullTextPopup({ data, api }, ref) {
+  useImperativeHandle(ref, () => ({ getValue: () => data.rawDescription, isCancelBeforeStart: () => false }))
+  return (
+    <div className="flex max-w-[480px] flex-col gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-sm shadow-lg" style={{ minWidth: 280 }}>
+      <div className="whitespace-pre-wrap break-words select-text">{data.rawDescription}</div>
+      <div className="flex justify-end">
+        <button type="button" onClick={() => api.stopEditing(true)} className="rounded px-2 py-1 text-xs text-[var(--color-text-muted)]">
+          Schließen
+        </button>
+      </div>
+    </div>
+  )
+})
 
 export default function ImportStaging() {
   const { tags, tagById } = useTags()
@@ -252,6 +267,11 @@ export default function ImportStaging() {
           )
         },
         cellClass: 'text-[var(--color-text-muted)]',
+        // Click (or Enter) shows the whole text in a small read-only popup (Nov 2026, Markus).
+        editable: true,
+        valueSetter: () => false,
+        cellEditor: FullTextPopup,
+        cellEditorPopup: true,
       },
       {
         colId: 'amount',
@@ -448,6 +468,7 @@ export default function ImportStaging() {
               defaultColDef={{ suppressMovable: true, resizable: true }}
               getRowId={(p) => p.data.id}
               tooltipShowDelay={400}
+              onCellClicked={(p) => p.column.getColId() === 'raw' && p.api.startEditingCell({ rowIndex: p.rowIndex, colKey: 'raw' })}
               suppressRowHoverHighlight
               getRowStyle={(p) => (p.data.include ? undefined : { opacity: 0.5 })}
               onCellKeyDown={(p) => {

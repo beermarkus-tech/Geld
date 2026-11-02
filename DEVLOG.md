@@ -2306,3 +2306,7 @@ The Regeln tab is now a grid like Konten (same look, columns Keyword | Empfänge
 ## Session 37, continued a hundred-and-fiftieth time — 2026-11-02 — Regeln uses the same pickers as Konten
 
 Markus: use the same dropdowns/modals as Konten. Regeln columns Gegenkonto (Listbox popup like the Konto editor, one account), Kategorie and Unterkategorie (the shared `CategoryEditor`), Tags (the shared `TagEditor`, incl. creating a new tag) now open those exact popups with Übernehmen/Abbrechen, Enter chain, Esc, Entf clears the category. `CategoryEditor` got an optional `allowGroupOnly` flag so a rule may stop at the Kategorie (group-only rules stay possible). Not click-tested in a browser this round (test harness had been removed) – only lint/tests/build. **Next:** Markus to try it; then duplicate flags.
+
+## Session 37, continued a hundred-and-fifty-first time — 2026-11-02 — Full bank text on click
+
+Staging: clicking a Bank-Text cell opens a small read-only popup with the complete, wrapped text (Schließen / Esc / click outside closes); the hover tooltip stays. Lint/tests/build only, not click-tested in a browser.
