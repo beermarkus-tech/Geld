@@ -163,12 +163,6 @@ export default function ImportStaging() {
     setBusy(false)
   }
 
-  async function applyRules() {
-    const fills = batchRows.map((r) => [r, ruleFillFor(r, rules)]).filter(([, p]) => p)
-    await commitInChunks(fills.map(([r, p]) => (batch) => batch.set(doc(db, 'stagedRows', r.id), p, { merge: true })))
-    setMessage({ ok: true, text: `Regeln auf ${fills.length} noch unbearbeitete Zeilen angewendet.` })
-  }
-
   async function discard() {
     if (!openBatch || !window.confirm('Diesen Import verwerfen? Alle Zeilen hier gehen verloren (Konten bleibt unberührt).')) return
     setBusy(true)
@@ -210,6 +204,20 @@ export default function ImportStaging() {
         minWidth: 200,
         valueGetter: (p) => p.data.rawDescription,
         tooltipValueGetter: (p) => p.data.rawDescription,
+        // The matched keyword in light yellow (Oct 2026, Markus).
+        cellRenderer: (p) => {
+          const text = p.data.rawDescription
+          const kw = matchRule(rules, text)?.keyword
+          const at = kw ? text.toUpperCase().indexOf(kw.toUpperCase()) : -1
+          if (at < 0) return text
+          return (
+            <>
+              {text.slice(0, at)}
+              <mark style={{ background: 'var(--color-breakdown-tint)', color: 'inherit' }}>{text.slice(at, at + kw.length)}</mark>
+              {text.slice(at + kw.length)}
+            </>
+          )
+        },
         cellClass: 'text-[var(--color-text-muted)]',
       },
       {
@@ -372,14 +380,10 @@ export default function ImportStaging() {
             )}
             {share && (
               <span title="Anteil der Zeilen, deren Bank-Text ein Keyword aus den Regeln trifft">
-                Regeltreffer: Empfänger <b>{share.empfaengerPct} %</b> ({share.empfaenger}/{share.total}) · Kategorie{' '}
-                <b>{share.kategoriePct} %</b> ({share.kategorie}/{share.total})
+                Regeltreffer <b>{share.empfaengerPct} %</b> ({share.empfaenger}/{share.total})
               </span>
             )}
-            <button type="button" onClick={applyRules} disabled={busy} className="ml-auto rounded-md border border-[var(--color-border)] px-3 py-1">
-              Regeln anwenden
-            </button>
-            <button type="button" onClick={discard} disabled={busy} className="rounded-md border border-[var(--color-border)] px-3 py-1">
+            <button type="button" onClick={discard} disabled={busy} className="ml-auto rounded-md border border-[var(--color-border)] px-3 py-1">
               Verwerfen
             </button>
           </div>

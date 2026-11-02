@@ -2282,3 +2282,7 @@ Markus's first real try: (1) Status column and closed-month warning **removed** 
 ## Session 37, continued a hundred-and-forty-fourth time — 2026-11-02 — Import staging: column order, blue unmatched Empfänger, Konto pair
 
 Markus: Empfänger not matched by a rule → blue; columns in two groups (input: Bankdatum | Bank-Text | Betrag; output: Datum | Konto | Empfänger | Kategorie | Unterkategorie), Details removed; Konto must come from the pattern matching, e.g. "STEUERN" → BNP ⇒ Livret A Fa…(text cut off). **Done** as above. **Assumption to confirm:** the rule list has no account column, so the counter account is derived from the rule's Gruppe — Rücklagen → Livret A Sparen, Außenstände → Außenstände account; the sub-account/tag (Rücklagen Steuern, Sparen Familie …) is not part of the Konto column and belongs to the commit step. "Livret A Fa…" was not readable — **open question for Markus:** is Livret A Sparen right for Rücklagen lines, or did he mean something else? Konto cannot be edited yet.
+
+## Session 37, continued a hundred-and-forty-fifth time — 2026-11-02 — Import staging: simpler hit share, no apply button, keyword highlight
+
+Markus: top bar counts only rule hits ("Regeltreffer x %"); "Regeln anwenden" button removed (rules apply automatically); matched keyword highlighted light yellow in Bank-Text. Done; SPEC §3k updated.

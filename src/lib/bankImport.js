@@ -213,8 +213,8 @@ export function ruleFillFor(row, rules) {
   return Object.keys(patch).length ? patch : null
 }
 
-/** Top-bar figures: share of lines whose bank text hits a rule (Empfänger) and whose
- *  hit also carries a category. */
+/** Top-bar figure: share of lines whose bank text hits a rule (Empfänger); the
+ *  category share is still returned but no longer shown. */
 export function matchShare(rows, rules) {
   let empfaenger = 0
   let kategorie = 0
