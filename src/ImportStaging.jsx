@@ -255,8 +255,7 @@ export default function ImportStaging() {
       {
         colId: 'konto',
         headerName: 'Konto',
-        flex: 1,
-        minWidth: 190,
+        width: 200,
         valueGetter: (p) => {
           const rule = matchRule(rules, p.data.rawDescription)
           const { fromAccountId, toAccountId } = accountPair(openBatch.accountId, p.data.amountCents, counterAccountFor(rule?.groupName))
@@ -290,7 +289,8 @@ export default function ImportStaging() {
       {
         colId: 'unterkategorie',
         headerName: 'Unterkategorie',
-        width: 180,
+        flex: 1,
+        minWidth: 200,
         editable: true,
         valueGetter: (p) => categoryById[p.data.categoryId]?.name ?? '—',
         valueSetter: () => false,
