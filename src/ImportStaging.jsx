@@ -8,9 +8,11 @@ import { db } from './firebase'
 import {
   buildStagedRows,
   importTotals,
+  matchShare,
   parseBnpRows,
   parseKeywordCsv,
   parseTypedDate,
+  ruleFillFor,
   resolveCategoryId,
 } from './lib/bankImport'
 import { centsToEuro } from './lib/format'
@@ -49,7 +51,6 @@ export default function ImportStaging() {
   const [rules, setRules] = useState([])
   const [batches, setBatches] = useState([])
   const [rows, setRows] = useState([])
-  const [closedByYear, setClosedByYear] = useState({})
   const [message, setMessage] = useState(null)
   const [busy, setBusy] = useState(false)
   const gridRef = useRef(null)
@@ -62,13 +63,6 @@ export default function ImportStaging() {
       ['importBatches', setBatches],
       ['stagedRows', setRows],
     ].map(([name, set]) => onSnapshot(collection(db, name), (snap) => set(snap.docs.map((d) => d.data()))))
-    subs.push(
-      onSnapshot(collection(db, 'settings'), (snap) => {
-        const m = {}
-        for (const d of snap.docs) m[d.id] = d.data().closedMonths ?? []
-        setClosedByYear(m)
-      }),
-    )
     return () => subs.forEach((u) => u())
   }, [])
 
@@ -80,6 +74,7 @@ export default function ImportStaging() {
   const categoryById = useMemo(() => Object.fromEntries(categories.map((c) => [c.id, c])), [categories])
   const liveTxs = useMemo(() => transactions.filter((t) => !t.deletedAt), [transactions])
 
+  const share = openBatch ? matchShare(batchRows, rules) : null
   const totals = openBatch
     ? importTotals({
         accountId: openBatch.accountId,
@@ -90,17 +85,14 @@ export default function ImportStaging() {
       })
     : null
 
-  const closedWarning = (date) => {
-    const closed = closedByYear[date.slice(0, 4)] ?? []
-    return closed.includes(Number(date.slice(5, 7)))
-  }
-
   // --- keyword list -> categorizationRules ------------------------------------
   async function loadRules(file) {
     setBusy(true)
     setMessage(null)
     try {
-      const parsed = parseKeywordCsv(await file.text())
+      const text = await file.text()
+      const parsed = parseKeywordCsv(text)
+      const lineCount = Math.max(0, text.split(/\r?\n/).filter((l) => l.trim()).length - 1)
       const unresolved = []
       const docs = parsed.map((r) => {
         const categoryId = resolveCategoryId(categories, r.groupName, r.categoryName)
@@ -108,10 +100,14 @@ export default function ImportStaging() {
         return { id: `rule-${slug(r.keyword)}`, ...r, categoryId, source: 'seed', createdAt: Date.now() }
       })
       await commitInChunks(docs.map((d) => (batch) => batch.set(doc(db, 'categorizationRules', d.id), d)))
+      const loaded = docs.map(({ id: _id, createdAt: _c, source: _s, ...r }) => r)
+      const fills = batchRows.map((r) => [r, ruleFillFor(r, loaded)]).filter(([, p]) => p)
+      await commitInChunks(fills.map(([r, p]) => (batch) => batch.set(doc(db, 'stagedRows', r.id), p, { merge: true })))
       setMessage({
         ok: true,
         text:
-          `${docs.length} Regeln geladen (Zeilen ohne Keyword übersprungen). ` +
+          `${docs.length} Regeln aus ${lineCount} Datenzeilen geladen (ohne Keyword übersprungen, doppelte Keywords nur einmal)` +
+          (openBatch ? `; ${fills.length} Zeilen des offenen Imports ergänzt. ` : '. ') +
           (unresolved.length
             ? `${unresolved.length} ohne passende Kategorie (nur Empfänger wird gesetzt): ${unresolved.slice(0, 12).join('; ')}${unresolved.length > 12 ? ' …' : ''}`
             : 'Alle Kategorien gefunden.'),
@@ -161,6 +157,12 @@ export default function ImportStaging() {
     setBusy(false)
   }
 
+  async function applyRules() {
+    const fills = batchRows.map((r) => [r, ruleFillFor(r, rules)]).filter(([, p]) => p)
+    await commitInChunks(fills.map(([r, p]) => (batch) => batch.set(doc(db, 'stagedRows', r.id), p, { merge: true })))
+    setMessage({ ok: true, text: `Regeln auf ${fills.length} noch unbearbeitete Zeilen angewendet.` })
+  }
+
   async function discard() {
     if (!openBatch || !window.confirm('Diesen Import verwerfen? Alle Zeilen hier gehen verloren (Konten bleibt unberührt).')) return
     setBusy(true)
@@ -193,22 +195,6 @@ export default function ImportStaging() {
             aria-label="in Konten übernehmen"
           />
         ),
-      },
-      {
-        colId: 'status',
-        headerName: 'Status',
-        width: 150,
-        valueGetter: (p) => {
-          const parts = []
-          if (p.data.status === 'duplicate?') parts.push('Duplikat?')
-          else parts.push(p.data.edited ? 'geändert' : 'Neu')
-          if (closedWarning(p.data.date)) parts.push('⚠ Monat abgeschlossen')
-          return parts.join(' · ')
-        },
-        tooltipValueGetter: (p) =>
-          closedWarning(p.data.date)
-            ? `Fällt in einen abgeschlossenen Monat (${p.data.date.slice(5, 7)}/${p.data.date.slice(0, 4)}) — nur eine Warnung.`
-            : undefined,
       },
       {
         colId: 'date',
@@ -303,8 +289,8 @@ export default function ImportStaging() {
         },
       },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- callbacks read closedByYear/categories each render; patchRow only needs db
-    [categories, categoryById, closedByYear],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- callbacks read categories each render; patchRow only needs db
+    [categories, categoryById],
   )
 
   const fileInput = (accept, onFile, label) => (
@@ -330,23 +316,23 @@ export default function ImportStaging() {
         <p className={'text-sm ' + (message.ok ? 'text-[var(--color-text-muted)]' : 'text-[var(--color-alert)]')}>{message.text}</p>
       )}
 
-      {!openBatch && (
-        <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3">
+        {!openBatch && (
           <div className="flex flex-wrap items-center gap-3">
             {fileInput('.xls,.xlsx', loadBankFile, 'BNP-Datei (.xls) einlesen')}
-            <span className="text-sm text-[var(--color-text-muted)]">
-              {rules.length} Empfänger-/Kategorie-Regeln gespeichert
-              {rules.length === 0 && ' — ohne Regeln bleibt alles unkategorisiert'}
-            </span>
+            {rules.length === 0 && (
+              <span className="text-sm text-[var(--color-text-muted)]">Ohne Regeln bleibt alles unkategorisiert — erst die Regeln laden.</span>
+            )}
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            {fileInput('.csv', loadRules, rules.length ? 'Regeln neu laden (CSV)' : 'Regeln laden (CSV)')}
-            <span className="text-sm text-[var(--color-text-muted)]">
-              Spalten: Keyword, Empfänger, Gruppe, Kategorie. Zeilen ohne Keyword und die Farbspalte werden ignoriert.
-            </span>
-          </div>
+        )}
+        <div className="flex flex-wrap items-center gap-3">
+          {fileInput('.csv', loadRules, rules.length ? 'Regeln neu laden (CSV)' : 'Regeln laden (CSV)')}
+          <span className="text-sm text-[var(--color-text-muted)]">
+            {rules.length} Regeln gespeichert — das Laden ist nur einmal nötig, sie bleiben in der Datenbank
+            (neu laden nur, wenn sich die Liste ändert; gleiche Keywords werden überschrieben).
+          </span>
         </div>
-      )}
+      </div>
 
       {openBatch && totals && (
         <>
@@ -376,7 +362,16 @@ export default function ImportStaging() {
                 (Konten-Buchungen nach dem {fmtDate(openBatch.balanceDate)}: {centsToEuro(totals.later)}, nicht mitgezählt)
               </span>
             )}
-            <button type="button" onClick={discard} disabled={busy} className="ml-auto rounded-md border border-[var(--color-border)] px-3 py-1">
+            {share && (
+              <span title="Anteil der Zeilen, deren Bank-Text ein Keyword aus den Regeln trifft">
+                Regeltreffer: Empfänger <b>{share.empfaengerPct} %</b> ({share.empfaenger}/{share.total}) · Kategorie{' '}
+                <b>{share.kategoriePct} %</b> ({share.kategorie}/{share.total})
+              </span>
+            )}
+            <button type="button" onClick={applyRules} disabled={busy} className="ml-auto rounded-md border border-[var(--color-border)] px-3 py-1">
+              Regeln anwenden
+            </button>
+            <button type="button" onClick={discard} disabled={busy} className="rounded-md border border-[var(--color-border)] px-3 py-1">
               Verwerfen
             </button>
           </div>

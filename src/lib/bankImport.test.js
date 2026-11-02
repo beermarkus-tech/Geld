@@ -4,6 +4,8 @@ import {
   buildStagedRows,
   fallbackLabel,
   importTotals,
+  matchShare,
+  ruleFillFor,
   matchRule,
   parseBnpRows,
   parseKeywordCsv,
@@ -142,5 +144,28 @@ describe('parseTypedDate', () => {
     expect(parseTypedDate('10.9.', '2026-09-01')).toBe('2026-09-10')
     expect(parseTypedDate('31.02.2026', '2026-09-01')).toBeNull()
     expect(parseTypedDate('quatsch', '2026-09-01')).toBeNull()
+  })
+})
+
+describe('rules on an already staged row', () => {
+  const rules = [{ keyword: 'LIDL', label: 'Lidl', categoryId: 'food' }, { keyword: 'PAYPAL', label: 'Paypal', categoryId: null }]
+  const row = (raw, extra = {}) => ({ rawDescription: raw, displayLabel: fallbackLabel(raw), categoryId: null, ...extra })
+  it('fills untouched rows only', () => {
+    expect(ruleFillFor(row('FACTURE CARTE DU 010926 LIDL CARTE   4974XXXXXXXX3562'), rules)).toEqual({ displayLabel: 'Lidl', categoryId: 'food' })
+    expect(ruleFillFor(row('PRLV PAYPAL'), rules)).toEqual({ displayLabel: 'Paypal' })
+    expect(ruleFillFor(row('LIDL', { displayLabel: 'Mein Lidl' }), rules)).toBeNull()
+    expect(ruleFillFor(row('LIDL', { categoryId: 'x' }), rules)).toBeNull()
+    expect(ruleFillFor(row('OTHER'), rules)).toBeNull()
+  })
+  it('counts the share of hits', () => {
+    const rows = [{ rawDescription: 'LIDL A' }, { rawDescription: 'PAYPAL' }, { rawDescription: 'x' }, { rawDescription: 'y' }]
+    expect(matchShare(rows, rules)).toEqual({ empfaenger: 2, kategorie: 1, total: 4, empfaengerPct: 50, kategoriePct: 25 })
+  })
+})
+describe('csv separators', () => {
+  it('reads semicolon files and keeps a stray quote inside a field', () => {
+    const r = parseKeywordCsv('Keyword;Empfänger;Gruppe;Kategorie\r\nLIDL;Lidl;Lebenshaltung;X\r\nDR;Dr. "Z";A;B\r\n')
+    expect(r.map((x) => x.keyword)).toEqual(['LIDL', 'DR'])
+    expect(r[1].label).toBe('Dr. "Z"')
   })
 })

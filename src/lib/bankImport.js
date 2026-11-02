@@ -80,6 +80,8 @@ export function fallbackLabel(rawDescription) {
 // --- keyword list -------------------------------------------------------------
 
 function parseCsv(text) {
+  const first = text.split(/\r?\n/, 1)[0]
+  const sep = [';', '\t', ','].reduce((b, c) => (first.split(c).length > first.split(b).length ? c : b), ',')
   const out = []
   let row = []
   let cell = ''
@@ -90,8 +92,8 @@ function parseCsv(text) {
       if (c === '"' && text[i + 1] === '"') { cell += '"'; i++ }
       else if (c === '"') quoted = false
       else cell += c
-    } else if (c === '"') quoted = true
-    else if (c === ',') { row.push(cell); cell = '' }
+    } else if (c === '"' && cell === '') quoted = true
+    else if (c === sep) { row.push(cell); cell = '' }
     else if (c === '\n' || c === '\r') {
       if (c === '\r' && text[i + 1] === '\n') i++
       row.push(cell); out.push(row); row = []; cell = ''
@@ -197,4 +199,30 @@ export function parseTypedDate(text, fallbackIso) {
     y = mt[3] ? (mt[3].length === 2 ? 2000 + Number(mt[3]) : Number(mt[3])) : Number(fallbackIso.slice(0, 4))
   } else return null
   return validDate(y, m, d) ? `${y}-${pad(m)}-${pad(d)}` : null
+}
+
+/** Fills Empfänger/Kategorie from the rules for a staged row nobody has touched yet
+ *  (no category, label still the plain bank-text fallback). Returns the patch, or null. */
+export function ruleFillFor(row, rules) {
+  if (row.categoryId || row.displayLabel !== fallbackLabel(row.rawDescription)) return null
+  const rule = matchRule(rules, row.rawDescription)
+  if (!rule) return null
+  const patch = {}
+  if (rule.label && rule.label !== row.displayLabel) patch.displayLabel = rule.label
+  if (rule.categoryId) patch.categoryId = rule.categoryId
+  return Object.keys(patch).length ? patch : null
+}
+
+/** Top-bar figures: share of lines whose bank text hits a rule (Empfänger) and whose
+ *  hit also carries a category. */
+export function matchShare(rows, rules) {
+  let empfaenger = 0
+  let kategorie = 0
+  for (const r of rows) {
+    const rule = matchRule(rules, r.rawDescription)
+    if (rule?.label) empfaenger++
+    if (rule?.categoryId) kategorie++
+  }
+  const pct = (n) => (rows.length ? Math.round((n / rows.length) * 100) : 0)
+  return { empfaenger, kategorie, total: rows.length, empfaengerPct: pct(empfaenger), kategoriePct: pct(kategorie) }
 }
