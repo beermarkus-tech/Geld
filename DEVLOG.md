@@ -2358,3 +2358,7 @@ Same as Konten: plain Delete on a Tags cell in the Regeln table removes all tags
 ## Session 37, continued a hundred-and-sixty-third time — 2026-11-03 — Außenstände: no "– ohne Tag" in the card name
 
 Markus: the yellow "Tag fehlt" label is enough. The untagged cards are now named just after the account ("Außenstände", "Reisekosten Airbus", "CPAM").
+
+## Session 37, continued a hundred-and-sixty-fourth time — 2026-11-03 — New Konten bookings stay in place
+
+Markus: a new booking must not jump to its sorted position once a value is entered. `+ Neue Buchung` remembers the booking shown right above the new row after it first settles (`frozenNewRowsRef`) and AG Grid's `postSortRows` puts the new row back right after that booking on every re-sort; a manual sort (header click or the sort shortcut) clears the memory and the row falls to its sorted place. Several new rows in a row are all kept. SPEC (Konten, before "Confirmed column order") has the rule. Lint/tests/build green, **not browser-checked** – please try: new row, enter a different date, row should stay; then click the Datum header, row should move.
