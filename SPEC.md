@@ -507,6 +507,8 @@ Open question raised by Markus: the totality of existing budgeting apps tested s
 
 **No phone-only or tablet-only functions:** every function must be reachable from both devices — the difference is interaction *pattern* (grid vs. form), not *capability*. In practice most bulk categorization/review happens on tablet, but corrections must remain fully possible on phone.
 
+**A new booking under a filter takes over the filter (Nov 2026, Markus):** so it is not hidden the moment it is created. Account filter → that account (already so); tag filter → that tag on its line; a text filter on Empfänger / Details → that text; Unterkategorie → that category, Tags → that tag, both only when exactly one matches. Blank filters need nothing, Betrag/Datum filters are left alone (the row takes the selected row's date). Under a "Nur diese n Buchungen" filter the new row is let into the set.
+
 **No auto-sort, anywhere (Nov 2026, Markus):** no table re-sorts itself. Editing a value – or creating a booking with "+ Neue Buchung" – never moves a row to its sorted place; it stays where it is until the table is sorted by hand (header click or the sort shortcut), which sorts once and becomes the new fixed order. Rows that appear from elsewhere (another device, an import) are slotted in after the row that precedes them in the sorted order. Same in Regeln and the Bank-Import grid (`lib/stickyOrder.js`).
 
 **Confirmed column order (grid and phone-card layout alike):** Datum → Konto → Empfänger → Betrag → Kategorie → Unterkategorie → Details → Tags.

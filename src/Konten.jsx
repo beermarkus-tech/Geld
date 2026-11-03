@@ -9,6 +9,7 @@ import KontoEditor from './KontoEditor'
 import { balance, jahresende } from './lib/balance'
 import { AUSSENSTAENDE_ACCOUNT_ID, claimOverview, claimTagIds, receivableAccountIds } from './lib/claims'
 import { centsToEuro } from './lib/format'
+import { newRowPrefill } from './lib/newRowPrefill'
 import { createStickyOrder } from './lib/stickyOrder'
 import { bookingsNeedingEntry, missingColumns } from './lib/needsEntry'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
@@ -936,6 +937,14 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     claimPendingFocus(id, 'date')
     // Under a "Nur diese n Buchungen" filter the new row would be hidden at once – let it in.
     setIdFilter((prev) => (prev ? new Set(prev).add(id) : prev))
+    // Under a filter the new row takes over what the filter asks for, so it is not hidden at once
+    // (Nov 2026, Markus): tag filter -> that tag, Empfänger/Details/Unterkategorie/Tags text filters -> that value.
+    const pre = newRowPrefill(gridRef.current?.api?.getFilterModel?.() ?? {}, {
+      categories,
+      tagList: tags.map((t) => ({ id: t.id, name: qualifiedTagName(t, tagById) || t.id })),
+      tagFilterId: accountFilter && !filteredAccountId && tagById[accountFilter] ? accountFilter : null,
+    })
+    const detail = pre.detail ?? ''
     await setDoc(doc(db, 'transactions', id), {
       id,
       date,
@@ -943,9 +952,9 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       toAccountId: null,
       amountCents: 0,
       rawDescription: '',
-      displayLabel: '',
-      lines: [],
-      detail: '',
+      displayLabel: pre.displayLabel ?? '',
+      lines: pre.categoryId || pre.tagIds || detail ? [{ amountCents: 0, categoryId: pre.categoryId ?? null, note: detail, tags: pre.tagIds ?? [] }] : [],
+      detail,
       createdAt: Date.now(),
     })
   }
