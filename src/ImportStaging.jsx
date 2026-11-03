@@ -5,6 +5,7 @@ import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-communi
 
 import CategoryEditor from './CategoryEditor'
 import { registerScreenCursor } from './lib/screenCursor'
+import { createStickyOrder } from './lib/stickyOrder'
 import { db } from './firebase'
 import {
   buildStagedRows,
@@ -73,6 +74,7 @@ export default function ImportStaging({ active = true, onOpenInKonten = null }) 
   const [message, setMessage] = useState(null)
   const [busy, setBusy] = useState(false)
   const gridRef = useRef(null)
+  const stickyOrderRef = useRef(createStickyOrder())
   // Remembered cursor cell; Tab with nothing focused puts the cursor back there (lib/screenCursor.js).
   const lastCell = useRef(null)
   useEffect(() => {
@@ -469,6 +471,11 @@ export default function ImportStaging({ active = true, onOpenInKonten = null }) 
               defaultColDef={{ suppressMovable: true, resizable: true, cellClass: grey }}
               getRowId={(p) => p.data.id}
               tooltipShowDelay={400}
+              // No auto-sort: edited rows stay where they are until the table is sorted by hand (lib/stickyOrder.js).
+              postSortRows={(params) => {
+                const sig = (gridRef.current?.api?.getColumnState() ?? []).filter((c) => c.sort).map((c) => `${c.colId}:${c.sort}:${c.sortIndex ?? 0}`).join(',')
+                stickyOrderRef.current.apply(params.nodes, sig, (n) => n.data?.id)
+              }}
               onCellClicked={(p) => {
                 const col = p.column.getColId()
                 if (col !== 'raw' && col !== 'label') return

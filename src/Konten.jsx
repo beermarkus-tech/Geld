@@ -9,6 +9,7 @@ import KontoEditor from './KontoEditor'
 import { balance, jahresende } from './lib/balance'
 import { AUSSENSTAENDE_ACCOUNT_ID, claimOverview, claimTagIds, receivableAccountIds } from './lib/claims'
 import { centsToEuro } from './lib/format'
+import { createStickyOrder } from './lib/stickyOrder'
 import { bookingsNeedingEntry, missingColumns } from './lib/needsEntry'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { withRemainder } from './lib/split'
@@ -538,11 +539,8 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // blue tint on one, cursor rectangle on the other. Waiting for `rows`
   // itself to contain the settled order, like addRow already did, is the
   // one point both agree on.
-  // New bookings keep the place they were created in (Nov 2026, Markus) instead of jumping to their
-  // date-sorted position as soon as a value is entered – until the table is sorted by hand.
-  // Each entry: { id, afterTxId } – afterTxId is the booking shown right above it once it first
-  // settled (null = at the very top, undefined = not settled yet, so plain sort order).
-  const frozenNewRowsRef = useRef([])
+  // Rows keep their place after an edit until the table is sorted by hand (lib/stickyOrder.js).
+  const stickyOrderRef = useRef(createStickyOrder())
   const pendingFocusIdRef = useRef(null)
   const pendingFocusColRef = useRef('date')
   // null = focus the parent row once it settles (the normal case); a
@@ -936,7 +934,8 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     const date = selected?.date ?? (year && today.startsWith(year) ? today : `${year}-01-01`)
     const id = `tx-manual-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`
     claimPendingFocus(id, 'date')
-    frozenNewRowsRef.current = [...frozenNewRowsRef.current, { id, afterTxId: undefined }]
+    // Under a "Nur diese n Buchungen" filter the new row would be hidden at once – let it in.
+    setIdFilter((prev) => (prev ? new Set(prev).add(id) : prev))
     await setDoc(doc(db, 'transactions', id), {
       id,
       date,
@@ -1468,7 +1467,6 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       const column = api.getFocusedCell()?.column
       if (!column || !column.isSortable()) return
       const nextSort = column.getSort() === 'asc' ? 'desc' : 'asc'
-      frozenNewRowsRef.current = []
       api.applyColumnState({ state: [{ colId: column.getColId(), sort: nextSort }], defaultState: { sort: null } })
     }
     window.addEventListener('keydown', onKeyDown, true)
@@ -1783,12 +1781,6 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         if (lineNode) node = lineNode
       }
       if (!node) return
-      // A just-created booking: remember which booking sits right above it, so it stays there.
-      const frozen = frozenNewRowsRef.current.find((f) => f.id === id)
-      if (frozen && frozen.afterTxId === undefined && node.rowIndex != null) {
-        const prev = node.rowIndex > 0 ? api.getDisplayedRowAtIndex(node.rowIndex - 1) : null
-        frozen.afterTxId = prev?.data ? (prev.data.__isLine ? prev.data.__parent.id : prev.data.id) : null
-      }
       api.ensureNodeVisible(node, 'middle')
       // Selected (the blue tint), not just cell-focused (Markus) — this
       // also means the *next* "+ Neue Buchung" naturally inserts below
@@ -3191,29 +3183,12 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
             setCategoryFilterActive(!!(model.kategorie || model.unterkategorie))
             ui.set('konten', 'filterModel', model)
           }}
-          // Sorting the table by hand releases the new bookings to their sorted places.
+          // No auto-sort: an edited or new row stays where it is until the table is sorted by hand.
           postSortRows={(params) => {
-            for (const f of frozenNewRowsRef.current) {
-              if (f.afterTxId === undefined) continue
-              const nodes = params.nodes
-              const from = nodes.findIndex((n) => n.data?.id === f.id)
-              if (from < 0) continue
-              const [node] = nodes.splice(from, 1)
-              const txIdOf = (n) => (n.data?.__isLine ? n.data.__parent?.id : n.data?.id)
-              let at = f.afterTxId === null ? 0 : nodes.findIndex((n) => txIdOf(n) === f.afterTxId)
-              if (at < 0) {
-                nodes.splice(from, 0, node)
-                continue
-              }
-              if (f.afterTxId !== null) {
-                at += 1
-                while (at < nodes.length && nodes[at].data?.__isLine && nodes[at].data.__parent?.id === f.afterTxId) at += 1
-              }
-              nodes.splice(at, 0, node)
-            }
+            const sig = (gridRef.current?.api?.getColumnState() ?? []).filter((c) => c.sort).map((c) => `${c.colId}:${c.sort}:${c.sortIndex ?? 0}`).join(',')
+            stickyOrderRef.current.apply(params.nodes, sig, (n) => n.data?.id, (n) => Boolean(n.data?.__isLine))
           }}
           onSortChanged={(e) => {
-            if (e.source === 'uiColumnSorted') frozenNewRowsRef.current = []
             const sorted = e.api
               .getColumnState()
               .filter((c) => c.sort)
