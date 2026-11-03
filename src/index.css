@@ -29,6 +29,7 @@
   --color-income-tint: #dcfce7; /* pale green row background — an armed *undelete* (Konten); also Verlauf's Einnahmen section tint */
   --color-savings-tint: #ede9fe; /* pale purple — Verlauf's Rücklagen section tint */
   --color-line-row-tint: #eef0f4; /* subtle grey row background — a split transaction's own line rows (Konten), distinguishing them from ordinary transaction rows */
+  --color-needs-entry: #facc15; /* bright yellow – a cell that still needs an entry (Konten, lib/needsEntry.js); deliberately stronger than the pale breakdown tint */
   --color-breakdown-tint: #fef9c3; /* pale yellow — Verlauf's breakdown-line rows (Hotels, Fehmarn, ...), always tinted regardless of month open/closed state */
   --color-breakdown-rollup-tint: #fde68a; /* a step stronger than the above — Verlauf's parent-tag "(automatisch)" rollup header row specifically (Markus: "tint the sub sum lines... in a slightly stronger yellow") */
 
@@ -212,4 +213,9 @@ body {
 .ag-cell.konten-find-current {
   background-color: rgba(249, 115, 22, 0.55) !important;
   box-shadow: inset 0 0 0 1px rgb(249, 115, 22);
+}
+
+.ag-cell.konten-needs-entry {
+  background-color: var(--color-needs-entry);
+  color: #1f1a00;
 }

@@ -9,6 +9,7 @@ import KontoEditor from './KontoEditor'
 import { balance, jahresende } from './lib/balance'
 import { AUSSENSTAENDE_ACCOUNT_ID, claimOverview, claimTagIds, receivableAccountIds } from './lib/claims'
 import { centsToEuro } from './lib/format'
+import { bookingsNeedingEntry, missingColumns } from './lib/needsEntry'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { withRemainder } from './lib/split'
 import { registerScreenCursor } from './lib/screenCursor'
@@ -704,6 +705,11 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // Every receivable account (Außenstände, CPAM, Reisekosten Airbus, …) — a
   // claim's money sits on whichever of them it belongs to.
   const receivableIds = useMemo(() => receivableAccountIds(accounts), [accounts])
+  // "Needs an entry" signal (lib/needsEntry.js): the context the rules read, a cell check for the
+  // grid, and the bookings that still have a gap (for the toolbar chip).
+  const needsCtx = useMemo(() => ({ receivableIds, tagById }), [receivableIds, tagById])
+  const needsEntryFor = (tx, line, col) => missingColumns(tx, line, needsCtx).has(col)
+  const needsEntryIds = useMemo(() => bookingsNeedingEntry(transactions, needsCtx), [transactions, needsCtx])
   const claimStatus = useMemo(() => {
     const claims = claimOverview(tags, activeTransactions, receivableIds)
     return { all: new Set(claims.map((c) => c.id)), open: new Set(claims.filter((c) => c.net !== 0).map((c) => c.id)) }
@@ -2345,6 +2351,11 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         // so a tag filter keeps the booking and its matching lines in view.
         valueGetter: (p) =>
           p.data.__isLine ? (p.data.__parent.lines[p.data.__lineIndex]?.tags ?? []) : (p.data.lines ?? []).length > 1 ? [] : tagIdsValue(p.data),
+        // Bright yellow = still needs an entry (lib/needsEntry.js, Nov 2026).
+        cellClass: (p) => {
+          if (p.data.__isLine) return needsEntryFor(p.data.__parent, p.data.__parent.lines[p.data.__lineIndex], 'tags') ? 'konten-needs-entry' : undefined
+          return (p.data.lines ?? []).length === 1 && needsEntryFor(p.data, p.data.lines[0], 'tags') ? 'konten-needs-entry' : undefined
+        },
         comparator: glueToParent(tagsValue),
         // Markus's "C": a real header filter, the same convention spec.md
         // §3a already describes for every column ("tag 'has this tag'")
@@ -2578,7 +2589,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps -- accountName/categoryName/groupName/ensureLine/handleDeleteClick/toggleExpanded/createTag close over these
-    [accountById, categoryById, tagById, recentTagValues, accountFilter, accounts, categories, tags, confirmDeleteId, expandedIds],
+    [accountById, categoryById, tagById, recentTagValues, accountFilter, accounts, categories, tags, confirmDeleteId, expandedIds, needsCtx],
   )
 
   const panel = useMemo(() => {
@@ -2896,6 +2907,17 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
             <span className="rounded-full border border-[var(--color-computed)] px-2 py-0.5 text-sm text-[var(--color-text)]">
               Nur diese {idFilter.size} {idFilter.size === 1 ? 'Buchung' : 'Buchungen'}, alle Jahre
             </span>
+          )}
+          {needsEntryIds.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setIdFilter(new Set(needsEntryIds))}
+              title="Zeigt alle Buchungen mit einer gelb markierten Zelle (alle Jahre)"
+              className="rounded-md px-3 py-1 text-sm font-medium"
+              style={{ background: 'var(--color-needs-entry)', color: '#1f1a00' }}
+            >
+              Fehlende Einträge ({needsEntryIds.length})
+            </button>
           )}
           {(accountFilter || anyColumnFilter || idFilter) && (
             <button
