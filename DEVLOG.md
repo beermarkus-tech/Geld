@@ -2354,3 +2354,7 @@ Markus: Delete on a Tags cell removes the tags (like in a text cell). Plain Dele
 ## Session 37, continued a hundred-and-sixty-second time — 2026-11-03 — Delete clears tags in Regeln
 
 Same as Konten: plain Delete on a Tags cell in the Regeln table removes all tags of that rule. Not browser-checked.
+
+## Session 37, continued a hundred-and-sixty-third time — 2026-11-03 — Außenstände: no "– ohne Tag" in the card name
+
+Markus: the yellow "Tag fehlt" label is enough. The untagged cards are now named just after the account ("Außenstände", "Reisekosten Airbus", "CPAM").

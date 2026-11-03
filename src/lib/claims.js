@@ -157,7 +157,7 @@ export function untaggedCards(accounts, tags, transactions, receivableIds) {
       lines.sort((x, y) => x.date.localeCompare(y.date) || x.txId.localeCompare(y.txId))
       return {
         id: `untagged:${a.id}`,
-        name: `${a.name} – ohne Tag`,
+        name: a.name,
         untagged: true,
         accountId: a.id,
         net: lines.reduce((sum, l) => sum + l.cents, 0),

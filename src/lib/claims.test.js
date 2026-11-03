@@ -135,7 +135,7 @@ describe('untaggedCards', () => {
   it('makes one card per receivable account that has untagged lines', () => {
     const cards = untaggedCards(accounts, tags, txs, receivableAccountIds(accounts))
     expect(cards.map((c) => c.id)).toEqual([`untagged:${AUS}`, 'untagged:cpam'])
-    expect(cards[0]).toMatchObject({ name: 'Außenstände – ohne Tag', net: 5000 - 700, txIds: ['a', 'd'], untagged: true })
-    expect(cards[1]).toMatchObject({ name: 'CPAM – ohne Tag', net: 1000 })
+    expect(cards[0]).toMatchObject({ name: 'Außenstände', net: 5000 - 700, txIds: ['a', 'd'], untagged: true })
+    expect(cards[1]).toMatchObject({ name: 'CPAM', net: 1000 })
   })
 })
