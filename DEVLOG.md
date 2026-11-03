@@ -2350,3 +2350,7 @@ Markus: one card per receivable account for lines without a tag. `untaggedCards(
 ## Session 37, continued a hundred-and-sixty-first time — 2026-11-03 — Delete clears tags in Konten
 
 Markus: Delete on a Tags cell removes the tags (like in a text cell). Plain Delete on the Tags cell (not editing) now sets the booking's / split line's tags to none (`applyTagsDirect` / `applyTagsToLine`), only where the cell is editable; Ctrl+Delete still deletes the row. Not browser-checked.
+
+## Session 37, continued a hundred-and-sixty-second time — 2026-11-03 — Delete clears tags in Regeln
+
+Same as Konten: plain Delete on a Tags cell in the Regeln table removes all tags of that rule. Not browser-checked.

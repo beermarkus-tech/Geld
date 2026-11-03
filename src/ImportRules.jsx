@@ -344,6 +344,13 @@ export default function ImportRules({ active = true }) {
           getRowId={(p) => p.data.id}
           suppressRowHoverHighlight
           stopEditingWhenCellsLoseFocus
+          // Delete on a Tags cell removes all tags of the rule (Nov 2026, Markus – same as in Konten).
+          onCellKeyDown={(p) => {
+            if (p.event?.key !== 'Delete' || p.event.altKey || p.event.shiftKey || p.column?.getColId() !== 'tags') return
+            if (p.api.getEditingCells().length > 0) return
+            p.event.preventDefault()
+            patch(p.data, { tagIds: [] })
+          }}
           onCellFocused={(e) => {
             if (e.column && e.rowIndex != null) lastCell.current = { rowIndex: e.rowIndex, colId: e.column.getColId() }
           }}
