@@ -36,7 +36,9 @@ const cellText = (api, node, colId) => {
   const v = api.getCellValue({ rowNode: node, colKey: colId, useFormatter: true })
   return Array.isArray(v) ? v.join(' ') : String(v ?? '')
 }
-const suppressGridDelete = (p) => isCtrlDelete(p) || (!p.editing && p.event.key === 'Delete' && CATEGORY_COLS.has(p.column?.getColId()))
+// Plain Delete on Tags removes all tags of the line (Nov 2026, Markus).
+const suppressGridDelete = (p) =>
+  isCtrlDelete(p) || (!p.editing && p.event.key === 'Delete' && (CATEGORY_COLS.has(p.column?.getColId()) || p.column?.getColId() === 'tags'))
 
 ModuleRegistry.registerModules([AllCommunityModule])
 syncAgGridColorScheme()
@@ -3311,6 +3313,15 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
               p.event.preventDefault()
               if (p.data.__isLine) clearCategoryToLine(p.data.__parent, p.data.__lineIndex)
               else clearCategoryDirect(p.data)
+              return
+            }
+            // Delete on Tags removes every tag of the booking / split line, like Delete in a text cell.
+            if (key === 'Delete' && !p.event.altKey && !p.event.shiftKey && p.column?.getColId() === 'tags') {
+              if (p.api.getEditingCells().length > 0) return
+              if (!p.colDef.editable?.(p)) return
+              p.event.preventDefault()
+              if (p.data.__isLine) applyTagsToLine(p.data.__parent, p.data.__lineIndex, [])
+              else applyTagsDirect(p.data, [])
               return
             }
             // Ctrl+D ("details") toggles the current transaction's own

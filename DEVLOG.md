@@ -2346,3 +2346,7 @@ New `lib/needsEntry.js` (rule list + 5 tests): first rule = a line on a receivab
 ## Session 37, continued a hundred-and-sixtieth time — 2026-11-03 — Außenstände: "ohne Tag" cards
 
 Markus: one card per receivable account for lines without a tag. `untaggedCards()` in `lib/claims.js` (1 test): "Außenstände – ohne Tag", "Reisekosten Airbus – ohne Tag", "CPAM – ohne Tag" (only when the account has such lines), always listed first under "Offen", marked "Tag fehlt" (same yellow as Konten), lines as usual, "In Konten anzeigen" opens exactly those bookings. "Untagged" = no tag that can be a claim (an allocation tag or a tag of another type does not count) – the same lines Konten shows yellow. Booking between two receivable accounts is skipped (no contribution). Not browser-checked. Also noted: the three accounts were already all part of the claim list in code (group `receivable`); why only Außenstände showed up is still unexplained – awaiting an example from Markus.
+
+## Session 37, continued a hundred-and-sixty-first time — 2026-11-03 — Delete clears tags in Konten
+
+Markus: Delete on a Tags cell removes the tags (like in a text cell). Plain Delete on the Tags cell (not editing) now sets the booking's / split line's tags to none (`applyTagsDirect` / `applyTagsToLine`), only where the cell is editable; Ctrl+Delete still deletes the row. Not browser-checked.
