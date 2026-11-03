@@ -10,7 +10,7 @@ const ctx = {
     reise: { id: 'reise', groupingType: 'trip' },
   },
 }
-const tx = (o) => ({ id: 't', fromAccountId: 'bnp-konto', toAccountId: 'aussenstaende', lines: [{ tags: [] }], ...o })
+const tx = (o) => ({ id: 't', fromAccountId: 'bnp-konto', toAccountId: 'aussenstaende', lines: [{ tags: [], categoryId: 'c' }], ...o })
 
 describe('needs-entry signal', () => {
   it('flags the Tags cell of an Außenstände booking without claim tag', () => {
@@ -37,5 +37,22 @@ describe('needs-entry signal', () => {
   })
   it('lists the booking ids needing an entry', () => {
     expect(bookingsNeedingEntry([tx({ id: 'a' }), tx({ id: 'b', lines: [{ tags: ['claim'] }] }), tx({ id: 'c', toAccountId: null })], ctx)).toEqual(['a'])
+  })
+})
+
+describe('category rule', () => {
+  const c = { receivableIds: new Set(), tagById: {} }
+  it('flags Kategorie and Unterkategorie of a one-sided booking without category', () => {
+    const t = { id: 'x', fromAccountId: 'bnp', toAccountId: null, lines: [{ categoryId: null, tags: [] }] }
+    expect([...missingColumns(t, t.lines[0], c)].sort()).toEqual(['kategorie', 'unterkategorie'])
+  })
+  it('is fine with a category, or for a transfer between two accounts', () => {
+    const t = { id: 'x', fromAccountId: 'bnp', toAccountId: null, lines: [{ categoryId: 'food', tags: [] }] }
+    expect(missingColumns(t, t.lines[0], c).size).toBe(0)
+    const tr = { id: 'y', fromAccountId: 'bnp', toAccountId: 'paypal', lines: [{ categoryId: null, tags: [] }] }
+    expect(missingColumns(tr, tr.lines[0], c).size).toBe(0)
+  })
+  it('a blank new row (no lines yet) counts as one empty line', () => {
+    expect(bookingsNeedingEntry([{ id: 'n', fromAccountId: 'bnp', toAccountId: null, lines: [] }], c)).toEqual(['n'])
   })
 })

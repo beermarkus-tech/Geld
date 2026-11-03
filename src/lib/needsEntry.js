@@ -4,8 +4,8 @@ import { CLAIM_TYPES } from './tagTypes'
 // Derived live from the booking – nothing is stored, so the signal vanishes by itself once the
 // entry is made. Each rule below is one small, independent check; a new case is a new rule here.
 //
-// A rule gets one booking line plus the context and returns the id of the column that is missing
-// (or null). Columns use Konten's colIds ('tags', 'unterkategorie', …).
+// A rule gets one booking line plus the context and returns the id(s) of the column(s) that are missing
+// (a string, an array, or null). Columns use Konten's colIds ('tags', 'kategorie', 'unterkategorie', …).
 
 /** A tag that can serve as a claim/loan tag: not an allocation tag, not typed as something else. */
 export function isClaimLike(tag) {
@@ -14,7 +14,16 @@ export function isClaimLike(tag) {
   return !tag.groupingType || CLAIM_TYPES.has(tag.groupingType)
 }
 
+/** The lines of a booking; a booking without any line yet (a blank new row) counts as one empty line. */
+export const linesOf = (tx) => ((tx.lines ?? []).length ? tx.lines : [{ tags: [], categoryId: null }])
+
 export const NEEDS_ENTRY_RULES = [
+  {
+    id: 'category',
+    label: 'Buchung ohne Kategorie (alles außer Überweisungen zwischen zwei Konten)',
+    // Anything that is not a transfer (both accounts set) must be categorized.
+    check: (tx, line) => (tx.fromAccountId && tx.toAccountId) || line.categoryId ? null : ['kategorie', 'unterkategorie'],
+  },
   {
     id: 'claim-tag',
     label: 'Außenstände-Buchung ohne Forderungs-Tag',
@@ -32,8 +41,8 @@ export function missingColumns(tx, line, ctx) {
   if (!tx || tx.deletedAt) return new Set()
   const cols = new Set()
   for (const rule of NEEDS_ENTRY_RULES) {
-    const col = rule.check(tx, line, ctx)
-    if (col) cols.add(col)
+    const found = rule.check(tx, line, ctx)
+    for (const col of [found].flat()) if (col) cols.add(col)
   }
   return cols
 }
@@ -41,6 +50,6 @@ export function missingColumns(tx, line, ctx) {
 /** Ids of all bookings with at least one line missing an entry. */
 export function bookingsNeedingEntry(transactions, ctx) {
   return transactions
-    .filter((tx) => !tx.deletedAt && (tx.lines ?? []).some((line) => missingColumns(tx, line, ctx).size > 0))
+    .filter((tx) => !tx.deletedAt && linesOf(tx).some((line) => missingColumns(tx, line, ctx).size > 0))
     .map((tx) => tx.id)
 }

@@ -11,7 +11,7 @@ import { AUSSENSTAENDE_ACCOUNT_ID, claimOverview, claimTagIds, receivableAccount
 import { centsToEuro } from './lib/format'
 import { newRowPrefill } from './lib/newRowPrefill'
 import { createStickyOrder } from './lib/stickyOrder'
-import { bookingsNeedingEntry, missingColumns } from './lib/needsEntry'
+import { bookingsNeedingEntry, linesOf, missingColumns } from './lib/needsEntry'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { withRemainder } from './lib/split'
 import { registerScreenCursor } from './lib/screenCursor'
@@ -2224,7 +2224,13 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           line.categoryId = p.newValue?.categoryId ?? line.categoryId
           return true
         },
-        cellClass: (p) => (p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined),
+        // Bright yellow = a booking that is not a transfer still has no category (lib/needsEntry.js).
+        cellClass: (p) => {
+          const hole = p.data.__isLine
+            ? needsEntryFor(p.data.__parent, p.data.__parent.lines[p.data.__lineIndex], 'kategorie')
+            : (p.data.lines ?? []).length <= 1 && needsEntryFor(p.data, linesOf(p.data)[0], 'kategorie')
+          return hole ? 'konten-needs-entry' : p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined
+        },
         // A line row is always editable here — including the last/remainder
         // line, which "can... be categorized/tagged directly as the final
         // line" (§3a) — a parent row only while unsplit (≤1 line); once
@@ -2280,7 +2286,13 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           line.categoryId = p.newValue?.categoryId ?? line.categoryId
           return true
         },
-        cellClass: (p) => (p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined),
+        // Bright yellow = a booking that is not a transfer still has no category (lib/needsEntry.js).
+        cellClass: (p) => {
+          const hole = p.data.__isLine
+            ? needsEntryFor(p.data.__parent, p.data.__parent.lines[p.data.__lineIndex], 'unterkategorie')
+            : (p.data.lines ?? []).length <= 1 && needsEntryFor(p.data, linesOf(p.data)[0], 'unterkategorie')
+          return hole ? 'konten-needs-entry' : p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined
+        },
         // A small red dot for a line tied to a still-open claim/loan (spec
         // §3a): on the Unterkategorie value, derived live — it clears itself
         // once the claim's tag nets to zero. A split booking shows it when
@@ -2370,7 +2382,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         // Bright yellow = still needs an entry (lib/needsEntry.js, Nov 2026).
         cellClass: (p) => {
           if (p.data.__isLine) return needsEntryFor(p.data.__parent, p.data.__parent.lines[p.data.__lineIndex], 'tags') ? 'konten-needs-entry' : undefined
-          return (p.data.lines ?? []).length === 1 && needsEntryFor(p.data, p.data.lines[0], 'tags') ? 'konten-needs-entry' : undefined
+          return (p.data.lines ?? []).length <= 1 && needsEntryFor(p.data, linesOf(p.data)[0], 'tags') ? 'konten-needs-entry' : undefined
         },
         comparator: glueToParent(tagsValue),
         // Markus's "C": a real header filter, the same convention spec.md

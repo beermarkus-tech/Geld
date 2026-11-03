@@ -2370,3 +2370,7 @@ Markus: do not auto-sort any table. Replaced the "frozen new row" trick by `lib/
 ## Session 37, continued a hundred-and-sixty-sixth time — 2026-11-03 — New booking adopts the active filter
 
 Markus's finding: Ctrl+'+' did create the line, but under a filter it was hidden at once. Tested first: the account filter (PayPal) already worked; the real cases are column text filters and tag filters. `lib/newRowPrefill.js` (4 tests) turns the grid's filter model into values for the new row (Empfänger, Details, Unterkategorie, Tags; tag filter → that tag); `addRow` uses it. Browser-checked with the fake-database harness: Empfänger filter "paypal" + Ctrl+'+' → the new row shows with Empfänger "paypal" and stays visible. Not covered by design: Betrag filters (e.g. "> 100"), filters matching several categories/tags – the new row can still vanish there.
+
+## Session 37, continued a hundred-and-sixty-seventh time — 2026-11-03 — Yellow: bookings without category
+
+Markus: any booking that is not a transfer (no incoming account) must have a category; show the ones that don't in the same bright yellow, on Kategorie and Unterkategorie. Second rule in `lib/needsEntry.js` (3 tests); rules may now name several columns. A booking without lines yet (blank new row) counts as one empty line. The "Fehlende Einträge (n)" chip counts both rules – expect a large number at first if many old bookings are uncategorized. Not browser-checked this round (harness already removed again); lint/tests/build green.
