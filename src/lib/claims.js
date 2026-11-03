@@ -1,4 +1,5 @@
 import { CLAIM_TYPES } from './tagTypes'
+import { isClaimLike } from './needsEntry'
 import { claimLineContribution, tagFilterMatchIds } from './tagBalance'
 
 // Außenstände's lookups (spec.md §3g) — everything is a query over tagged
@@ -123,4 +124,47 @@ export function claimOverview(tags, transactions, receivableIds) {
   return claims
     .filter((c) => c.lines.length > 0)
     .sort((a, b) => (a.net === 0) - (b.net === 0) || b.lastDate.localeCompare(a.lastDate) || a.name.localeCompare(b.name, 'de'))
+}
+
+/** One card per receivable account for its lines that carry no claim tag at all (Nov 2026,
+ *  Markus) – the same lines Konten shows with a yellow Tags cell. Same shape as a claim from
+ *  claimOverview, plus `untagged: true`, `accountId` and `txIds`. Cards without lines are left out. */
+export function untaggedCards(accounts, tags, transactions, receivableIds) {
+  const byId = Object.fromEntries(tags.map((t) => [t.id, t]))
+  return accounts
+    .filter((a) => receivableIds.has(a.id))
+    .map((a) => {
+      const lines = []
+      for (const tx of transactions) {
+        if (tx.deletedAt || (tx.fromAccountId !== a.id && tx.toAccountId !== a.id)) continue
+        ;(tx.lines ?? []).forEach((line, lineIndex) => {
+          const tagIds = line.tags ?? []
+          if (tagIds.some((id) => isClaimLike(byId[id]))) return
+          const cents = claimLineContribution(tx, line, receivableIds)
+          if (cents === null) return
+          lines.push({
+            txId: tx.id,
+            lineIndex,
+            date: tx.date,
+            accountId: a.id,
+            label: tx.displayLabel || line.note || '',
+            detail: ((tx.lines ?? []).length > 1 && line.note) || tx.detail || '',
+            cents,
+            tagIds,
+          })
+        })
+      }
+      lines.sort((x, y) => x.date.localeCompare(y.date) || x.txId.localeCompare(y.txId))
+      return {
+        id: `untagged:${a.id}`,
+        name: `${a.name} – ohne Tag`,
+        untagged: true,
+        accountId: a.id,
+        net: lines.reduce((sum, l) => sum + l.cents, 0),
+        lines,
+        txIds: [...new Set(lines.map((l) => l.txId))],
+        lastDate: lines.reduce((m, l) => (l.date > m ? l.date : m), ''),
+      }
+    })
+    .filter((c) => c.lines.length > 0)
 }

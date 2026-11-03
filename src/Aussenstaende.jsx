@@ -5,7 +5,7 @@ import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { db } from './firebase'
 import { balance } from './lib/balance'
 import ui from './lib/uiState'
-import { claimOverview, receivableAccountIds } from './lib/claims'
+import { claimOverview, receivableAccountIds, untaggedCards } from './lib/claims'
 import { useTags } from './TagsProvider'
 import { centsToEuro } from './lib/format'
 
@@ -45,7 +45,9 @@ export default function Aussenstaende({ onOpenInKonten, active = true }) {
     () => [...receivableIds].reduce((sum, id) => sum + balance(id, '9999-12-31', transactions), 0),
     [receivableIds, transactions],
   )
-  const open = claims.filter((c) => c.net !== 0)
+  // Lines without any claim tag, one card per receivable account – always under "Offen", first.
+  const untagged = useMemo(() => untaggedCards(accounts, tags, transactions, receivableIds), [accounts, tags, transactions, receivableIds])
+  const open = [...untagged, ...claims.filter((c) => c.net !== 0)]
   const settled = claims.filter((c) => c.net === 0)
   const shown = tab === 'open' ? open : settled
 
@@ -103,13 +105,16 @@ export default function Aussenstaende({ onOpenInKonten, active = true }) {
       )}
 
       {shown.map((claim) => {
-        const isOpen = claim.net !== 0
+        const isOpen = claim.net !== 0 || claim.untagged
         const isExpanded = expanded.has(claim.id)
         return (
           <section key={claim.id} className="rounded-lg border border-[color-mix(in_srgb,var(--color-text)_30%,transparent)] bg-[var(--color-surface)] shadow-sm">
             <button type="button" onClick={() => toggle(claim.id)} className="flex w-full items-center gap-3 px-3 py-2 text-left">
               <span className="text-[var(--color-text-muted)]">{isExpanded ? '▾' : '▸'}</span>
-              <span className="flex-1 font-medium">{claim.name}</span>
+              <span className="flex-1 font-medium">
+                {claim.name}
+                {claim.untagged && <span className="ml-2 rounded px-1.5 text-xs font-normal" style={{ background: 'var(--color-needs-entry)', color: '#1f1a00' }}>Tag fehlt</span>}
+              </span>
               <span className={`tabular-nums font-medium ${isOpen ? 'text-[var(--color-alert)]' : 'text-[var(--color-income)]'}`}>
                 {isOpen ? `${centsToEuro(claim.net)} €` : '0,00 € ✓'}
               </span>
@@ -138,7 +143,13 @@ export default function Aussenstaende({ onOpenInKonten, active = true }) {
                 <div className="flex items-center gap-3 pt-1 text-sm">
                   <button
                     type="button"
-                    onClick={() => onOpenInKonten({ kind: 'tag', name: claim.name, tagId: claim.id, year: null, month: null, from: 'aussenstaende' })}
+                    onClick={() =>
+                      onOpenInKonten(
+                        claim.untagged
+                          ? { txIds: claim.txIds, from: 'aussenstaende' }
+                          : { kind: 'tag', name: claim.name, tagId: claim.id, year: null, month: null, from: 'aussenstaende' },
+                      )
+                    }
                     className="text-[var(--color-computed)] underline"
                   >
                     In Konten anzeigen

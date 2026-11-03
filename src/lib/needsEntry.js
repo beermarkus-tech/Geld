@@ -8,7 +8,7 @@ import { CLAIM_TYPES } from './tagTypes'
 // (or null). Columns use Konten's colIds ('tags', 'unterkategorie', …).
 
 /** A tag that can serve as a claim/loan tag: not an allocation tag, not typed as something else. */
-function isClaimLike(tag) {
+export function isClaimLike(tag) {
   if (!tag) return true // an old free-text value still counts as "something was entered"
   if (tag.class === 'allocation') return false
   return !tag.groupingType || CLAIM_TYPES.has(tag.groupingType)

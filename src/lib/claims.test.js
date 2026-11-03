@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { AUSSENSTAENDE_ACCOUNT_ID as AUS, claimLines, claimOverview, claimTagIds, receivableAccountIds } from './claims'
+import { AUSSENSTAENDE_ACCOUNT_ID as AUS, claimLines, claimOverview, claimTagIds, receivableAccountIds, untaggedCards } from './claims'
 import { tagFilterTotal } from './tagBalance'
 
 // Synthetic fixtures only.
@@ -113,5 +113,29 @@ describe('Krankenkasse', () => {
       { id: 'zahn-r', name: 'Rechnung', parentTag: 'zahn', class: 'grouping', groupingType: 'health-insurance' },
     ]
     expect(claimTagIds(t, [], REC)).toEqual(['zahn'])
+  })
+})
+
+describe('untaggedCards', () => {
+  const accounts = [
+    { id: AUS, name: 'Außenstände', group: 'receivable' },
+    { id: 'cpam', name: 'CPAM', group: 'receivable' },
+    { id: 'airbus', name: 'Reisekosten Airbus', group: 'receivable' },
+    { id: 'bnp', name: 'BNP', group: 'cash' },
+  ]
+  const txs = [
+    tx('a', '2026-01-02', 'bnp', AUS, 5000, []), // untagged, Außenstände
+    tx('b', '2026-01-03', 'bnp', AUS, 3000, ['loan']), // tagged
+    tx('c', '2026-01-04', 'bnp', 'cpam', 1000, ['spar']), // allocation tag only → still untagged
+    tx('d', '2026-01-05', AUS, 'bnp', 700, []), // untagged repayment
+    tx('e', '2026-01-06', 'bnp', 'airbus', 900, ['trip']),
+    tx('f', '2026-01-07', 'bnp', null, 100, []), // not on a receivable account
+    tx('g', '2026-01-08', 'bnp', AUS, 400, [], { deletedAt: 9 }),
+  ]
+  it('makes one card per receivable account that has untagged lines', () => {
+    const cards = untaggedCards(accounts, tags, txs, receivableAccountIds(accounts))
+    expect(cards.map((c) => c.id)).toEqual([`untagged:${AUS}`, 'untagged:cpam'])
+    expect(cards[0]).toMatchObject({ name: 'Außenstände – ohne Tag', net: 5000 - 700, txIds: ['a', 'd'], untagged: true })
+    expect(cards[1]).toMatchObject({ name: 'CPAM – ohne Tag', net: 1000 })
   })
 })
