@@ -338,7 +338,7 @@ export default function App() {
             position and unsaved state when you come back (Nov 2026, Markus). */}
         {importExportSeen && (
           <div className={view === 'importexport' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
-            <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} active={view === 'importexport'} />
+            <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} active={view === 'importexport'} onOpenInKonten={openInKonten} />
           </div>
         )}
         {/* Every other nav item (Dashboard,

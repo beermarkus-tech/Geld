@@ -8,6 +8,7 @@ import {
   importTotals,
   matchShare,
   defaultTagIdsFor,
+  buildTransactions,
   effectiveRow,
   effectiveRule,
   matchRule,
@@ -200,5 +201,36 @@ describe('account pair', () => {
     expect(accountPair('bnp', 5000, 'aussenstaende')).toEqual({ fromAccountId: 'aussenstaende', toAccountId: 'bnp' })
     expect(accountPair('bnp', -500, null)).toEqual({ fromAccountId: 'bnp', toAccountId: null })
     expect(accountPair('bnp', 500, null)).toEqual({ fromAccountId: null, toAccountId: 'bnp' })
+  })
+})
+
+describe('buildTransactions', () => {
+  const rs = [
+    { keyword: 'LIDL', label: 'Lidl', categoryId: 'food', counterAccountId: null, detail: 'Einkauf', tagIds: [] },
+    { keyword: 'STEUERN', label: 'Steuern', groupName: 'Rücklagen', counterAccountId: 'livret-a-sparen', tagIds: ['t-steuern'] },
+  ]
+  const batch = { id: 'imp-1', accountId: 'bnp-konto' }
+  const row = (o) => ({ id: 'imp-1-0000', include: true, date: '2026-09-09', bankDate: '2026-09-30', amountCents: -1234, rawDescription: 'X', ...o })
+  it('one-sided expense keeps its negative sign and the rule values', () => {
+    const [t] = buildTransactions([row({ rawDescription: 'CARTE LIDL 1' })], rs, batch, 5)
+    expect(t).toMatchObject({
+      id: 'tx-imp-1-0000', date: '2026-09-09', fromAccountId: 'bnp-konto', toAccountId: null, amountCents: -1234,
+      displayLabel: 'Lidl', detail: 'Einkauf', bankDate: '2026-09-30', importBatchId: 'imp-1', deletedAt: null,
+    })
+    expect(t.lines).toEqual([{ amountCents: -1234, categoryId: 'food', note: 'Einkauf', tags: [] }])
+  })
+  it('a rule with a Gegenkonto makes a transfer with a positive amount and the rule tags', () => {
+    const [t] = buildTransactions([row({ rawDescription: 'VIR STEUERN' })], rs, batch)
+    expect(t).toMatchObject({ fromAccountId: 'bnp-konto', toAccountId: 'livret-a-sparen', amountCents: 1234 })
+    expect(t.lines[0]).toMatchObject({ amountCents: 1234, tags: ['t-steuern'] })
+    const [back] = buildTransactions([row({ rawDescription: 'VIR STEUERN', amountCents: 500 })], rs, batch)
+    expect(back).toMatchObject({ fromAccountId: 'livret-a-sparen', toAccountId: 'bnp-konto', amountCents: 500 })
+  })
+  it('skips unticked rows, allows no category, keeps typed-over values', () => {
+    expect(buildTransactions([row({ include: false })], rs, batch)).toEqual([])
+    const [t] = buildTransactions([row({ rawDescription: 'ROSTOCK 1' })], rs, batch)
+    expect(t.lines[0].categoryId).toBeNull()
+    const [u] = buildTransactions([row({ rawDescription: 'CARTE LIDL', displayLabel: 'Mein Lidl', manual: { displayLabel: true } })], rs, batch)
+    expect(u.displayLabel).toBe('Mein Lidl')
   })
 })

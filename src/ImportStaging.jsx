@@ -8,6 +8,7 @@ import { registerScreenCursor } from './lib/screenCursor'
 import { db } from './firebase'
 import {
   buildStagedRows,
+  buildTransactions,
   accountPair,
   importTotals,
   matchRule,
@@ -61,7 +62,7 @@ function highlighted(text, kw) {
   )
 }
 
-export default function ImportStaging({ active = true }) {
+export default function ImportStaging({ active = true, onOpenInKonten = null }) {
   const { tagById } = useTags()
   const [categories, setCategories] = useState([])
   const [transactions, setTransactions] = useState([])
@@ -170,6 +171,50 @@ export default function ImportStaging({ active = true }) {
     }
     setBusy(false)
   }
+
+  // "In Konten übernehmen": every ticked row becomes one booking, the batch is marked committed
+  // (written last, so an interrupted commit can simply be repeated – the booking ids are fixed),
+  // the staged rows go, and Konten opens on exactly these bookings.
+  async function commit() {
+    const n = batchRows.filter((r) => r.include).length
+    if (!n) return setMessage({ ok: false, text: 'Keine Zeile angehakt – nichts zu übernehmen.' })
+    const ask =
+      totals.difference === 0
+        ? `${n} Buchungen in Konten übernehmen? Nicht angehakte Zeilen werden verworfen.`
+        : `Die Summen stimmen NICHT: Differenz ${centsToEuro(totals.difference)} zum Bank-Saldo.\n\n${n} Buchungen trotzdem in Konten übernehmen?`
+    if (!window.confirm(ask)) return
+    setBusy(true)
+    setMessage(null)
+    try {
+      const txs = buildTransactions(batchRows, rules, openBatch)
+      const ops = txs.map((t) => (b) => b.set(doc(db, 'transactions', t.id), t))
+      ops.push((b) => b.set(doc(db, 'importBatches', openBatch.id), { ...openBatch, status: 'committed', committedAt: Date.now(), txCount: txs.length }))
+      await commitInChunks(ops)
+      await commitInChunks(batchRows.map((r) => (b) => b.delete(doc(db, 'stagedRows', r.id))))
+      setMessage({ ok: true, text: `${txs.length} Buchungen in Konten übernommen.` })
+      onOpenInKonten?.({ txIds: txs.map((t) => t.id), from: 'importexport' })
+    } catch (e) {
+      setMessage({ ok: false, text: `Übernehmen fehlgeschlagen: ${e.message}` })
+    }
+    setBusy(false)
+  }
+
+  // "Import rückgängig": all bookings of one import go to "Kürzlich gelöscht", like any delete.
+  async function undoImport(b) {
+    const mine = transactions.filter((t) => t.importBatchId === b.id && !t.deletedAt)
+    if (!window.confirm(`Import „${b.fileName}“ rückgängig machen? ${mine.length} Buchungen kommen nach „Kürzlich gelöscht“ in Konten.`)) return
+    setBusy(true)
+    const now = Date.now()
+    const ops = mine.map((t) => (bt) => bt.set(doc(db, 'transactions', t.id), { deletedAt: now, updatedAt: now }, { merge: true }))
+    ops.push((bt) => bt.set(doc(db, 'importBatches', b.id), { ...b, status: 'undone' }))
+    await commitInChunks(ops)
+    setMessage({ ok: true, text: `Import „${b.fileName}“ rückgängig gemacht (${mine.length} Buchungen).` })
+    setBusy(false)
+  }
+  const committedBatches = batches
+    .filter((b) => b.status === 'committed')
+    .sort((a, b) => (b.committedAt ?? 0) - (a.committedAt ?? 0))
+    .slice(0, 5)
 
   async function discard() {
     if (!openBatch || !window.confirm('Diesen Import verwerfen? Alle Zeilen hier gehen verloren (Konten bleibt unberührt).')) return
@@ -408,7 +453,10 @@ export default function ImportStaging({ active = true }) {
                 Regeltreffer <b>{share.empfaengerPct} %</b> ({share.empfaenger}/{share.total})
               </span>
             )}
-            <button type="button" onClick={discard} disabled={busy} className="ml-auto rounded-md border border-[var(--color-border)] px-3 py-1">
+            <button type="button" onClick={commit} disabled={busy} className="ml-auto rounded-md bg-[var(--color-computed)] px-3 py-1 font-medium text-white disabled:opacity-50">
+              In Konten übernehmen
+            </button>
+            <button type="button" onClick={discard} disabled={busy} className="rounded-md border border-[var(--color-border)] px-3 py-1">
               Verwerfen
             </button>
           </div>
@@ -451,6 +499,27 @@ export default function ImportStaging({ active = true }) {
             />
           </div>
         </>
+      )}
+      {committedBatches.length > 0 && (
+        <div className="flex flex-col gap-1 border-t border-[var(--color-border)] pt-3 text-sm">
+          <span className="font-medium">Letzte Importe</span>
+          {committedBatches.map((b) => {
+            const ids = transactions.filter((t) => t.importBatchId === b.id && !t.deletedAt).map((t) => t.id)
+            return (
+              <div key={b.id} className="flex flex-wrap items-center gap-3">
+                <span>
+                  {ACCOUNT_NAME[b.accountId]} · {b.fileName} · {new Date(b.committedAt).toLocaleDateString('de-DE')} · {ids.length} Buchungen
+                </span>
+                <button type="button" disabled={!ids.length} onClick={() => onOpenInKonten?.({ txIds: ids, from: 'importexport' })} className="rounded-md border border-[var(--color-border)] px-2 py-0.5">
+                  In Konten zeigen
+                </button>
+                <button type="button" disabled={busy || !ids.length} onClick={() => undoImport(b)} className="rounded-md border border-[var(--color-border)] px-2 py-0.5">
+                  Import rückgängig
+                </button>
+              </div>
+            )
+          })}
+        </div>
       )}
       {peek && (
         <div

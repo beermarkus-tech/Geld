@@ -272,3 +272,34 @@ export function effectiveRow(row, rules) {
     tagIds: r?.tagIds ?? [],
   }
 }
+
+/** The bookings a commit creates from the ticked staged rows (Konten's transaction shape,
+ *  SPEC §2.6). Everything comes from `effectiveRow`, i.e. the rule plus whatever Markus typed
+ *  over. Ids are fixed per row, so repeating an interrupted commit writes the same documents. */
+export function buildTransactions(rows, rules, batch, now = Date.now()) {
+  return rows
+    .filter((r) => r.include)
+    .map((r) => {
+      const e = effectiveRow(r, rules)
+      const { fromAccountId, toAccountId } = accountPair(batch.accountId, r.amountCents, e.counterAccountId)
+      // Konten's sign convention: a transfer (both accounts) carries a positive amount, a one-sided booking its natural sign.
+      const amountCents = fromAccountId && toAccountId ? Math.abs(r.amountCents) : r.amountCents
+      const detail = e.detail ?? ''
+      return {
+        id: `tx-${r.id}`,
+        date: r.date,
+        fromAccountId,
+        toAccountId,
+        amountCents,
+        rawDescription: r.rawDescription,
+        displayLabel: e.displayLabel,
+        lines: [{ amountCents, categoryId: e.categoryId ?? null, note: detail, tags: [...e.tagIds] }],
+        detail,
+        bankDate: r.bankDate ?? null,
+        importBatchId: batch.id,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+      }
+    })
+}

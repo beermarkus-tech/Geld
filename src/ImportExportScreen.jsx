@@ -9,7 +9,7 @@ import ImportStaging from './ImportStaging'
 // (Datenimport/Sicherung) under spec.md §1b.2's one "Import/Export" nav
 // destination — same two screens, just reached as tabs under one entry
 // instead of two separate always-visible buttons.
-export default function ImportExportScreen({ userEmail, usingCachedSession, active = true }) {
+export default function ImportExportScreen({ userEmail, usingCachedSession, active = true, onOpenInKonten = null }) {
   const [tab, setTab] = useState('staging')
   // Bank-Import and Regeln stay mounted once opened (only hidden), so cursor and scroll position survive a tab switch.
   const [seen, setSeen] = useState(() => new Set(['staging']))
@@ -40,7 +40,7 @@ export default function ImportExportScreen({ userEmail, usingCachedSession, acti
         ))}
       </div>
       <div className={tab === 'staging' ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}>
-        <ImportStaging active={active && tab === 'staging'} />
+        <ImportStaging active={active && tab === 'staging'} onOpenInKonten={onOpenInKonten} />
       </div>
       {seen.has('rules') && (
         <div className={tab === 'rules' ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}>
