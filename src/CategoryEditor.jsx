@@ -51,14 +51,34 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
   // Same removal as groupOptions above, and for the same reason (Markus,
   // follow-up: this one turned out to have the identical problem — "gets
   // selected first" — not actually fine as first reported).
+  // Unterkategorie works on its own (Nov 2026, Markus): with no Kategorie chosen it offers every
+  // Unterkategorie ("Tanken (Auto)"), and picking one fills in its Kategorie. Once a Kategorie is
+  // chosen the list is that Kategorie's own Unterkategorien, as before.
   const subcatOptions = useMemo(
     // "Erstattungen" excluded (spec.md §2.4, Sept 2026: "I do not recognize
     // Erstattungen, please remove it from the app") — the Firestore
     // document itself isn't reachable from this session to actually
     // delete, so it's filtered out of every picker instead.
-    () => categories.filter((c) => c.parentCategoryId === groupId && c.name !== 'Erstattungen').map((c) => ({ id: c.id, name: c.name })),
+    () => {
+      const leaves = categories.filter((c) => c.parentCategoryId && c.name !== 'Erstattungen')
+      if (groupId) return leaves.filter((c) => c.parentCategoryId === groupId).map((c) => ({ id: c.id, name: c.name }))
+      const groupName = Object.fromEntries(categories.map((c) => [c.id, c.name]))
+      return leaves
+        .map((c) => ({ id: c.id, name: `${c.name} (${groupName[c.parentCategoryId] ?? ''})` }))
+        .sort((a, b) => a.name.localeCompare(b.name, 'de'))
+    },
     [categories, groupId],
   )
+  // Picking an Unterkategorie sets its Kategorie too (without jumping on to the Unterkategorie list again).
+  const fromSubcatRef = useRef(false)
+  const pickSubcat = (id) => {
+    setCategoryId(id)
+    const parent = categories.find((c) => c.id === id)?.parentCategoryId
+    if (parent && parent !== groupId) {
+      fromSubcatRef.current = true
+      setGroupId(parent)
+    }
+  }
 
   useImperativeHandle(ref, () => ({
     getValue: () => (categoryId ? { categoryId } : null),
@@ -116,7 +136,8 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
   useEffect(() => {
     const changed = prevGroupIdRef.current !== groupId
     prevGroupIdRef.current = groupId
-    if (changed && groupId) subcatRef.current?.focus()
+    if (changed && groupId && !fromSubcatRef.current) subcatRef.current?.focus()
+    fromSubcatRef.current = false
   }, [groupId])
 
   // Escape cancels outright, discarding whatever's mid-edit (Markus) —
@@ -221,10 +242,12 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
         <Listbox
           ref={subcatRef}
           value={categoryId}
-          onChange={setCategoryId}
-          onEnter={apply}
+          onChange={pickSubcat}
+          onEnter={(id) => {
+            pickSubcat(id)
+            apply(id)
+          }}
           options={subcatOptions}
-          disabled={!groupId}
           placeholder="– wählen –"
           searchable
         />

@@ -2374,3 +2374,7 @@ Markus's finding: Ctrl+'+' did create the line, but under a filter it was hidden
 ## Session 37, continued a hundred-and-sixty-seventh time — 2026-11-03 — Yellow: bookings without category
 
 Markus: any booking that is not a transfer (no incoming account) must have a category; show the ones that don't in the same bright yellow, on Kategorie and Unterkategorie. Second rule in `lib/needsEntry.js` (3 tests); rules may now name several columns. A booking without lines yet (blank new row) counts as one empty line. The "Fehlende Einträge (n)" chip counts both rules – expect a large number at first if many old bookings are uncategorized. Not browser-checked this round (harness already removed again); lint/tests/build green.
+
+## Session 37, continued a hundred-and-sixty-eighth time — 2026-11-08 — Unterkategorie first
+
+Markus: pick an Unterkategorie directly, its Kategorie follows. `CategoryEditor` (shared by Konten, Regeln, Bank-Import): the Unterkategorie list is no longer disabled without a Kategorie; it then shows all Unterkategorien as "Name (Kategorie)", searchable; picking one (click or Enter) sets both. Browser-checked with the fake-database harness: Unterkategorie cell → Enter → type "tank" → Enter gives Mobilität / Tanken and the yellow cells clear. Harness files removed again.
