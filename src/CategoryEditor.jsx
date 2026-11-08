@@ -261,7 +261,20 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
           same apply() call. Übernehmen writes directly via onApply and
           closes with api.stopEditing(true), not AG Grid's own commit
           pipeline, which confirmed didn't reliably apply the selection. */}
-      <div className="mt-1 flex justify-end gap-2">
+      <div className="mt-1 flex items-center justify-end gap-2">
+        {/* Same as the Entf key (touch screens have none): empties Kategorie and Unterkategorie. */}
+        {initialCategoryId && (
+          <button
+            type="button"
+            onClick={() => {
+              onClear()
+              api.stopEditing(true)
+            }}
+            className="mr-auto rounded px-2 py-1 text-xs text-[var(--color-alert)]"
+          >
+            Entfernen
+          </button>
+        )}
         <button
           type="button"
           onClick={() => api.stopEditing(true)}

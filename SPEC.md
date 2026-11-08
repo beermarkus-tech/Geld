@@ -511,6 +511,8 @@ Open question raised by Markus: the totality of existing budgeting apps tested s
 
 **Unterkategorie can be picked first (Nov 2026, Markus):** in the category picker (Konten, Regeln, Bank-Import) the Unterkategorie list is usable right away. With no Kategorie chosen it offers every Unterkategorie as "Tanken (Mobilität)" and is searchable; picking one fills in its Kategorie automatically. With a Kategorie chosen it lists that Kategorie's Unterkategorien as before. Opening the picker from the Unterkategorie cell shows **only** the Unterkategorie field (all Unterkategorien as "Name (Kategorie)", searchable); opening it from the Kategorie cell shows both fields as before.
 
+**Removing a category without a keyboard (Nov 2026, Markus):** the category window has a red **Entfernen** button (only when a category is set) that does exactly what the Entf key does – empties Kategorie and Unterkategorie – for tablets.
+
 **No auto-sort, anywhere (Nov 2026, Markus):** no table re-sorts itself. Editing a value – or creating a booking with "+ Neue Buchung" – never moves a row to its sorted place; it stays where it is until the table is sorted by hand (header click or the sort shortcut), which sorts once and becomes the new fixed order. Rows that appear from elsewhere (another device, an import) are slotted in after the row that precedes them in the sorted order. Same in Regeln and the Bank-Import grid (`lib/stickyOrder.js`).
 
 **Confirmed column order (grid and phone-card layout alike):** Datum → Konto → Empfänger → Betrag → Kategorie → Unterkategorie → Details → Tags.

@@ -2382,3 +2382,7 @@ Markus: pick an Unterkategorie directly, its Kategorie follows. `CategoryEditor`
 ## Session 37, continued a hundred-and-sixty-ninth time — 2026-11-08 — Unterkategorie window: one field only
 
 Markus: the window opened from an Unterkategorie cell needs no Kategorie part. `CategoryEditor` with `startField: 'category'` now shows just the Unterkategorie list (all, "Name (Kategorie)"); the Kategorie cell's window is unchanged (both fields). Browser-checked with the harness (removed again).
+
+## Session 37, continued a hundred-and-seventieth time — 2026-11-08 — "Entfernen" button in the category window
+
+Markus: a way to remove a category on a tablet. `CategoryEditor` now has a red "Entfernen" button (shown only when a category is set) = the Entf key (`onClear` + close), in Konten, Regeln and Bank-Import. Lint/tests/build green; not clicked in a browser. Open question: the same button for the tag window (tags are removable one by one there with ×, the Entf key clears all) – not built unless Markus asks.
