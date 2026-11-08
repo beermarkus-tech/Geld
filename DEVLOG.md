@@ -2378,3 +2378,7 @@ Markus: any booking that is not a transfer (no incoming account) must have a cat
 ## Session 37, continued a hundred-and-sixty-eighth time — 2026-11-08 — Unterkategorie first
 
 Markus: pick an Unterkategorie directly, its Kategorie follows. `CategoryEditor` (shared by Konten, Regeln, Bank-Import): the Unterkategorie list is no longer disabled without a Kategorie; it then shows all Unterkategorien as "Name (Kategorie)", searchable; picking one (click or Enter) sets both. Browser-checked with the fake-database harness: Unterkategorie cell → Enter → type "tank" → Enter gives Mobilität / Tanken and the yellow cells clear. Harness files removed again.
+
+## Session 37, continued a hundred-and-sixty-ninth time — 2026-11-08 — Unterkategorie window: one field only
+
+Markus: the window opened from an Unterkategorie cell needs no Kategorie part. `CategoryEditor` with `startField: 'category'` now shows just the Unterkategorie list (all, "Name (Kategorie)"); the Kategorie cell's window is unchanged (both fields). Browser-checked with the harness (removed again).

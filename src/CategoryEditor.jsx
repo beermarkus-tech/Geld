@@ -29,6 +29,8 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
     ? (categories.find((c) => c.id === initialCategoryId)?.parentCategoryId ?? initialCategoryId)
     : null
 
+  // Opened from the Unterkategorie cell: just the Unterkategorie list, the Kategorie follows (Nov 2026, Markus).
+  const subOnly = startField === 'category'
   const [groupId, setGroupId] = useState(currentGroupId ?? '')
   const [categoryId, setCategoryId] = useState(initialCategoryId ?? '')
   const groupRef = useRef(null)
@@ -61,13 +63,13 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
     // delete, so it's filtered out of every picker instead.
     () => {
       const leaves = categories.filter((c) => c.parentCategoryId && c.name !== 'Erstattungen')
-      if (groupId) return leaves.filter((c) => c.parentCategoryId === groupId).map((c) => ({ id: c.id, name: c.name }))
+      if (groupId && !subOnly) return leaves.filter((c) => c.parentCategoryId === groupId).map((c) => ({ id: c.id, name: c.name }))
       const groupName = Object.fromEntries(categories.map((c) => [c.id, c.name]))
       return leaves
         .map((c) => ({ id: c.id, name: `${c.name} (${groupName[c.parentCategoryId] ?? ''})` }))
         .sort((a, b) => a.name.localeCompare(b.name, 'de'))
     },
-    [categories, groupId],
+    [categories, groupId, subOnly],
   )
   // Picking an Unterkategorie sets its Kategorie too (without jumping on to the Unterkategorie list again).
   const fromSubcatRef = useRef(false)
@@ -212,31 +214,33 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
       className="flex flex-col gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-2 shadow-lg"
       style={{ minWidth: 260 }}
     >
+      {!subOnly && (
       <label className="text-xs text-[var(--color-text-muted)]">
-        Kategorie
-        <Listbox
-          ref={groupRef}
-          value={groupId}
-          onChange={(id) => {
-            setGroupId(id)
-            // Only clear the already-chosen Unterkategorie when the group
-            // actually changes (spec.md §3a: a stale leaf from a genuinely
-            // different old group is never left silently selected under
-            // the new one) — Listbox's Enter-to-commit fires onChange even
-            // when re-confirming the same group unchanged (the normal case
-            // when arrowing through an already-categorized transaction),
-            // and clearing on every commit regardless wiped the existing
-            // subcategory before the Unterkategorie list even opened,
-            // losing its pre-highlighted position (Markus: it should open
-            // "with the cursor sitting on... the selected subcategory").
-            if (id !== groupId) setCategoryId('')
-          }}
-          onEnter={(id) => id && subcatRef.current?.focus()}
-          options={groupOptions}
-          placeholder="– wählen –"
-          searchable
-        />
-      </label>
+          Kategorie
+          <Listbox
+            ref={groupRef}
+            value={groupId}
+            onChange={(id) => {
+              setGroupId(id)
+              // Only clear the already-chosen Unterkategorie when the group
+              // actually changes (spec.md §3a: a stale leaf from a genuinely
+              // different old group is never left silently selected under
+              // the new one) — Listbox's Enter-to-commit fires onChange even
+              // when re-confirming the same group unchanged (the normal case
+              // when arrowing through an already-categorized transaction),
+              // and clearing on every commit regardless wiped the existing
+              // subcategory before the Unterkategorie list even opened,
+              // losing its pre-highlighted position (Markus: it should open
+              // "with the cursor sitting on... the selected subcategory").
+              if (id !== groupId) setCategoryId('')
+            }}
+            onEnter={(id) => id && subcatRef.current?.focus()}
+            options={groupOptions}
+            placeholder="– wählen –"
+            searchable
+          />
+        </label>
+      )}
       <label className="text-xs text-[var(--color-text-muted)]">
         Unterkategorie
         <Listbox
