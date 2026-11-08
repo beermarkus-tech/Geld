@@ -128,6 +128,24 @@ const KontoEditor = forwardRef(function KontoEditor(props, ref) {
       className="flex flex-col gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-2 shadow-lg"
       style={{ minWidth: 260 }}
     >
+      {/* Buttons on top: the open drop-down lists below would cover them (Nov 2026, Markus). */}
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => api.stopEditing(true)}
+          className="rounded px-2 py-1 text-xs text-[var(--color-text-muted)]"
+        >
+          Abbrechen
+        </button>
+        <button
+          type="button"
+          onClick={() => apply()}
+          disabled={!fromId && !toId}
+          className="rounded bg-[var(--color-computed)] px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+        >
+          Übernehmen
+        </button>
+      </div>
       {fixedSide === 'from' && (
         <div className="text-xs text-[var(--color-text-muted)]">
           Von (Abfluss): <span className="text-[var(--color-text)]">{filteredAccountName}</span> (Filter)
@@ -174,30 +192,6 @@ const KontoEditor = forwardRef(function KontoEditor(props, ref) {
           />
         </label>
       )}
-      {/* Explicit Übernehmen/Abbrechen (Markus's request) for mouse/touch
-          use — the Enter chain above is the keyboard equivalent of the
-          same apply() call, not a separate path. Übernehmen writes
-          directly via onApply + closes with api.stopEditing(true) (cancel
-          — we've already persisted ourselves) instead of relying on AG
-          Grid's own getValue()/stopEditing() commit pipeline, which
-          confirmed didn't reliably apply the selection. */}
-      <div className="mt-1 flex justify-end gap-2">
-        <button
-          type="button"
-          onClick={() => api.stopEditing(true)}
-          className="rounded px-2 py-1 text-xs text-[var(--color-text-muted)]"
-        >
-          Abbrechen
-        </button>
-        <button
-          type="button"
-          onClick={() => apply()}
-          disabled={!fromId && !toId}
-          className="rounded bg-[var(--color-computed)] px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
-        >
-          Übernehmen
-        </button>
-      </div>
     </div>
   )
 })

@@ -2386,3 +2386,7 @@ Markus: the window opened from an Unterkategorie cell needs no Kategorie part. `
 ## Session 37, continued a hundred-and-seventieth time — 2026-11-08 — "Entfernen" button in the category window
 
 Markus: a way to remove a category on a tablet. `CategoryEditor` now has a red "Entfernen" button (shown only when a category is set) = the Entf key (`onClear` + close), in Konten, Regeln and Bank-Import. Lint/tests/build green; not clicked in a browser. Open question: the same button for the tag window (tags are removable one by one there with ×, the Entf key clears all) – not built unless Markus asks.
+
+## Session 37, continued a hundred-and-seventy-first time — 2026-11-08 — Buttons on top of the pickers; "Alle entfernen" for tags
+
+Markus: the button row was hidden by the open drop-down lists. Abbrechen / Übernehmen (and Entfernen) now sit at the **top** of the category, tag and Konto windows; the tag window got "Alle entfernen" (= Entf key: all tags of the line). Browser-checked with the harness (category Entfernen empties both cells, tag "Alle entfernen" empties the tags, layout screenshot looks right); harness removed again. The Konto window was only moved, not clicked.

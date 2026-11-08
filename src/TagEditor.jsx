@@ -170,6 +170,29 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
           return false
         }}
         header={
+          <div>
+            {/* Buttons on top: the open drop-down list below would cover them (Nov 2026, Markus). */}
+            <div className="mb-1 flex items-center justify-end gap-2">
+              {(initialTagIds.length > 0 || selectedIds.length > 0) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onApply(data, [])
+                    api.stopEditing(true)
+                  }}
+                  className="mr-auto rounded px-2 py-1 text-xs text-[var(--color-alert)]"
+                  title="Entfernt alle Tags (wie die Entf-Taste)"
+                >
+                  Alle entfernen
+                </button>
+              )}
+              <button type="button" onClick={() => api.stopEditing(true)} className="rounded px-2 py-1 text-xs text-[var(--color-text-muted)]">
+                Abbrechen
+              </button>
+              <button type="button" onClick={apply} className="rounded bg-[var(--color-computed)] px-2 py-1 text-xs font-medium text-white">
+                Übernehmen
+              </button>
+            </div>
           <div className="flex flex-wrap gap-1">
             {selectedIds.map((id) => (
               <Chip
@@ -182,16 +205,6 @@ const TagEditor = forwardRef(function TagEditor(props, ref) {
             ))}
             {selectedIds.length === 0 && <span className="text-xs text-[var(--color-text-muted)]">Keine Tags</span>}
           </div>
-        }
-        footer={
-          // Abbrechen closes without writing; Übernehmen keeps the chips as they are now.
-          <div className="mt-1 flex justify-end gap-2">
-            <button type="button" onClick={() => api.stopEditing(true)} className="rounded px-2 py-1 text-xs text-[var(--color-text-muted)]">
-              Abbrechen
-            </button>
-            <button type="button" onClick={apply} className="rounded bg-[var(--color-computed)] px-2 py-1 text-xs font-medium text-white">
-              Übernehmen
-            </button>
           </div>
         }
       />

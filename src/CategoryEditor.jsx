@@ -214,6 +214,37 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
       className="flex flex-col gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-2 shadow-lg"
       style={{ minWidth: 260 }}
     >
+      {/* Buttons on top: the open drop-down lists below would cover them (Nov 2026, Markus). */}
+      <div className="flex items-center justify-end gap-2">
+        {/* Same as the Entf key (touch screens have none): empties Kategorie and Unterkategorie. */}
+        {initialCategoryId && (
+          <button
+            type="button"
+            onClick={() => {
+              onClear()
+              api.stopEditing(true)
+            }}
+            className="mr-auto rounded px-2 py-1 text-xs text-[var(--color-alert)]"
+          >
+            Entfernen
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => api.stopEditing(true)}
+          className="rounded px-2 py-1 text-xs text-[var(--color-text-muted)]"
+        >
+          Abbrechen
+        </button>
+        <button
+          type="button"
+          onClick={() => apply()}
+          disabled={!categoryId && !(allowGroupOnly && groupId)}
+          className="rounded bg-[var(--color-computed)] px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+        >
+          Übernehmen
+        </button>
+      </div>
       {!subOnly && (
       <label className="text-xs text-[var(--color-text-muted)]">
           Kategorie
@@ -256,41 +287,6 @@ const CategoryEditor = forwardRef(function CategoryEditor(props, ref) {
           searchable
         />
       </label>
-      {/* Explicit Übernehmen/Abbrechen (Markus's request) for mouse/touch
-          use — the Enter chain above is the keyboard equivalent of the
-          same apply() call. Übernehmen writes directly via onApply and
-          closes with api.stopEditing(true), not AG Grid's own commit
-          pipeline, which confirmed didn't reliably apply the selection. */}
-      <div className="mt-1 flex items-center justify-end gap-2">
-        {/* Same as the Entf key (touch screens have none): empties Kategorie and Unterkategorie. */}
-        {initialCategoryId && (
-          <button
-            type="button"
-            onClick={() => {
-              onClear()
-              api.stopEditing(true)
-            }}
-            className="mr-auto rounded px-2 py-1 text-xs text-[var(--color-alert)]"
-          >
-            Entfernen
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => api.stopEditing(true)}
-          className="rounded px-2 py-1 text-xs text-[var(--color-text-muted)]"
-        >
-          Abbrechen
-        </button>
-        <button
-          type="button"
-          onClick={() => apply()}
-          disabled={!categoryId && !(allowGroupOnly && groupId)}
-          className="rounded bg-[var(--color-computed)] px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
-        >
-          Übernehmen
-        </button>
-      </div>
     </div>
   )
 })
