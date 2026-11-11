@@ -10,7 +10,7 @@ import { balance, jahresende } from './lib/balance'
 import { AUSSENSTAENDE_ACCOUNT_ID, claimOverview, claimTagIds, receivableAccountIds } from './lib/claims'
 import { centsToEuro } from './lib/format'
 import { newRowPrefill } from './lib/newRowPrefill'
-import { createStickyOrder } from './lib/stickyOrder'
+import { createStickyOrder, makeStickyPostSort } from './lib/stickyOrder'
 import { bookingsNeedingEntry, linesOf, missingColumns } from './lib/needsEntry'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { withRemainder } from './lib/split'
@@ -542,6 +542,11 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // one point both agree on.
   // Rows keep their place after an edit until the table is sorted by hand (lib/stickyOrder.js).
   const stickyOrderRef = useRef(createStickyOrder())
+  // One stable function for the whole life of the grid (a new one per render would re-sort and redraw on every click).
+  const postSortRows = useMemo(
+    () => makeStickyPostSort(stickyOrderRef.current, () => gridRef.current?.api, (n) => n.data?.id, (n) => Boolean(n.data?.__isLine)),
+    [],
+  )
   const pendingFocusIdRef = useRef(null)
   const pendingFocusColRef = useRef('date')
   // null = focus the parent row once it settles (the normal case); a
@@ -3205,10 +3210,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
             ui.set('konten', 'filterModel', model)
           }}
           // No auto-sort: an edited or new row stays where it is until the table is sorted by hand.
-          postSortRows={(params) => {
-            const sig = (gridRef.current?.api?.getColumnState() ?? []).filter((c) => c.sort).map((c) => `${c.colId}:${c.sort}:${c.sortIndex ?? 0}`).join(',')
-            stickyOrderRef.current.apply(params.nodes, sig, (n) => n.data?.id, (n) => Boolean(n.data?.__isLine))
-          }}
+          postSortRows={postSortRows}
           onSortChanged={(e) => {
             const sorted = e.api
               .getColumnState()

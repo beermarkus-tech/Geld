@@ -9,7 +9,7 @@ import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { qualifiedTagName } from './lib/tagStyle'
 import CategoryEditor from './CategoryEditor'
 import { registerScreenCursor } from './lib/screenCursor'
-import { createStickyOrder } from './lib/stickyOrder'
+import { createStickyOrder, makeStickyPostSort } from './lib/stickyOrder'
 import Listbox from './Listbox'
 import TagEditor from './TagEditor'
 import TagPill from './TagPill'
@@ -75,6 +75,7 @@ export default function ImportRules({ active = true }) {
   const [testText, setTestText] = useState('')
   const gridRef = useRef(null)
   const stickyOrderRef = useRef(createStickyOrder())
+  const postSortRows = useMemo(() => makeStickyPostSort(stickyOrderRef.current, () => gridRef.current?.api, (n) => n.data?.id), [])
   const lastCell = useRef(null)
   useEffect(() => {
     if (!active) return undefined
@@ -347,10 +348,7 @@ export default function ImportRules({ active = true }) {
           suppressRowHoverHighlight
           stopEditingWhenCellsLoseFocus
           // No auto-sort: edited rows stay where they are until the table is sorted by hand (lib/stickyOrder.js).
-          postSortRows={(params) => {
-            const sig = (gridRef.current?.api?.getColumnState() ?? []).filter((c) => c.sort).map((c) => `${c.colId}:${c.sort}:${c.sortIndex ?? 0}`).join(',')
-            stickyOrderRef.current.apply(params.nodes, sig, (n) => n.data?.id)
-          }}
+          postSortRows={postSortRows}
           // Delete on a Tags cell removes all tags of the rule (Nov 2026, Markus – same as in Konten).
           onCellKeyDown={(p) => {
             if (p.event?.key !== 'Delete' || p.event.altKey || p.event.shiftKey || p.column?.getColId() !== 'tags') return

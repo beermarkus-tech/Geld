@@ -59,3 +59,15 @@ export function createStickyOrder() {
     },
   }
 }
+
+// A stable `postSortRows` for a grid (lib/stickyOrder.js): AG Grid re-sorts and redraws the rows whenever
+// this option's identity changes, which made every click redraw the table and swallowed double-clicks.
+export function makeStickyPostSort(stickyOrder, getApi, keyOf, isChild) {
+  return (params) => {
+    const sig = (getApi()?.getColumnState() ?? [])
+      .filter((c) => c.sort)
+      .map((c) => `${c.colId}:${c.sort}:${c.sortIndex ?? 0}`)
+      .join(',')
+    stickyOrder.apply(params.nodes, sig, keyOf, isChild)
+  }
+}
