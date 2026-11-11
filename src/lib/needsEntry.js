@@ -53,3 +53,28 @@ export function bookingsNeedingEntry(transactions, ctx) {
     .filter((tx) => !tx.deletedAt && linesOf(tx).some((line) => missingColumns(tx, line, ctx).size > 0))
     .map((tx) => tx.id)
 }
+
+// Quick-filter chips in Konten (Nov 2026, Markus): the bookings with a yellow cell, split by who they
+// belong to. A booking may fall under several chips; "Fehlende Einträge" is what none of the others show.
+const touches = (tx, id) => tx.fromAccountId === id || tx.toAccountId === id
+export const NEEDS_ENTRY_CHIPS = [
+  { key: 'amazon', label: 'Amazon', test: (tx) => /amazon/i.test(`${tx.displayLabel ?? ''} ${tx.rawDescription ?? ''}`) },
+  { key: 'cpam', label: 'CPAM', test: (tx) => touches(tx, 'cpam') },
+  { key: 'aussenstaende', label: 'Außenstände', test: (tx) => touches(tx, 'aussenstaende') },
+]
+
+/** [{key, label, ids}] – one entry per chip that has something to show, then "Fehlende Einträge" (the rest). */
+export function needsEntryChips(transactions, ctx) {
+  const missing = new Set(bookingsNeedingEntry(transactions, ctx))
+  const byId = new Map(transactions.map((t) => [t.id, t]))
+  const out = []
+  const claimed = new Set()
+  for (const chip of NEEDS_ENTRY_CHIPS) {
+    const ids = [...missing].filter((id) => chip.test(byId.get(id)))
+    ids.forEach((id) => claimed.add(id))
+    if (ids.length) out.push({ key: chip.key, label: chip.label, ids })
+  }
+  const rest = [...missing].filter((id) => !claimed.has(id))
+  if (rest.length) out.push({ key: 'rest', label: 'Fehlende Einträge', ids: rest })
+  return out
+}

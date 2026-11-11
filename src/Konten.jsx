@@ -11,7 +11,7 @@ import { AUSSENSTAENDE_ACCOUNT_ID, claimOverview, claimTagIds, receivableAccount
 import { centsToEuro } from './lib/format'
 import { newRowPrefill } from './lib/newRowPrefill'
 import { createStickyOrder, makeStickyPostSort } from './lib/stickyOrder'
-import { bookingsNeedingEntry, linesOf, missingColumns } from './lib/needsEntry'
+import { linesOf, missingColumns, needsEntryChips } from './lib/needsEntry'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { withRemainder } from './lib/split'
 import { registerScreenCursor } from './lib/screenCursor'
@@ -720,7 +720,9 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // grid, and the bookings that still have a gap (for the toolbar chip).
   const needsCtx = useMemo(() => ({ receivableIds, tagById }), [receivableIds, tagById])
   const needsEntryFor = (tx, line, col) => missingColumns(tx, line, needsCtx).has(col)
-  const needsEntryIds = useMemo(() => bookingsNeedingEntry(transactions, needsCtx), [transactions, needsCtx])
+  const needsChips = useMemo(() => needsEntryChips(transactions, needsCtx), [transactions, needsCtx])
+  // a chip is "on" while the grid shows exactly its bookings
+  const chipActive = (chip) => idFilter && idFilter.size === chip.ids.length && chip.ids.every((id) => idFilter.has(id))
   const claimStatus = useMemo(() => {
     const claims = claimOverview(tags, activeTransactions, receivableIds)
     return { all: new Set(claims.map((c) => c.id)), open: new Set(claims.filter((c) => c.net !== 0).map((c) => c.id)) }
@@ -2936,22 +2938,19 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
               <span className="tabular-figure font-medium text-[var(--color-computed)]">{centsToEuro(tagFilterSum)} €</span>
             </span>
           )}
-          {idFilter && (
-            <span className="rounded-full border border-[var(--color-computed)] px-2 py-0.5 text-sm text-[var(--color-text)]">
-              Nur diese {idFilter.size} {idFilter.size === 1 ? 'Buchung' : 'Buchungen'}, alle Jahre
-            </span>
-          )}
-          {needsEntryIds.length > 0 && (
+          {/* Quick filters for the yellow cells (lib/needsEntry.js); each appears only when it has something to show. */}
+          {needsChips.map((chip) => (
             <button
+              key={chip.key}
               type="button"
-              onClick={() => setIdFilter(new Set(needsEntryIds))}
-              title="Zeigt alle Buchungen mit einer gelb markierten Zelle (alle Jahre)"
-              className="rounded-md px-3 py-1 text-sm font-medium"
+              onClick={() => setIdFilter(chipActive(chip) ? null : new Set(chip.ids))}
+              title="Zeigt nur die Buchungen mit einer gelb markierten Zelle (alle Jahre)"
+              className={'rounded-md px-3 py-1 text-sm font-medium ' + (chipActive(chip) ? 'ring-2 ring-[var(--color-text)]' : '')}
               style={{ background: 'var(--color-needs-entry)', color: '#1f1a00' }}
             >
-              Fehlende Einträge ({needsEntryIds.length})
+              {chip.label} ({chip.ids.length})
             </button>
-          )}
+          ))}
           {(accountFilter || anyColumnFilter || idFilter) && (
             <button
               type="button"

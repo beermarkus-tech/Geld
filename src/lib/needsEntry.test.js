@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { bookingsNeedingEntry, missingColumns } from './needsEntry'
+import { bookingsNeedingEntry, missingColumns, needsEntryChips } from './needsEntry'
 
 const ctx = {
   receivableIds: new Set(['aussenstaende']),
@@ -54,5 +54,32 @@ describe('category rule', () => {
   })
   it('a blank new row (no lines yet) counts as one empty line', () => {
     expect(bookingsNeedingEntry([{ id: 'n', fromAccountId: 'bnp', toAccountId: null, lines: [] }], c)).toEqual(['n'])
+  })
+})
+
+describe('needsEntryChips', () => {
+  const c = { receivableIds: new Set(['aussenstaende', 'cpam']), tagById: {} }
+  const t = (id, o = {}) => ({ id, fromAccountId: 'bnp', toAccountId: null, lines: [{ categoryId: null, tags: [] }], displayLabel: '', ...o })
+  it('splits the bookings with a gap by chip; the rest goes to "Fehlende Einträge"', () => {
+    const chips = needsEntryChips(
+      [
+        t('a', { displayLabel: 'Amazon EU' }),
+        t('b', { fromAccountId: 'bnp', toAccountId: 'cpam' }),
+        t('c', { fromAccountId: 'bnp', toAccountId: 'aussenstaende' }),
+        t('d'),
+        t('ok', { lines: [{ categoryId: 'x', tags: [] }] }),
+      ],
+      c,
+    )
+    expect(chips.map((x) => [x.key, x.ids])).toEqual([
+      ['amazon', ['a']],
+      ['cpam', ['b']],
+      ['aussenstaende', ['c']],
+      ['rest', ['d']],
+    ])
+  })
+  it('leaves out chips with nothing to show', () => {
+    expect(needsEntryChips([t('d')], c).map((x) => x.key)).toEqual(['rest'])
+    expect(needsEntryChips([], c)).toEqual([])
   })
 })
