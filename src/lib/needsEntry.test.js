@@ -58,14 +58,15 @@ describe('category rule', () => {
 })
 
 describe('needsEntryChips', () => {
-  const c = { receivableIds: new Set(['aussenstaende', 'cpam']), tagById: {} }
+  const c = { receivableIds: new Set(['aussenstaende', 'cpam', 'reisekosten-airbus']), tagById: {} }
   const t = (id, o = {}) => ({ id, fromAccountId: 'bnp', toAccountId: null, lines: [{ categoryId: null, tags: [] }], displayLabel: '', ...o })
-  it('splits the bookings with a gap by chip; the rest goes to "Fehlende Einträge"', () => {
+  it('splits the bookings with a gap by chip; the rest goes to "Andere"', () => {
     const chips = needsEntryChips(
       [
         t('a', { displayLabel: 'Amazon EU' }),
         t('b', { fromAccountId: 'bnp', toAccountId: 'cpam' }),
         t('c', { fromAccountId: 'bnp', toAccountId: 'aussenstaende' }),
+        t('e', { fromAccountId: 'bnp', toAccountId: 'reisekosten-airbus' }),
         t('d'),
         t('ok', { lines: [{ categoryId: 'x', tags: [] }] }),
       ],
@@ -75,6 +76,7 @@ describe('needsEntryChips', () => {
       ['amazon', ['a']],
       ['cpam', ['b']],
       ['aussenstaende', ['c']],
+      ['airbus', ['e']],
       ['rest', ['d']],
     ])
   })

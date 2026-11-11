@@ -55,15 +55,16 @@ export function bookingsNeedingEntry(transactions, ctx) {
 }
 
 // Quick-filter chips in Konten (Nov 2026, Markus): the bookings with a yellow cell, split by who they
-// belong to. A booking may fall under several chips; "Fehlende Einträge" is what none of the others show.
+// belong to. A booking may fall under several chips; "Andere" is what none of the others show.
 const touches = (tx, id) => tx.fromAccountId === id || tx.toAccountId === id
 export const NEEDS_ENTRY_CHIPS = [
   { key: 'amazon', label: 'Amazon', test: (tx) => /amazon/i.test(`${tx.displayLabel ?? ''} ${tx.rawDescription ?? ''}`) },
   { key: 'cpam', label: 'CPAM', test: (tx) => touches(tx, 'cpam') },
   { key: 'aussenstaende', label: 'Außenstände', test: (tx) => touches(tx, 'aussenstaende') },
+  { key: 'airbus', label: 'Airbus', test: (tx) => touches(tx, 'reisekosten-airbus') },
 ]
 
-/** [{key, label, ids}] – one entry per chip that has something to show, then "Fehlende Einträge" (the rest). */
+/** [{key, label, ids}] – one entry per chip that has something to show, then "Andere" (the rest). */
 export function needsEntryChips(transactions, ctx) {
   const missing = new Set(bookingsNeedingEntry(transactions, ctx))
   const byId = new Map(transactions.map((t) => [t.id, t]))
@@ -75,6 +76,6 @@ export function needsEntryChips(transactions, ctx) {
     if (ids.length) out.push({ key: chip.key, label: chip.label, ids })
   }
   const rest = [...missing].filter((id) => !claimed.has(id))
-  if (rest.length) out.push({ key: 'rest', label: 'Fehlende Einträge', ids: rest })
+  if (rest.length) out.push({ key: 'rest', label: 'Andere', ids: rest })
   return out
 }

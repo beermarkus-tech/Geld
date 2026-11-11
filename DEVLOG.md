@@ -2398,3 +2398,7 @@ Markus: the button row was hidden by the open drop-down lists. Abbrechen / Über
 ## Session 37, continued a hundred-and-seventy-third time — 2026-11-11 — Quick-filter chips for the yellow cells
 
 Markus: chips Amazon / CPAM / Außenstände next to "Filter zurücksetzen", each only the bookings with missing info, shown only when non-empty; "Fehlende Einträge" = the yellow bookings not in the other chips; "Nur diese n Buchungen, alle Jahre" removed. `needsEntryChips()` + `NEEDS_ENTRY_CHIPS` in `lib/needsEntry.js` (2 tests); Konten renders them, an active chip is ringed, clicking it again clears. Browser-checked with the harness (Amazon 2, CPAM 1, Fehlende 1; toggling off restores all). Assumptions to confirm: "Amazon" = the word in Empfänger/bank text; "Reisekosten Airbus" has no chip, its yellow bookings land in "Fehlende Einträge".
+
+## Session 37, continued a hundred-and-seventy-fourth time — 2026-11-11 — Chip "Airbus", "Fehlende Einträge" → "Andere"
+
+Markus: bookings on Reisekosten Airbus with yellow cells get their own chip "Airbus"; the catch-all chip is renamed "Andere". Order: Amazon, CPAM, Außenstände, Airbus, Andere. Test extended; lint/tests/build green (UI text only, no new browser check).
