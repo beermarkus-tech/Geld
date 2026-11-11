@@ -515,6 +515,8 @@ Open question raised by Markus: the totality of existing budgeting apps tested s
 
 **The Konto window — two lists side by side (Nov 2026, Markus: the stacked dropdowns were unintuitive):** the window shows two always-visible lists next to each other, left **Von (Abfluss)** = the account the money leaves, right **Nach (Zufluss)** = the account it arrives on. What the booking already has is pre-selected in its list (a one-sided booking shows "– keins –" on the other side); this also holds under an account filter, where both sides stay editable. Pick one entry per list, then Übernehmen / Enter (not without any account). Keyboard: Up/Down in a list, Left/Right to the other list, typing letters jumps, Esc cancels. Jahresabschluß is offered on the left only.
 
+**Cells stay editable under a filter (fixed Nov 2026, Markus):** with a column filter active, double-clicking a cell did not open its editor (or closed it at once), because the grid reloaded all its columns, and so re-ran the filter, on every click. The grid's column defaults are now one fixed object (Konten, Regeln, Bank-Import, Verlauf).
+
 **No auto-sort, anywhere (Nov 2026, Markus):** no table re-sorts itself. Editing a value – or creating a booking with "+ Neue Buchung" – never moves a row to its sorted place; it stays where it is until the table is sorted by hand (header click or the sort shortcut), which sorts once and becomes the new fixed order. Rows that appear from elsewhere (another device, an import) are slotted in after the row that precedes them in the sorted order. Same in Regeln and the Bank-Import grid (`lib/stickyOrder.js`).
 
 **Confirmed column order (grid and phone-card layout alike):** Datum → Konto → Empfänger → Betrag → Kategorie → Unterkategorie → Details → Tags.

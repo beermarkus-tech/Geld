@@ -2402,3 +2402,7 @@ Markus: chips Amazon / CPAM / Außenstände next to "Filter zurücksetzen", each
 ## Session 37, continued a hundred-and-seventy-fourth time — 2026-11-11 — Chip "Airbus", "Fehlende Einträge" → "Andere"
 
 Markus: bookings on Reisekosten Airbus with yellow cells get their own chip "Airbus"; the catch-all chip is renamed "Andere". Order: Amazon, CPAM, Außenstände, Airbus, Andere. Test extended; lint/tests/build green (UI text only, no new browser check).
+
+## Session 37, continued a hundred-and-seventy-fifth time — 2026-11-11 — Editors closed immediately under a filter (root cause of the double-click problem)
+
+Reproduced in the harness: with a column filter (e.g. Empfänger "amazon") a double-click opened no editor; Enter worked. Cause: `defaultColDef` was a new object on every render in Konten (and Regeln, Bank-Import, Verlauf); AG Grid reloads all columns when it changes, which re-runs the filter and cancels an open editor – and every click re-rendered Konten. Fixed by making `defaultColDef` (and Konten's `rowSelection` / `isFullWidthRow`) stable. After the fix: double-click opens the editor under the filter in Konten (kategorie, empfaenger, tags); Regeln 28 of 28. This is most likely also the "double-click works only rarely" report from 2026-11-11 (an earlier "not reproduced" entry – it was only reproducible with a filter active). Bank-Import grid not re-clicked this round (no staged rows in the harness), Verlauf not clicked.

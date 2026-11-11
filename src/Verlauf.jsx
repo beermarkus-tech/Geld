@@ -33,6 +33,8 @@ import { isLabelId, labelIdFor, labelNames } from './lib/labels'
 // Ctrl/Cmd+Delete deletes a row (Oct 2026, Markus); the grid's own "Delete clears
 // the cell" must not run on it too — onCellKeyDown still sees the key.
 const isCtrlDelete = (p) => !p.editing && p.event.key === 'Delete' && (p.event.ctrlKey || p.event.metaKey)
+// A constant: a new object per render makes AG Grid reload all columns (and close open editors).
+const VERLAUF_DEFAULT_COL_DEF = { suppressMovable: true, sortable: false, filter: false, resizable: true, suppressKeyboardEvent: isCtrlDelete }
 
 ModuleRegistry.registerModules([AllCommunityModule])
 syncAgGridColorScheme()
@@ -2299,7 +2301,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
             }
           }}
           columnDefs={columnDefs}
-          defaultColDef={{ suppressMovable: true, sortable: false, filter: false, resizable: true, suppressKeyboardEvent: isCtrlDelete }}
+          defaultColDef={VERLAUF_DEFAULT_COL_DEF}
           // No row-add/remove/reorder animation on this screen (Markus,
           // Sept 2026: "is there a way to stop ag grid animations for this
           // screen") — a breakdown block expanding/collapsing or the

@@ -244,6 +244,10 @@ export default function ImportStaging({ active = true, onOpenInKonten = null }) 
   const isAuto = (row) => Boolean(matchRule(rules, row.rawDescription)) && !row.manual?.displayLabel && !row.manual?.categoryId && !row.manual?.detail
   const grey = (p) => (isAuto(p.data) ? GREY : '')
 
+  // Stable between renders (a new object makes AG Grid reload all columns and close open editors); follows the rules.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- grey only reads rules
+  const defaultColDef = useMemo(() => ({ suppressMovable: true, resizable: true, cellClass: grey }), [rules])
+
   const columnDefs = useMemo(
     () => [
       {
@@ -469,7 +473,7 @@ export default function ImportStaging({ active = true, onOpenInKonten = null }) 
               theme={themeQuartz}
               rowData={batchRows}
               columnDefs={columnDefs}
-              defaultColDef={{ suppressMovable: true, resizable: true, cellClass: grey }}
+              defaultColDef={defaultColDef}
               getRowId={(p) => p.data.id}
               tooltipShowDelay={400}
               // No auto-sort: edited rows stay where they are until the table is sorted by hand (lib/stickyOrder.js).

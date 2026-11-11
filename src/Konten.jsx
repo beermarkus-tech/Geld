@@ -371,6 +371,8 @@ function OpeningRow({ data, api }) {
 // Its model also understands the "contains" / "equals" / "blank" text models
 // that Quickview's jump into Konten and the remembered state set directly.
 const QUICK_FILTER = { filter: QuickFilter }
+const ROW_SELECTION = { mode: 'singleRow', checkboxes: false, enableClickSelection: true }
+const isOpeningRow = (p) => Boolean(p.rowNode.data?.__opening)
 
 // Column filters / sort remembered from the last session (lib/uiState.js);
 // only known filterable columns are taken over, anything else is dropped.
@@ -1354,6 +1356,19 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     return norm(cellText(p.api, p.node, p.column.getColId())).includes(f.needle)
   }
   const findCellCurrent = (p) => findRef.current.nodeId === p.node?.id && findCellHit(p)
+  // One stable object for the whole life of the grid: AG Grid reloads every column (and re-runs the
+  // filter, which closes an open cell editor) whenever this option's identity changes – a new object
+  // per render made double-clicks fail while a filter was active (Nov 2026). The closures only read refs.
+  const defaultColDef = useMemo(
+    () => ({
+      suppressMovable: true,
+      suppressKeyboardEvent: suppressGridDelete,
+      // the global search's tints (see findCellHit)
+      cellClassRules: { 'konten-find-hit': findCellHit, 'konten-find-current': findCellCurrent },
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- findCellHit/findCellCurrent only read refs
+    [],
+  )
 
   useEffect(() => {
     const onKeyDown = (e) => {
@@ -3190,7 +3205,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           rowData={displayRows}
           columnDefs={columnDefs}
           pinnedTopRowData={openingRow ? [openingRow] : undefined}
-          isFullWidthRow={(p) => Boolean(p.rowNode.data?.__opening)}
+          isFullWidthRow={isOpeningRow}
           fullWidthCellRenderer={OpeningRow}
           // Mirrors AG Grid's own column-filter state into React (Markus's
           // "Filter zurücksetzen" button needs to know this) — also fires
@@ -3226,15 +3241,10 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           // Markus's request: no accidental drag-reordering or hiding.
           // Plain Delete does nothing outside an edit (Oct 2026): AG Grid would
           // otherwise empty the cell and save it — deleting a row is Ctrl+Delete.
-          defaultColDef={{
-            suppressMovable: true,
-            suppressKeyboardEvent: suppressGridDelete,
-            // the global search's tints (see findCellHit)
-            cellClassRules: { 'konten-find-hit': findCellHit, 'konten-find-current': findCellCurrent },
-          }}
+          defaultColDef={defaultColDef}
           // Single-row selection just for "+ Neue Buchung"'s "insert below
           // the selected row" — not a bulk-actions feature.
-          rowSelection={{ mode: 'singleRow', checkboxes: false, enableClickSelection: true }}
+          rowSelection={ROW_SELECTION}
           // No hover tint: on a touchscreen the last tap leaves the pointer
           // parked on screen, so the hover highlight sticks to whichever row
           // scrolls under that spot — a second "selected-looking" row that

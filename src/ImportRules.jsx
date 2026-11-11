@@ -19,6 +19,8 @@ ModuleRegistry.registerModules([AllCommunityModule])
 syncAgGridColorScheme()
 
 const NONE = '–'
+// A constant: a new object per render makes AG Grid reload all columns (and close open editors).
+const DEFAULT_COL_DEF = { suppressMovable: true, resizable: true }
 
 // Gegenkonto popup for one rule: the same Listbox dropdown as the Konto editor in Konten, one account only.
 const GegenkontoEditor = forwardRef(function GegenkontoEditor({ accounts, initialId, onApply, api }, ref) {
@@ -343,7 +345,7 @@ export default function ImportRules({ active = true }) {
           theme={themeQuartz}
           rowData={shown}
           columnDefs={columnDefs}
-          defaultColDef={{ suppressMovable: true, resizable: true }}
+          defaultColDef={DEFAULT_COL_DEF}
           getRowId={(p) => p.data.id}
           suppressRowHoverHighlight
           stopEditingWhenCellsLoseFocus
