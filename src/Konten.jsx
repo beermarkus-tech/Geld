@@ -938,6 +938,18 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // Pre-fills fromAccountId from the active account filter, if any, so the
   // new row is actually visible in a filtered view instead of vanishing
   // the moment it's created (it wouldn't match the filter otherwise).
+  function searchEmpfaenger() {
+    const api = gridRef.current?.api
+    const row = api?.getSelectedRows()?.[0] ?? api?.getDisplayedRowAtIndex(api.getFocusedCell()?.rowIndex ?? -1)?.data
+    const tx = row?.__isLine ? row.__parent : row
+    const text = (tx?.displayLabel || tx?.rawDescription || '').trim()
+    if (!text) return
+    const url = `https://www.google.com/search?q=${encodeURIComponent(text)}`
+    // the same named window is reused, so repeated searches do not pile up windows
+    const w = window.open(url, 'geld-suche', 'popup=yes,width=560,height=820')
+    if (!w) window.open(url, '_blank', 'noopener')
+  }
+
   async function addRow() {
     const selected = gridRef.current?.api?.getSelectedRows()?.[0]
     const today = new Date().toISOString().slice(0, 10)
@@ -2896,7 +2908,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
             Wiederherstellen action. */}
         <label className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
           <input type="checkbox" checked={showDeleted} onChange={(e) => setShowDeleted(e.target.checked)} />
-          Kürzlich gelöscht
+          Gelöscht
         </label>
         {/* Manual "empty the trash" (Markus), only reachable while browsing
             the deleted rows — a real, irreversible delete, so it opens a
@@ -2919,6 +2931,17 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           className="rounded-md bg-[var(--color-computed)] px-3 py-1 text-sm font-medium text-white"
         >
           + Neue Buchung
+        </button>
+        {/* Google search for the Empfänger of the selected row (Nov 2026, Markus): opens in one small
+            reusable window next to the app. Google cannot be embedded in the page itself (it refuses
+            to be framed), so this is a separate browser window / the device's in-app browser. */}
+        <button
+          type="button"
+          onClick={searchEmpfaenger}
+          title="Google-Suche nach dem Empfänger der markierten Zeile"
+          className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm"
+        >
+          🔍 Suchen
         </button>
 
         {/* Everything right-aligned lives in one shared wrapper with a
@@ -3060,7 +3083,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
                     <b>Strg+K</b> — Sprung ins Konto-Panel
                   </li>
                   <li>
-                    <b>Strg+H</b> — Kürzlich gelöscht ein-/ausblenden
+                    <b>Strg+H</b> — Gelöscht ein-/ausblenden
                   </li>
                   <li>
                     <b>Strg+D</b> — Positionen ein-/ausklappen
