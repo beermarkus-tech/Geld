@@ -2410,3 +2410,7 @@ Reproduced in the harness: with a column filter (e.g. Empfänger "amazon") a dou
 ## Session 37, continued a hundred-and-seventy-sixth time — 2026-11-14 — Google search button in Konten
 
 Markus: click an Empfänger, press a button, search Google, ideally in an in-app window. "🔍 Suchen" next to "+ Neue Buchung" (selected row's Empfänger, else bank text) opens `google.com/search?q=…` via `window.open` in one reusable small window ("geld-suche"). An embedded in-page browser is impossible (Google blocks framing), so on a tablet it depends on the device whether this shows as an in-app browser view or a tab. "Kürzlich gelöscht" renamed "Gelöscht". Browser-checked with the harness (the click calls `window.open` with the right, URL-encoded address and the button fits in the toolbar); the real Google window was not opened from the sandbox.
+
+## Session 37, continued a hundred-and-seventy-seventh time — 2026-11-14 — Amazon chip also catches AMZ / AMZN
+
+Markus: Amazon can also be written AMZ or AMZN. The chip's test is now `/amazon|\bamz/i` on Empfänger + bank text (any word starting with "AMZ", so also "AMZNMKTP" or "AMZ*1A2B3"). Test added.

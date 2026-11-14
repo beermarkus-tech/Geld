@@ -58,7 +58,7 @@ export function bookingsNeedingEntry(transactions, ctx) {
 // belong to. A booking may fall under several chips; "Andere" is what none of the others show.
 const touches = (tx, id) => tx.fromAccountId === id || tx.toAccountId === id
 export const NEEDS_ENTRY_CHIPS = [
-  { key: 'amazon', label: 'Amazon', test: (tx) => /amazon/i.test(`${tx.displayLabel ?? ''} ${tx.rawDescription ?? ''}`) },
+  { key: 'amazon', label: 'Amazon', test: (tx) => /amazon|\bamz/i.test(`${tx.displayLabel ?? ''} ${tx.rawDescription ?? ''}`) },
   { key: 'cpam', label: 'CPAM', test: (tx) => touches(tx, 'cpam') },
   { key: 'aussenstaende', label: 'Außenstände', test: (tx) => touches(tx, 'aussenstaende') },
   { key: 'airbus', label: 'Airbus', test: (tx) => touches(tx, 'reisekosten-airbus') },

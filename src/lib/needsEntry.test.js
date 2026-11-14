@@ -57,6 +57,15 @@ describe('category rule', () => {
   })
 })
 
+describe('Amazon chip spellings', () => {
+  const c = { receivableIds: new Set(), tagById: {} }
+  it('also catches AMZ and AMZN (also glued to more text), but not unrelated words', () => {
+    const t = (id, label) => ({ id, fromAccountId: 'bnp', toAccountId: null, lines: [{ categoryId: null, tags: [] }], displayLabel: label })
+    const chips = needsEntryChips([t('1', 'AMZ*1A2B3'), t('2', 'AMZN Mktp DE'), t('3', 'AMZNMKTP'), t('4', 'Amazon EU'), t('5', 'Reamzo Shop')], c)
+    expect(chips.find((x) => x.key === 'amazon').ids).toEqual(['1', '2', '3', '4'])
+  })
+})
+
 describe('needsEntryChips', () => {
   const c = { receivableIds: new Set(['aussenstaende', 'cpam', 'reisekosten-airbus']), tagById: {} }
   const t = (id, o = {}) => ({ id, fromAccountId: 'bnp', toAccountId: null, lines: [{ categoryId: null, tags: [] }], displayLabel: '', ...o })
