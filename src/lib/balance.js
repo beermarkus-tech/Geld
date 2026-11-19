@@ -39,7 +39,7 @@ export function balance(accountId, asOfDate, transactions) {
 
 // The bookkeeping plug account of the one opening-balance transaction per
 // account (spec.md §2.3).
-const ANCHOR_ACCOUNT_ID = 'jahresabschluss'
+export const ANCHOR_ACCOUNT_ID = 'jahresabschluss'
 
 /** True for an opening-balance anchor transaction (spec.md §2.3). It is part
  * of every balance, but never of a period's activity: Verlauf's and Planung's
