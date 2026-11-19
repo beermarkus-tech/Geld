@@ -195,7 +195,7 @@ describe('csv separators', () => {
 describe('account pair', () => {
   it('maps Gruppe to a counter account and builds the direction from the sign', () => {
     expect(counterAccountFor('Rücklagen')).toBe('livret-a-sparen')
-    expect(counterAccountFor('Außenstände')).toBe('aussenstaende')
+    expect(counterAccountFor('Außenstände')).toBeNull() // a category since Nov 2026, no account
     expect(counterAccountFor('Wohnen')).toBeNull()
     expect(accountPair('bnp', -17000, 'livret-a-sparen')).toEqual({ fromAccountId: 'bnp', toAccountId: 'livret-a-sparen' })
     expect(accountPair('bnp', 5000, 'aussenstaende')).toEqual({ fromAccountId: 'aussenstaende', toAccountId: 'bnp' })

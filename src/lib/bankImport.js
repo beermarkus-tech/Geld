@@ -217,10 +217,10 @@ export function matchShare(rows, rules) {
 
 /** The other account of a booking, from the rule's Gruppe (Oct 2026, Markus: a keyword
  *  like STEUERN must produce the pair BNP -> Livret A): Rücklagen lines are transfers
- *  into the savings account, Außenstände lines go to/from the claims account. */
+ *  into the savings account. Außenstände is a category since Nov 2026 (no account any more):
+ *  such a line stays on the bank account, its sub-category says which kind of claim it is. */
 export function counterAccountFor(groupName) {
   if (groupName === 'Rücklagen') return 'livret-a-sparen'
-  if (groupName === 'Außenstände') return 'aussenstaende'
   return null
 }
 

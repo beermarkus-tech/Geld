@@ -3,17 +3,18 @@ import { describe, expect, it } from 'vitest'
 import { planPlainTagConversion } from './tagConvert'
 
 const tags = [{ id: 'sco', name: 'Schottland', parentTag: null, class: 'grouping' }]
-const receivableIds = new Set(['aussenstaende', 'airbus'])
+// claim lines = lines in an Außenstände sub-category (Nov 2026)
+const claimCategoryIds = new Set(['verliehen', 'airbus'])
 const transactions = [
-  { id: 'a', fromAccountId: 'bnp', toAccountId: 'airbus', lines: [{ tags: ['RAW GET', 'Hotel'] }] },
-  { id: 'b', fromAccountId: 'airbus', toAccountId: 'bnp', lines: [{ tags: ['RAW GET'] }] },
+  { id: 'a', fromAccountId: 'bnp', toAccountId: null, lines: [{ categoryId: 'airbus', tags: ['RAW GET', 'Hotel'] }] },
+  { id: 'b', fromAccountId: null, toAccountId: 'bnp', lines: [{ categoryId: 'airbus', tags: ['RAW GET'] }] },
   { id: 'c', fromAccountId: 'bnp', toAccountId: null, lines: [{ tags: ['sco', 'Urlaub 2019'] }] },
-  { id: 'd', fromAccountId: 'bnp', toAccountId: 'aussenstaende', lines: [{ tags: ['sco', 'Dirk/Sept'] }] },
-  { id: 'e', fromAccountId: 'bnp', toAccountId: 'aussenstaende', lines: [{ tags: ['Hotel'] }] },
+  { id: 'd', fromAccountId: 'bnp', toAccountId: null, lines: [{ categoryId: 'verliehen', tags: ['sco', 'Dirk/Sept'] }] },
+  { id: 'e', fromAccountId: 'bnp', toAccountId: null, lines: [{ categoryId: 'verliehen', tags: ['Hotel'] }] },
 ]
 
 describe('planPlainTagConversion', () => {
-  const r = planPlainTagConversion({ tags, transactions, receivableIds, now: 7 })
+  const r = planPlainTagConversion({ tags, transactions, claimCategoryIds, now: 7 })
   const byName = Object.fromEntries(r.creates.map((d) => [d.name, d]))
   it('gives every plain-text tag a record with its text as id', () => {
     expect(byName['RAW GET']).toMatchObject({ id: 'RAW GET', class: 'grouping', parentTag: null, createdAt: 7 })
@@ -29,10 +30,10 @@ describe('planPlainTagConversion', () => {
   })
   it('a text that cannot be an id gets a new one, and its bookings are rewritten', () => {
     expect(byName['Dirk/Sept'].id).toBe('dirk-sept')
-    expect(r.rewrites).toEqual([{ ...transactions[3], lines: [{ tags: ['sco', 'dirk-sept'] }] }])
+    expect(r.rewrites).toEqual([{ ...transactions[3], lines: [{ categoryId: 'verliehen', tags: ['sco', 'dirk-sept'] }] }])
   })
   it('labels within a claim become Anspruchsart', () => {
-    const only = planPlainTagConversion({ tags, transactions: transactions.slice(0, 2), receivableIds })
+    const only = planPlainTagConversion({ tags, transactions: transactions.slice(0, 2), claimCategoryIds })
     expect(only.creates.find((d) => d.name === 'Hotel').groupingType).toBe('claim-category')
   })
 })

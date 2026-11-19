@@ -150,39 +150,32 @@ export function tagFilterMatchIds(tagId, tags) {
 // untouched, so hot loops (every line of every booking) never rebuild one.
 const asIdSet = (ids) => (ids instanceof Set ? ids : typeof ids === 'string' ? new Set([ids]) : new Set(ids))
 
-export function claimLineContribution(tx, line, receivableAccountIds) {
-  const receivable = asIdSet(receivableAccountIds)
-  const isReceivable = (id) => receivable.has(id)
-  // A genuinely single-sided booking (only one account set — e.g. a claim
-  // written off as an expense, booked on the receivable account itself) has no
-  // "other side" to read a direction from: the line's own natural sign is its
-  // contribution, exactly as migration/transform-transactions.py's
-  // allocation_tag_delta() does. (Reading it by position instead flipped such
-  // a booking's sign — Oct 2026, Markus: "2025-11 BLR" showed 251,74 € open.)
-  if (!tx.fromAccountId || !tx.toAccountId) return line.amountCents
-  // A transfer: + when money arrives on a receivable account, − when it leaves;
-  // between two receivables, or between two other accounts, it doesn't count.
-  const from = isReceivable(tx.fromAccountId)
-  const to = isReceivable(tx.toAccountId)
-  if (to && !from) return line.amountCents
-  if (from && !to) return -line.amountCents
-  return null
+export function claimLineContribution(tx, line, claimCategoryIds) {
+  // Since Nov 2026 a claim line is a line in one of the Außenstände sub-categories (lib/claims.js);
+  // its contribution is the negated amount: money paid out for someone (−) is owed to us (+).
+  const cats = asIdSet(claimCategoryIds)
+  return cats.has(line.categoryId) ? -line.amountCents : null
 }
 
 // @param {string} tagId
 // @param {string} asOfDate  "YYYY-MM-DD"
 // @param {Array} transactions
-// @param {string|Iterable<string>} aussenstaendeAccountId  one receivable account id, or all of them
+// @param {Set<string>|Iterable<string>} claimCategoryIds  the Außenstände sub-category ids
 // @param {Array} tags
-export function tagFilterTotal(tagId, asOfDate, transactions, aussenstaendeAccountId, tags) {
-  const receivable = asIdSet(aussenstaendeAccountId)
+export function tagFilterTotal(tagId, asOfDate, transactions, claimCategoryIds, tags) {
+  const receivable = asIdSet(claimCategoryIds)
   const matchIds = tagFilterMatchIds(tagId, tags)
   let total = 0
   for (const tx of transactions) {
     if (tx.date > asOfDate) continue
     for (const line of tx.lines ?? []) {
       if (!(line.tags ?? []).some((id) => matchIds.has(id))) continue
-      total += claimLineContribution(tx, line, receivable) ?? 0
+      // A claim line counts as "owed to us" (negated); any other line on a single account keeps its
+      // natural sign (a trip tag adds up its expenses); a transfer between two accounts does not count.
+      const claim = claimLineContribution(tx, line, receivable)
+      if (claim !== null) total += claim
+      else if (!tx.fromAccountId || !tx.toAccountId) total += line.amountCents
+
     }
   }
   return total

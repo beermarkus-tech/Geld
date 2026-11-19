@@ -3,9 +3,8 @@ import { collection, onSnapshot } from 'firebase/firestore'
 
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { db } from './firebase'
-import { balance } from './lib/balance'
 import ui from './lib/uiState'
-import { claimOverview, receivableAccountIds, untaggedCards } from './lib/claims'
+import { claimCategoryIds, claimOverview, claimTotal, untaggedCards } from './lib/claims'
 import { useTags } from './TagsProvider'
 import { centsToEuro } from './lib/format'
 
@@ -17,7 +16,7 @@ const shortDate = (iso) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.`
 export default function Aussenstaende({ onOpenInKonten, active = true }) {
   // Hidden screens keep the newest data aside instead of recomputing on every save elsewhere.
   const syncWhenVisible = useDeferWhileHidden(active)
-  const [accounts, setAccounts] = useState([])
+  const [categories, setCategories] = useState([])
   const { tags, tagById } = useTags() // the central tag list (TagsProvider.jsx)
   const [transactions, setTransactions] = useState([])
   // Both remembered between sessions (lib/uiState.js).
@@ -28,7 +27,7 @@ export default function Aussenstaende({ onOpenInKonten, active = true }) {
 
   useEffect(() => {
     const unsubs = [
-      onSnapshot(collection(db, 'accounts'), (snap) => setAccounts(snap.docs.map((d) => d.data()))),
+      onSnapshot(collection(db, 'categories'), (snap) => setCategories(snap.docs.map((d) => d.data()))),
       onSnapshot(collection(db, 'transactions'), (snap) => {
         const next = snap.docs.map((d) => d.data()).filter((t) => !t.deletedAt)
         syncWhenVisible(() => setTransactions(next))
@@ -37,16 +36,13 @@ export default function Aussenstaende({ onOpenInKonten, active = true }) {
     return () => unsubs.forEach((u) => u())
   }, [])
 
-  const receivableIds = useMemo(() => receivableAccountIds(accounts), [accounts])
-  const claims = useMemo(() => claimOverview(tags, transactions, receivableIds), [tags, transactions, receivableIds])
-  // What the receivable accounts hold in total — the figure Konten's pinned
-  // Außenstände box shows; the claims below are what it is made of.
-  const receivableTotal = useMemo(
-    () => [...receivableIds].reduce((sum, id) => sum + balance(id, '9999-12-31', transactions), 0),
-    [receivableIds, transactions],
-  )
-  // Lines without any claim tag, one card per receivable account – always under "Offen", first.
-  const untagged = useMemo(() => untaggedCards(accounts, tags, transactions, receivableIds), [accounts, tags, transactions, receivableIds])
+  // Claim lines = lines in the category Außenstände (CPAM, Airbus-Reisekosten, Verliehen), lib/claims.js.
+  const claimCats = useMemo(() => claimCategoryIds(categories), [categories])
+  const claims = useMemo(() => claimOverview(tags, transactions, claimCats), [tags, transactions, claimCats])
+  // Everything still open – the figure Konten's Außenstände box shows; the claims below are what it is made of.
+  const receivableTotal = useMemo(() => claimTotal(transactions, claimCats), [transactions, claimCats])
+  // Lines without any claim tag, one card per Außenstände sub-category – always under "Offen", first.
+  const untagged = useMemo(() => untaggedCards(categories, tags, transactions, claimCats), [categories, tags, transactions, claimCats])
   const open = [...untagged, ...claims.filter((c) => c.net !== 0)]
   const settled = claims.filter((c) => c.net === 0)
   const shown = tab === 'open' ? open : settled
@@ -81,7 +77,7 @@ export default function Aussenstaende({ onOpenInKonten, active = true }) {
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
       <div className="flex items-baseline justify-between gap-3 border-b border-[var(--color-border)] pb-2">
-        <span className="text-sm text-[var(--color-text-muted)]">Außenstände gesamt (alle Forderungskonten)</span>
+        <span className="text-sm text-[var(--color-text-muted)]">Außenstände gesamt (alle offenen Forderungen)</span>
         <span className="text-lg font-semibold tabular-nums">{centsToEuro(receivableTotal)} €</span>
       </div>
       <div className="flex gap-2">

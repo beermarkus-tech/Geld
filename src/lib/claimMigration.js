@@ -59,3 +59,60 @@ export function analyzeClaimMigration({ accounts, categories, transactions, rule
     byTarget,
   }
 }
+
+/** The category documents the switch creates (kept if they already exist). */
+export function claimCategoryDocs() {
+  return [
+    { id: 'aussenstaende-kategorie', name: CLAIM_GROUP, parentCategoryId: null, isFixkosten: false },
+    { id: 'aussenstaende-cpam', name: 'CPAM', parentCategoryId: 'aussenstaende-kategorie', isFixkosten: false },
+    { id: 'aussenstaende-airbus-reisekosten', name: 'Airbus-Reisekosten', parentCategoryId: 'aussenstaende-kategorie', isFixkosten: false },
+    { id: 'aussenstaende-verliehen', name: 'Verliehen', parentCategoryId: 'aussenstaende-kategorie', isFixkosten: false },
+  ]
+}
+const SUBCAT_ID = { aussenstaende: 'aussenstaende-verliehen', cpam: 'aussenstaende-cpam', 'reisekosten-airbus': 'aussenstaende-airbus-reisekosten' }
+
+/**
+ * One booking on a Merkkonto, rewritten: the Merkkonto is dropped, the booking becomes one-sided on
+ * the other account (a real account, or Jahresabschluß for an opening balance) with the natural sign
+ * (money out −, money in +), and every line gets the matching Außenstände sub-category (replacing
+ * any category it had) while keeping its tags and notes.
+ */
+export function rewriteClaimBooking(tx, receivable, now = Date.now()) {
+  const f = receivable.has(tx.fromAccountId)
+  const recId = f ? tx.fromAccountId : tx.toAccountId
+  const other = f ? tx.toAccountId : tx.fromAccountId
+  const sign = f ? 1 : -1 // Merkkonto → real account: money came in (+); real → Merkkonto: went out (−)
+  const categoryId = SUBCAT_ID[recId]
+  // A transfer's line amounts are signed in the direction from → to; one-sided they carry the natural sign.
+  const lines = (tx.lines ?? []).length
+    ? tx.lines.map((l) => ({ ...l, amountCents: sign * (l.amountCents ?? 0), categoryId }))
+    : [{ amountCents: sign * (tx.amountCents ?? 0), categoryId, note: tx.detail ?? '', tags: [] }]
+  return {
+    ...tx,
+    fromAccountId: f ? null : other,
+    toAccountId: f ? other : null,
+    amountCents: lines.reduce((s, l) => s + l.amountCents, 0),
+    lines,
+    updatedAt: now,
+  }
+}
+
+/** Everything the switch writes: categories to create, bookings to rewrite, rules to update, accounts to delete. */
+export function planClaimMigration({ accounts, categories, transactions, rules = [], now = Date.now() }) {
+  const a = analyzeClaimMigration({ accounts, categories, transactions, rules })
+  const receivable = new Set(a.receivableIds)
+  const existing = new Set(categories.map((c) => c.id))
+  const bookings = [...a.normal, ...a.anchors].map((i) => rewriteClaimBooking(i.tx, receivable, now))
+  const subName = { 'aussenstaende-verliehen': 'Verliehen', 'aussenstaende-cpam': 'CPAM', 'aussenstaende-airbus-reisekosten': 'Airbus-Reisekosten' }
+  const ruleUpdates = a.rules.map((r) => {
+    const categoryId = SUBCAT_ID[r.counterAccountId] ?? 'aussenstaende-verliehen'
+    return { id: r.id, patch: { counterAccountId: null, groupName: CLAIM_GROUP, categoryId, categoryName: subName[categoryId] } }
+  })
+  return {
+    categories: claimCategoryDocs().filter((c) => !existing.has(c.id)),
+    bookings,
+    ruleUpdates,
+    deleteAccounts: a.receivableIds,
+    blocked: a.between.length + a.external.length, // cases decided as "do not exist" – the switch refuses if they do
+  }
+}

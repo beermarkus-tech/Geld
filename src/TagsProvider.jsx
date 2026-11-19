@@ -36,7 +36,7 @@ export function useTagUsage() {
 //   move(id, newParentId | null)     → { ok } or { ok: false, reason }
 //   setArchived(id, bool)           — the whole family
 //   merge(fromId, intoId)            → { ok, done } or { ok: false, reason }
-//   previewPlainTags(receivableIds) / convertPlainTags(receivableIds) → old plain-text tags → records
+//   previewPlainTags(claimCategoryIds) / convertPlainTags(claimCategoryIds) → old plain-text tags → records
 //   replaceInBlock({ year, targetKey, targetId, planVersion, oldTagId,
 //                    isHeader, lineTagIds, newTagId })
 //                                    → { focusRowId, done: Promise }
@@ -143,13 +143,13 @@ export default function TagsProvider({ children }) {
         if (docs.length) write(docs.map((d) => ({ col: 'tags', id: d.id, data: d })))
       },
       // Step 6 of Phase 5b: every old plain-text tag gets a record (lib/tagConvert.js).
-      previewPlainTags(receivableIds) {
+      previewPlainTags(claimCategoryIds) {
         const d = latest.current.data
-        return planPlainTagConversion({ tags: currentTags(), transactions: d.transactions ?? [], receivableIds })
+        return planPlainTagConversion({ tags: currentTags(), transactions: d.transactions ?? [], claimCategoryIds })
       },
-      convertPlainTags(receivableIds) {
+      convertPlainTags(claimCategoryIds) {
         const d = latest.current.data
-        const plan = planPlainTagConversion({ tags: currentTags(), transactions: d.transactions ?? [], receivableIds })
+        const plan = planPlainTagConversion({ tags: currentTags(), transactions: d.transactions ?? [], claimCategoryIds })
         remember(plan.creates)
         return write([...plan.creates.map((t) => ({ col: 'tags', id: t.id, data: t })), ...plan.rewrites.map((tx) => ({ col: 'transactions', id: tx.id, data: tx }))])
       },

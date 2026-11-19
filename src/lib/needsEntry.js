@@ -26,11 +26,10 @@ export const NEEDS_ENTRY_RULES = [
   },
   {
     id: 'claim-tag',
-    label: 'Außenstände-Buchung ohne Forderungs-Tag',
-    // A line of a booking on a receivable account (Außenstände, CPAM, Reisekosten …) with no claim tag.
+    label: 'Außenstände-Zeile ohne Forderungs-Tag',
+    // A line in the category Außenstände (CPAM, Airbus-Reisekosten, Verliehen) with no claim tag.
     check: (tx, line, ctx) => {
-      const touches = ctx.receivableIds.has(tx.fromAccountId) || ctx.receivableIds.has(tx.toAccountId)
-      if (!touches) return null
+      if (!ctx.claimCategoryIds?.has(line.categoryId)) return null
       return (line.tags ?? []).some((id) => isClaimLike(ctx.tagById[id])) ? null : 'tags'
     },
   },
@@ -56,12 +55,13 @@ export function bookingsNeedingEntry(transactions, ctx) {
 
 // Quick-filter chips in Konten (Nov 2026, Markus): the bookings with a yellow cell, split by who they
 // belong to. A booking may fall under several chips; "Andere" is what none of the others show.
-const touches = (tx, id) => tx.fromAccountId === id || tx.toAccountId === id
+// A booking belongs to a sub-category chip when one of its lines is in that Außenstände sub-category.
+const inCat = (tx, id) => (tx.lines ?? []).some((l) => l.categoryId === id)
 export const NEEDS_ENTRY_CHIPS = [
   { key: 'amazon', label: 'Amazon', test: (tx) => /amazon|\bamz/i.test(`${tx.displayLabel ?? ''} ${tx.rawDescription ?? ''}`) },
-  { key: 'cpam', label: 'CPAM', test: (tx) => touches(tx, 'cpam') },
-  { key: 'aussenstaende', label: 'Außenstände', test: (tx) => touches(tx, 'aussenstaende') },
-  { key: 'airbus', label: 'Airbus', test: (tx) => touches(tx, 'reisekosten-airbus') },
+  { key: 'cpam', label: 'CPAM', test: (tx) => inCat(tx, 'aussenstaende-cpam') },
+  { key: 'verliehen', label: 'Verliehen', test: (tx) => inCat(tx, 'aussenstaende-verliehen') },
+  { key: 'airbus', label: 'Airbus', test: (tx) => inCat(tx, 'aussenstaende-airbus-reisekosten') },
 ]
 
 /** [{key, label, ids}] – one entry per chip that has something to show, then "Andere" (the rest). */

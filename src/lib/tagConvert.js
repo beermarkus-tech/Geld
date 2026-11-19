@@ -8,7 +8,7 @@
 //     a text containing "/" (or "." / "..", or "__…__") as an id: those get a
 //     new id from the name, and their booking lines are rewritten to it.
 //   - type: the claim itself — the first plain-text tag on a line of a booking
-//     to or from a receivable account (Außenstände, CPAM, Reisekosten Airbus) —
+//     with a line in the category Außenstände (CPAM, Airbus-Reisekosten, Verliehen) —
 //     becomes Anspruch; further plain-text tags on such lines become
 //     Anspruchsart (labels within a claim, e.g. "Hotel"); all others none.
 //     (A text that is a claim anywhere is a claim.)
@@ -19,7 +19,7 @@ const validId = (s) => s.length > 0 && s.length <= 700 && !s.includes('/') && s 
 
 // @returns {{ creates: object[], rewrites: object[], counts: { claim: number, 'claim-category': number, none: number } }}
 //   creates   the new tag documents; rewrites   whole booking documents to save (only for texts that needed a new id)
-export function planPlainTagConversion({ tags, transactions, receivableIds, now = Date.now() }) {
+export function planPlainTagConversion({ tags, transactions, claimCategoryIds, now = Date.now() }) {
   const known = new Set(tags.map((t) => t.id))
   const kind = new Map() // text → 'claim' | 'claim-category' | null
   const rank = { 'claim-category': 1, claim: 2 }
@@ -28,7 +28,7 @@ export function planPlainTagConversion({ tags, transactions, receivableIds, now 
     if (prev === undefined || (rank[k] ?? 0) > (rank[prev] ?? 0)) kind.set(text, k)
   }
   for (const tx of transactions) {
-    const receivable = receivableIds.has(tx.fromAccountId) || receivableIds.has(tx.toAccountId)
+    const receivable = (tx.lines ?? []).some((l) => claimCategoryIds.has(l.categoryId))
     for (const line of tx.lines ?? []) {
       let firstPlainSeen = false
       for (const id of line.tags ?? []) {

@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { collection, onSnapshot } from 'firebase/firestore'
 
 import { db } from './firebase'
-import { receivableAccountIds } from './lib/claims'
+import { claimCategoryIds } from './lib/claims'
 import { MOVE_MESSAGES, twinIds } from './lib/tagActions'
 import { TAG_RENAME_MESSAGES } from './lib/tagRename'
 import { qualifiedName } from './lib/tags'
@@ -837,7 +837,7 @@ export default function Settings({ year, onOpenInKonten, onOpenInVerlauf }) {
               {!needle && (
                 <button
                   type="button"
-                  onClick={() => setConvertPreview(tagActions.previewPlainTags(receivableAccountIds(accounts)))}
+                  onClick={() => setConvertPreview(tagActions.previewPlainTags(claimCategoryIds(categories)))}
                   disabled={accounts.length === 0}
                   className="rounded-md bg-[var(--color-computed)] px-3 py-1 text-xs font-medium text-white disabled:opacity-50"
                 >
@@ -880,7 +880,7 @@ export default function Settings({ year, onOpenInKonten, onOpenInVerlauf }) {
                 onClick={async () => {
                   setConverting(true)
                   try {
-                    await tagActions.convertPlainTags(receivableAccountIds(accounts))
+                    await tagActions.convertPlainTags(claimCategoryIds(categories))
                   } finally {
                     setConverting(false)
                     setConvertPreview(null)

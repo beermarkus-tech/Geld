@@ -1,11 +1,25 @@
 import { describe, expect, it } from 'vitest'
 
-import { AUSSENSTAENDE_ACCOUNT_ID as AUS, claimLines, claimOverview, claimTagIds, receivableAccountIds, untaggedCards } from './claims'
+import { claimCategoryIds, claimLines, claimOverview, claimTagIds, claimTotal, receivableAccountIds, untaggedCards } from './claims'
 import { tagFilterTotal } from './tagBalance'
 
-// Synthetic fixtures only.
-const tx = (id, date, from, to, cents, tagIds, extra = {}) => ({ id, date, fromAccountId: from, toAccountId: to, amountCents: cents, displayLabel: id, detail: '', lines: [{ amountCents: cents, categoryId: null, tags: tagIds }], ...extra })
-const REC = new Set([AUS, 'cpam', 'airbus'])
+// Synthetic fixtures only. Since Nov 2026 a claim line is a line in an Außenstände sub-category on a
+// real account; its amount has the natural sign (paid out −, paid back +).
+const V = 'aussenstaende-verliehen'
+const C = 'aussenstaende-cpam'
+const A = 'aussenstaende-airbus-reisekosten'
+const CATS = new Set([V, C, A])
+const tx = (id, date, account, cents, tagIds, categoryId = V, extra = {}) => ({
+  id,
+  date,
+  fromAccountId: cents < 0 ? account : null,
+  toAccountId: cents < 0 ? null : account,
+  amountCents: cents,
+  displayLabel: id,
+  detail: '',
+  lines: [{ amountCents: cents, categoryId, tags: tagIds }],
+  ...extra,
+})
 const tags = [
   { id: 'loan', name: 'Dirk Sept', class: 'grouping', groupingType: null, parentTag: null },
   { id: 'trip', name: '2026-05 HAM', class: 'grouping', groupingType: 'claim', parentTag: null },
@@ -13,33 +27,52 @@ const tags = [
   { id: 'spar', name: 'Sparen', class: 'allocation', parentTag: null },
 ]
 
-describe('claim discovery and totals', () => {
-  const txs = [
-    tx('out', '2026-09-05', 'bar', AUS, 5000, ['loan']),
-    tx('back', '2026-09-20', AUS, 'bar', 4500, ['loan']),
-    tx('lunch', '2026-05-26', 'visa', null, -4480, ['trip', 'meal']),
-    tx('x', '2026-05-27', 'bar', 'dkb', 100, ['loan']), // a transfer between other accounts never counts
-  ]
-
-  it('finds loans by their Außenstände booking and trips by their claim type, never categories/allocation tags', () => {
-    expect(claimTagIds(tags, txs, REC).sort()).toEqual(['loan', 'trip'])
+describe('claimCategoryIds', () => {
+  it('takes the sub-categories of the Außenstände category', () => {
+    const cats = [
+      { id: 'aussenstaende-kategorie', name: 'Außenstände', parentCategoryId: null },
+      { id: V, name: 'Verliehen', parentCategoryId: 'aussenstaende-kategorie' },
+      { id: 'food', name: 'Lebensmittel', parentCategoryId: 'g' },
+    ]
+    expect([...claimCategoryIds(cats)]).toEqual([V])
   })
-
-  it('lists each claim\'s lines and their net equals tagFilterTotal', () => {
-    const lines = claimLines('loan', txs, tags, REC)
-    expect(lines.map((l) => [l.txId, l.cents])).toEqual([['out', 5000], ['back', -4500]])
-    expect(lines.reduce((s, l) => s + l.cents, 0)).toBe(tagFilterTotal('loan', '9999-12-31', txs, REC, tags))
-  })
-
-  it('puts open claims first', () => {
-    const o = claimOverview(tags, [...txs, tx('o2', '2026-01-02', 'bar', AUS, 100, ['loan']), tx('o3', '2026-01-03', AUS, 'bar', 100, ['loan'])], REC)
-    expect(o.map((c) => [c.id, c.net !== 0])).toEqual([['loan', true], ['trip', true]])
-    const settled = claimOverview(tags, [tx('a', '2026-01-02', 'bar', AUS, 500, ['loan']), tx('b', '2026-01-09', AUS, 'bar', 500, ['loan']), tx('c', '2026-05-26', 'visa', null, -100, ['trip'])], REC)
-    expect(settled.map((c) => [c.id, c.net === 0])).toEqual([['trip', false], ['loan', true]])
+  it('receivableAccountIds() (only for the switch) takes every receivable-group account', () => {
+    const ids = receivableAccountIds([{ id: 'a', group: 'receivable' }, { id: 'b', group: 'cash' }, { id: 'c', group: 'receivable' }])
+    expect([...ids]).toEqual(['a', 'c'])
   })
 })
 
-describe('trip and statement tags on a receivable booking', () => {
+describe('claim discovery and totals', () => {
+  const txs = [
+    tx('out', '2026-09-05', 'bar', -5000, ['loan']),
+    tx('back', '2026-09-20', 'bar', 4500, ['loan']),
+    tx('lunch', '2026-05-26', 'visa', -4480, ['trip', 'meal'], A),
+    tx('x', '2026-05-27', 'bar', 100, ['loan'], 'food', { fromAccountId: 'bar', toAccountId: 'dkb' }), // a transfer outside Außenstände never counts
+  ]
+
+  it('finds loans by their Außenstände line and trips by their claim type, never categories/allocation tags', () => {
+    expect(claimTagIds(tags, txs, CATS).sort()).toEqual(['loan', 'trip'])
+  })
+
+  it("lists each claim's lines (+ = owed to us) and their net equals tagFilterTotal", () => {
+    const lines = claimLines('loan', txs, tags, CATS)
+    expect(lines.map((l) => [l.txId, l.cents])).toEqual([['out', 5000], ['back', -4500]])
+    expect(lines.reduce((s, l) => s + l.cents, 0)).toBe(tagFilterTotal('loan', '9999-12-31', txs, CATS, tags))
+  })
+
+  it('puts open claims first', () => {
+    const settled = claimOverview(tags, [tx('a', '2026-01-02', 'bar', -500, ['loan']), tx('b', '2026-01-09', 'bar', 500, ['loan']), tx('c', '2026-05-26', 'visa', -100, ['trip'], A)], CATS)
+    expect(settled.map((c) => [c.id, c.net === 0])).toEqual([['trip', false], ['loan', true]])
+  })
+
+  it('claimTotal adds up what is open, optionally per sub-category and up to a date', () => {
+    expect(claimTotal(txs, CATS)).toBe(5000 - 4500 + 4480)
+    expect(claimTotal(txs, CATS, '9999-12-31', A)).toBe(4480)
+    expect(claimTotal(txs, CATS, '2026-09-10')).toBe(5000 + 4480)
+  })
+})
+
+describe('trip and statement tags on a claim line', () => {
   it('are not claims; an untyped tag there still is', () => {
     const t = [
       { id: 'cars', name: 'Cars', class: 'grouping', groupingType: 'claim' },
@@ -47,8 +80,8 @@ describe('trip and statement tags on a receivable booking', () => {
       { id: 'visa', name: '2025-07', class: 'grouping', groupingType: 'statement' },
       { id: 'dirk', name: 'Dirk Sept', class: 'grouping', groupingType: null },
     ]
-    const txs = [tx('a', '2025-07-31', 'aussenstaende', 'bnp', 88275, ['cars', 'mw', 'visa']), tx('b', '2025-08-01', 'bnp', 'aussenstaende', 500, ['dirk'])]
-    expect(claimTagIds(t, txs, REC).sort()).toEqual(['cars', 'dirk'])
+    const txs = [tx('a', '2025-07-31', 'bnp', 88275, ['cars', 'mw', 'visa']), tx('b', '2025-08-01', 'bnp', -500, ['dirk'])]
+    expect(claimTagIds(t, txs, CATS).sort()).toEqual(['cars', 'dirk'])
   })
 })
 
@@ -58,34 +91,16 @@ describe('labels within a claim', () => {
       { id: '2026-03 GET', name: '2026-03 GET', class: 'grouping', groupingType: 'claim' },
       { id: 'Hotel', name: 'Hotel', class: 'grouping', groupingType: 'claim-category' },
     ]
-    const txs = [tx('a', '2026-03-09', 'visa', 'airbus', 5000, ['2026-03 GET', 'Hotel']), tx('b', '2026-04-22', 'airbus', 'bnp', 2000, ['2026-03 GET'])]
-    expect(claimTagIds(t, txs, REC)).toEqual(['2026-03 GET'])
-    expect(claimOverview(t, txs, REC).map((c) => [c.name, c.net])).toEqual([['2026-03 GET', 3000]])
+    const txs = [tx('a', '2026-03-09', 'visa', -5000, ['2026-03 GET', 'Hotel'], A), tx('b', '2026-04-22', 'bnp', 2000, ['2026-03 GET'], A)]
+    expect(claimTagIds(t, txs, CATS)).toEqual(['2026-03 GET'])
+    expect(claimOverview(t, txs, CATS).map((c) => [c.name, c.net])).toEqual([['2026-03 GET', 3000]])
   })
 })
 
-describe('claims on the other receivable accounts (CPAM, Airbus)', () => {
-  it('are found and totalled', () => {
-    const txs = [tx('exp', '2026-05-01', 'visa', 'airbus', 20000, ['trip']), tx('back', '2026-06-01', 'airbus', 'bnp', 15000, ['trip'])]
-    const o = claimOverview(tags, txs, REC)
-    expect(o).toHaveLength(1)
-    expect(o[0].net).toBe(5000)
-  })
-
-  it('receivableAccountIds() takes every receivable-group account', () => {
-    const ids = receivableAccountIds([{ id: 'a', group: 'receivable' }, { id: 'b', group: 'cash' }, { id: 'c', group: 'receivable' }])
-    expect([...ids]).toEqual(['a', 'c'])
-  })
-})
-
-describe('single-sided bookings on a receivable account (write-offs)', () => {
-  it('count with their own natural sign, as in the migration', () => {
-    // a 100 € claim fully written off as an expense booked on the receivable itself
-    const txs = [
-      tx('open', '2026-01-02', 'bar', AUS, 10000, ['loan']),
-      tx('writeoff', '2026-02-02', AUS, null, -10000, ['loan']),
-    ]
-    expect(claimOverview(tags, txs, REC)[0].net).toBe(0)
+describe('write-offs inside the category', () => {
+  it('a claim written off by an opposite line nets to zero', () => {
+    const txs = [tx('open', '2026-01-02', 'bar', -10000, ['loan']), tx('writeoff', '2026-02-02', 'bar', 10000, ['loan'])]
+    expect(claimOverview(tags, txs, CATS)[0].net).toBe(0)
   })
 })
 
@@ -96,13 +111,9 @@ describe('Dienstreise', () => {
       { id: 'ham-hotel', name: 'Hotel', parentTag: 'ham', class: 'grouping', groupingType: 'business-trip' },
       { id: 'ham-taxi', name: 'Taxi', parentTag: 'ham', class: 'grouping', groupingType: null },
     ]
-    const txs = [
-      tx('a', '2024-05-10', 'visa', 'airbus', 30000, ['ham-hotel']),
-      tx('b', '2024-05-11', 'visa', 'airbus', 5000, ['ham-taxi']),
-      tx('c', '2024-06-20', 'airbus', 'bnp', 30000, ['ham']),
-    ]
-    expect(claimTagIds(t, txs, REC)).toEqual(['ham'])
-    expect(claimOverview(t, txs, REC).map((c) => [c.id, c.net, c.lines.length])).toEqual([['ham', 5000, 3]])
+    const txs = [tx('a', '2024-05-10', 'visa', -30000, ['ham-hotel'], A), tx('b', '2024-05-11', 'visa', -5000, ['ham-taxi'], A), tx('c', '2024-06-20', 'bnp', 30000, ['ham'], A)]
+    expect(claimTagIds(t, txs, CATS)).toEqual(['ham'])
+    expect(claimOverview(t, txs, CATS).map((c) => [c.id, c.net, c.lines.length])).toEqual([['ham', 5000, 3]])
   })
 })
 
@@ -112,30 +123,30 @@ describe('Krankenkasse', () => {
       { id: 'zahn', name: '2026-03 Zahnarzt', parentTag: null, class: 'grouping', groupingType: 'health-insurance' },
       { id: 'zahn-r', name: 'Rechnung', parentTag: 'zahn', class: 'grouping', groupingType: 'health-insurance' },
     ]
-    expect(claimTagIds(t, [], REC)).toEqual(['zahn'])
+    expect(claimTagIds(t, [], CATS)).toEqual(['zahn'])
   })
 })
 
 describe('untaggedCards', () => {
-  const accounts = [
-    { id: AUS, name: 'Außenstände', group: 'receivable' },
-    { id: 'cpam', name: 'CPAM', group: 'receivable' },
-    { id: 'airbus', name: 'Reisekosten Airbus', group: 'receivable' },
-    { id: 'bnp', name: 'BNP', group: 'cash' },
+  const categories = [
+    { id: V, name: 'Verliehen', parentCategoryId: 'aussenstaende-kategorie' },
+    { id: C, name: 'CPAM', parentCategoryId: 'aussenstaende-kategorie' },
+    { id: A, name: 'Airbus-Reisekosten', parentCategoryId: 'aussenstaende-kategorie' },
+    { id: 'food', name: 'Lebensmittel', parentCategoryId: 'g' },
   ]
   const txs = [
-    tx('a', '2026-01-02', 'bnp', AUS, 5000, []), // untagged, Außenstände
-    tx('b', '2026-01-03', 'bnp', AUS, 3000, ['loan']), // tagged
-    tx('c', '2026-01-04', 'bnp', 'cpam', 1000, ['spar']), // allocation tag only → still untagged
-    tx('d', '2026-01-05', AUS, 'bnp', 700, []), // untagged repayment
-    tx('e', '2026-01-06', 'bnp', 'airbus', 900, ['trip']),
-    tx('f', '2026-01-07', 'bnp', null, 100, []), // not on a receivable account
-    tx('g', '2026-01-08', 'bnp', AUS, 400, [], { deletedAt: 9 }),
+    tx('a', '2026-01-02', 'bnp', -5000, []), // untagged, Verliehen
+    tx('b', '2026-01-03', 'bnp', -3000, ['loan']), // tagged
+    tx('c', '2026-01-04', 'bnp', -1000, ['spar'], C), // allocation tag only → still untagged
+    tx('d', '2026-01-05', 'bnp', 700, []), // untagged repayment
+    tx('e', '2026-01-06', 'bnp', -900, ['trip'], A),
+    tx('f', '2026-01-07', 'bnp', -100, [], 'food'), // not a claim line
+    tx('g', '2026-01-08', 'bnp', -400, [], V, { deletedAt: 9 }),
   ]
-  it('makes one card per receivable account that has untagged lines', () => {
-    const cards = untaggedCards(accounts, tags, txs, receivableAccountIds(accounts))
-    expect(cards.map((c) => c.id)).toEqual([`untagged:${AUS}`, 'untagged:cpam'])
-    expect(cards[0]).toMatchObject({ name: 'Außenstände', net: 5000 - 700, txIds: ['a', 'd'], untagged: true })
+  it('makes one card per Außenstände sub-category that has untagged lines', () => {
+    const cards = untaggedCards(categories, tags, txs, CATS)
+    expect(cards.map((c) => c.id)).toEqual([`untagged:${V}`, `untagged:${C}`])
+    expect(cards[0]).toMatchObject({ name: 'Verliehen', net: 5000 - 700, txIds: ['a', 'd'], untagged: true })
     expect(cards[1]).toMatchObject({ name: 'CPAM', net: 1000 })
   })
 })

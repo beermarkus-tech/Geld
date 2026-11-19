@@ -155,22 +155,23 @@ describe('tagJahresende()', () => {
 })
 
 describe('tagFilterTotal()', () => {
-  const AUSSENSTAENDE = 'aussenstaende'
+  // Since Nov 2026 claims are lines in an Außenstände sub-category (no Merkkonto any more).
+  const AUSSENSTAENDE = new Set(['aussenstaende-verliehen'])
 
   it('a loan tag nets to zero once fully repaid — the case that motivated this function (a plain signed-line sum would always be zero-by-construction, hiding a real open balance)', () => {
     const lent = {
       date: '2026-01-01',
       fromAccountId: 'bnp-konto',
-      toAccountId: AUSSENSTAENDE,
-      amountCents: 5000,
-      lines: [{ amountCents: 5000, categoryId: null, note: '', tags: ['dirk'] }],
+      toAccountId: null,
+      amountCents: -5000,
+      lines: [{ amountCents: -5000, categoryId: 'aussenstaende-verliehen', note: '', tags: ['dirk'] }],
     }
     const repaid = {
       date: '2026-02-01',
-      fromAccountId: AUSSENSTAENDE,
+      fromAccountId: null,
       toAccountId: 'bnp-konto',
       amountCents: 5000,
-      lines: [{ amountCents: 5000, categoryId: null, note: '', tags: ['dirk'] }],
+      lines: [{ amountCents: 5000, categoryId: 'aussenstaende-verliehen', note: '', tags: ['dirk'] }],
     }
     expect(tagFilterTotal('dirk', '2026-01-15', [lent], AUSSENSTAENDE, NO_TAGS)).toBe(5000)
     expect(tagFilterTotal('dirk', '2026-12-31', [lent, repaid], AUSSENSTAENDE, NO_TAGS)).toBe(0)
@@ -180,16 +181,16 @@ describe('tagFilterTotal()', () => {
     const lent = {
       date: '2026-01-01',
       fromAccountId: 'bnp-konto',
-      toAccountId: AUSSENSTAENDE,
-      amountCents: 5000,
-      lines: [{ amountCents: 5000, categoryId: null, note: '', tags: ['dirk'] }],
+      toAccountId: null,
+      amountCents: -5000,
+      lines: [{ amountCents: -5000, categoryId: 'aussenstaende-verliehen', note: '', tags: ['dirk'] }],
     }
     const partial = {
       date: '2026-02-01',
-      fromAccountId: AUSSENSTAENDE,
+      fromAccountId: null,
       toAccountId: 'bnp-konto',
       amountCents: 2000,
-      lines: [{ amountCents: 2000, categoryId: null, note: '', tags: ['dirk'] }],
+      lines: [{ amountCents: 2000, categoryId: 'aussenstaende-verliehen', note: '', tags: ['dirk'] }],
     }
     expect(tagFilterTotal('dirk', '2026-12-31', [lent, partial], AUSSENSTAENDE, NO_TAGS)).toBe(3000)
   })
@@ -227,9 +228,9 @@ describe('tagFilterTotal()', () => {
     const lent = {
       date: '2026-06-01',
       fromAccountId: 'bnp-konto',
-      toAccountId: AUSSENSTAENDE,
-      amountCents: 5000,
-      lines: [{ amountCents: 5000, categoryId: null, note: '', tags: ['dirk'] }],
+      toAccountId: null,
+      amountCents: -5000,
+      lines: [{ amountCents: -5000, categoryId: 'aussenstaende-verliehen', note: '', tags: ['dirk'] }],
     }
     expect(tagFilterTotal('dirk', '2026-01-01', [lent], AUSSENSTAENDE, NO_TAGS)).toBe(0)
   })

@@ -7,7 +7,7 @@ import CategoryEditor from './CategoryEditor'
 import { db } from './firebase'
 import KontoEditor from './KontoEditor'
 import { balance, jahresende } from './lib/balance'
-import { AUSSENSTAENDE_ACCOUNT_ID, claimOverview, claimTagIds, receivableAccountIds } from './lib/claims'
+import { claimCategoryIds, claimLines, claimOverview, claimTagIds, claimTotal } from './lib/claims'
 import { centsToEuro } from './lib/format'
 import { newRowPrefill } from './lib/newRowPrefill'
 import { createStickyOrder, makeStickyPostSort } from './lib/stickyOrder'
@@ -715,20 +715,20 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // Ids of claim/loan tags that are still open (net ≠ 0) — drives the small
   // red dot on a line's Unterkategorie (spec §3a/§3g). Read through a ref by
   // the column's renderer; the effect below refreshes the cells when it changes.
-  // Every receivable account (Außenstände, CPAM, Reisekosten Airbus, …) — a
-  // claim's money sits on whichever of them it belongs to.
-  const receivableIds = useMemo(() => receivableAccountIds(accounts), [accounts])
+  // The Außenstände sub-categories (CPAM, Airbus-Reisekosten, Verliehen): a claim is a line in one
+  // of them, its tag says which claim (lib/claims.js; replaced the three Merkkonten, Nov 2026).
+  const claimCats = useMemo(() => claimCategoryIds(categories), [categories])
   // "Needs an entry" signal (lib/needsEntry.js): the context the rules read, a cell check for the
   // grid, and the bookings that still have a gap (for the toolbar chip).
-  const needsCtx = useMemo(() => ({ receivableIds, tagById }), [receivableIds, tagById])
+  const needsCtx = useMemo(() => ({ claimCategoryIds: claimCats, tagById }), [claimCats, tagById])
   const needsEntryFor = (tx, line, col) => missingColumns(tx, line, needsCtx).has(col)
   const needsChips = useMemo(() => needsEntryChips(transactions, needsCtx), [transactions, needsCtx])
   // a chip is "on" while the grid shows exactly its bookings
   const chipActive = (chip) => idFilter && idFilter.size === chip.ids.length && chip.ids.every((id) => idFilter.has(id))
   const claimStatus = useMemo(() => {
-    const claims = claimOverview(tags, activeTransactions, receivableIds)
+    const claims = claimOverview(tags, activeTransactions, claimCats)
     return { all: new Set(claims.map((c) => c.id)), open: new Set(claims.filter((c) => c.net !== 0).map((c) => c.id)) }
-  }, [tags, activeTransactions, receivableIds])
+  }, [tags, activeTransactions, claimCats])
   // Same Set object while its contents are unchanged, so the grid's cells are
   // only refreshed when a claim really opens/closes — not on every save.
   const stableOpenIdsRef = useRef(claimStatus.open)
@@ -815,16 +815,12 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // read accountFilter directly for this purpose now reads instead.
   const filteredAccountId = accountFilter && accountById[accountFilter] ? accountFilter : null
 
-  // Filtering by a receivable account (Außenstände/CPAM/Reisekosten Airbus)
-  // shows only what is still open on it (Oct 2026, Markus: it listed the
-  // whole history and a meaningless total): every year, and only bookings
-  // that carry an open claim's tag or no claim tag at all — a booking whose
-  // claim tags are all closed (nets to zero) is hidden. `sum` is the account's
-  // open amount, counted line by line (a mixed booking such as an opening
-  // balance contributes only its open lines), which equals the account's
-  // balance when every claim nets as it should.
+  // Filtering by an Außenstände sub-category (a row of the Außenstände box above, `cat:<id>`) shows
+  // only what is still open in it: every year, and only bookings with a line in that sub-category
+  // that carries an open claim's tag or no claim tag at all. `sum` is the open amount (+ = owed to us).
+  const claimCatId = accountFilter?.startsWith('cat:') ? accountFilter.slice(4) : null
   const receivableView = useMemo(() => {
-    if (!filteredAccountId || !receivableIds.has(filteredAccountId)) return null
+    if (!claimCatId) return null
     const isClosedLine = (l) => {
       const claimTags = (l.tags ?? []).filter((id) => claimStatus.all.has(id))
       return claimTags.length > 0 && !claimTags.some((id) => claimStatus.open.has(id))
@@ -833,16 +829,14 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     const txs = []
     for (const t of transactions) {
       if (!showDeleted && t.deletedAt) continue
-      if (t.fromAccountId !== filteredAccountId && t.toAccountId !== filteredAccountId) continue
-      const openLines = (t.lines ?? []).filter((l) => !isClosedLine(l))
-      if (openLines.length === 0 && (t.lines ?? []).length > 0) continue
+      const openLines = (t.lines ?? []).filter((l) => l.categoryId === claimCatId && !isClosedLine(l))
+      if (openLines.length === 0) continue
       txs.push(t)
       if (t.deletedAt) continue
-      const single = !t.fromAccountId || !t.toAccountId
-      for (const l of openLines) sum += single ? l.amountCents : t.toAccountId === filteredAccountId ? l.amountCents : -l.amountCents
+      for (const l of openLines) sum -= l.amountCents
     }
     return { txs, sum }
-  }, [filteredAccountId, receivableIds, claimStatus, transactions, showDeleted])
+  }, [claimCatId, claimStatus, transactions, showDeleted])
 
   // Purple/allocation tags (spec.md §1b.4/§2.5) and claim tags (receivable accounts) — any other
   // grouping tag has no accounts of its own to order around. `null`
@@ -850,14 +844,10 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // early-return covers every other case uniformly.
   const filteredAllocationTargets = useMemo(() => {
     if (!accountFilter || filteredAccountId) return null
-    // A claim (Außenstände) is viewed from its receivable account: that
-    // account always on the left, arrow showing where the money went (Oct
-    // 2026, Markus) — the same reordering an allocation tag gets.
-    if (claimStatus.all.has(accountFilter)) return receivableIds
     const tag = tagById[accountFilter]
     if (tag?.class !== 'allocation') return null
     return new Set(tag.reconciliationTargetAccountIds ?? [])
-  }, [accountFilter, filteredAccountId, tagById, claimStatus, receivableIds])
+  }, [accountFilter, filteredAccountId, tagById])
 
   // Each column's "parent-level" comparable/display value, extracted so
   // both its valueGetter (parent-row display) and its comparator (every
@@ -965,6 +955,8 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       tagList: tags.map((t) => ({ id: t.id, name: qualifiedTagName(t, tagById) || t.id })),
       tagFilterId: accountFilter && !filteredAccountId && tagById[accountFilter] ? accountFilter : null,
     })
+    // Under an Außenstände sub-category filter the new row gets that sub-category.
+    if (accountFilter?.startsWith('cat:') && !pre.categoryId) pre.categoryId = accountFilter.slice(4)
     const detail = pre.detail ?? ''
     await setDoc(doc(db, 'transactions', id), {
       id,
@@ -1703,7 +1695,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     if (!api) return
     let cancelled = false
     ;(async () => {
-      if (accountFilter && !filteredAccountId) {
+      if (accountFilter && !filteredAccountId && !accountFilter.startsWith('cat:')) {
         const t = tagById[accountFilter]
         const label = t ? qualifiedTagName(t, tagById) : accountFilter
         // 'contains', not 'equals' — a parent-tag filter (Markus) shows a
@@ -2665,32 +2657,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         cents: jahresende(a.id, Number(year), activeTransactions),
       }))
       const total = items.reduce((sum, i) => sum + i.cents, 0)
-      // The shared Außenstände account's own row only shows while it holds
-      // something not already listed as a claim below (Oct 2026, Markus: a
-      // 30 € claim "Stefan" appeared twice, as the account and as the tag).
-      // CPAM and Reisekosten Airbus always show their own row.
-      // Its amount is what the *untagged* bookings on it add up to (the tagged
-      // ones are the claim rows below); a booking without lines yet (a row
-      // just added, before any tag/category is set) counts as untagged.
-      let untaggedOnShared = 0
-      for (const t of activeTransactions) {
-        if (t.date > `${year}-12-31`) continue
-        const touchesFrom = t.fromAccountId === AUSSENSTAENDE_ACCOUNT_ID
-        if (!touchesFrom && t.toAccountId !== AUSSENSTAENDE_ACCOUNT_ID) continue
-        const single = !t.fromAccountId || !t.toAccountId
-        const lines = t.lines ?? []
-        if (lines.length === 0) {
-          untaggedOnShared += touchesFrom ? -Math.abs(t.amountCents) : Math.abs(t.amountCents)
-          continue
-        }
-        for (const l of lines) {
-          if ((l.tags ?? []).some((id) => claimStatus.all.has(id))) continue
-          untaggedOnShared += single ? l.amountCents : touchesFrom ? -l.amountCents : l.amountCents
-        }
-      }
       const shownItems = items
-        .map((i) => (i.id === AUSSENSTAENDE_ACCOUNT_ID ? { ...i, cents: untaggedOnShared } : i))
-        .filter((i) => i.id !== AUSSENSTAENDE_ACCOUNT_ID || i.cents !== 0)
       // Allocation-tag reconciliation, surfaced here per spec.md §3a's own
       // "Live consistency checks" note ("should surface here, since
       // Konten's pinned header is one of the natural places for always-on
@@ -2704,37 +2671,33 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         .filter((t) => t.class === 'allocation')
         .filter((t) => (t.reconciliationTargetAccountIds ?? []).some((id) => groupAccountIds.has(id)))
         .map((t) => ({ id: t.id, name: t.name, cents: tagJahresende(t.id, Number(year), activeTransactions, tags), tag: t }))
-      // Open claims/loans on the shared Außenstände account (Markus's
-      // design, Sept 2026) — unlike the allocation-tag rows above, there's
-      // no stored per-tag target to read (every claim tag here shares the
-      // one same account, tagFilterTotal hardcodes it rather than needing
-      // one), so the candidate tag list itself has to be *discovered*:
-      // every distinct tag used on a line whose transaction touches
-      // Außenstände. "Open" (shown) vs. "settled" (silently drops off the
-      // list, same as the loan mechanism already described in spec.md
-      // §3a) is exactly "does its total come out to zero."
-      // Claim rows are for the shared Außenstände account only (friends' loans,
-      // Amazon returns) — CPAM and Reisekosten Airbus are their own accounts
-      // with their own row above and get their per-claim view on the
-      // Außenstände screen (Oct 2026, Markus: they showed up twice here).
-      if (group === 'Außenstände' && groupAccountIds.has(AUSSENSTAENDE_ACCOUNT_ID)) {
-        const sharedAccount = new Set([AUSSENSTAENDE_ACCOUNT_ID])
-        // Same claim discovery as the Außenstände screen (lib/claims.js): a
-        // migrated claim is the line's *first* raw tag; later raw tags are
-        // labels (Meal, Hotel, …) and must not show up as claims of their own.
-        const claimItems = claimTagIds(tags, activeTransactions, sharedAccount)
+      // Außenstände (Nov 2026: no accounts any more): one row per sub-category with what is still
+      // open in it at year end (a click filters Konten to it, `cat:<id>`), then the open loans of
+      // "Verliehen" as their own rows (CPAM/Airbus claims have their per-claim view on the
+      // Außenstände screen).
+      if (group === 'Außenstände') {
+        const asOf = `${year}-12-31`
+        const catItems = categories
+          .filter((c) => claimCats.has(c.id))
+          .map((c) => ({ id: `cat:${c.id}`, name: c.name, cents: claimTotal(activeTransactions, claimCats, asOf, c.id) }))
+          .filter((i) => i.cents !== 0)
+        const verliehen = new Set(categories.filter((c) => claimCats.has(c.id) && c.name === 'Verliehen').map((c) => c.id))
+        // only what was booked in "Verliehen" counts here (a CPAM/Airbus claim tag must not show up as a loan)
+        const claimItems = claimTagIds(tags, activeTransactions, verliehen)
           .map((tagId) => ({
             id: tagId,
             name: tagById[tagId]?.name ?? tagId,
-            cents: tagFilterTotal(tagId, `${year}-12-31`, activeTransactions, AUSSENSTAENDE_ACCOUNT_ID, tags),
+            cents: claimLines(tagId, activeTransactions, tags, verliehen)
+              .filter((l) => l.date <= asOf)
+              .reduce((sum, l) => sum + l.cents, 0),
             tag: tagById[tagId],
           }))
           .filter((i) => i.cents !== 0)
-        return { group, items: shownItems, total, tagItems: [...tagItems, ...claimItems] }
+        return { group, items: catItems, total: catItems.reduce((sum, i) => sum + i.cents, 0), tagItems: claimItems }
       }
       return { group, items: shownItems, total, tagItems }
     })
-  }, [accounts, activeTransactions, tags, tagById, year, claimStatus])
+  }, [accounts, activeTransactions, tags, tagById, year, categories, claimCats])
 
   // (Unused tags are removed by TagCleanup.jsx, app-wide.)
   // Completely empty bookings left behind (Oct 2026: Ctrl++ / Tab in other
@@ -2778,10 +2741,11 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     if (!accountFilter) return
     const known =
       accountById[accountFilter] ||
+      (accountFilter.startsWith('cat:') && categories.some((c) => `cat:${c.id}` === accountFilter)) ||
       tagById[accountFilter] ||
       transactions.some((t) => (t.lines ?? []).some((l) => (l.tags ?? []).includes(accountFilter)))
     if (!known) setAccountFilter(null)
-  }, [allLoaded, accountFilter, accountById, tagById, transactions])
+  }, [allLoaded, accountFilter, accountById, tagById, transactions, categories])
   // Scroll back to the remembered top row once, after the rows are in and the
   // cursor restore (which scrolls to the cursor row) has run — best effort.
   const scrollRestoredRef = useRef(false)
@@ -2848,7 +2812,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     : accountFilter && !filteredAccountId
       ? filteredTagForSum?.class === 'allocation'
         ? tagJahresende(accountFilter, Number(year), activeTransactions, tags)
-        : tagFilterTotal(accountFilter, claimStatus.all.has(accountFilter) ? '9999-12-31' : `${year}-12-31`, activeTransactions, receivableIds, tags)
+        : tagFilterTotal(accountFilter, claimStatus.all.has(accountFilter) ? '9999-12-31' : `${year}-12-31`, activeTransactions, claimCats, tags)
       : null
   // Shown for any column filter or account filter (Markus, Sept 2026) — a
   // tag filter keeps its own tag balance above instead (his call).

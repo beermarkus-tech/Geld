@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { collection, onSnapshot } from 'firebase/firestore'
+import { collection, doc, onSnapshot, writeBatch } from 'firebase/firestore'
 
 import { db } from './firebase'
 import { centsToEuro } from './lib/format'
-import { analyzeClaimMigration, CLAIM_TARGETS } from './lib/claimMigration'
+import { analyzeClaimMigration, CLAIM_TARGETS, planClaimMigration } from './lib/claimMigration'
 
 // Settings: a read-only preview for the planned switch from the three Merkkonten to the category
 // "Außenstände" (Nov 2026, Markus). It changes nothing – it shows with the real data which cases
@@ -14,6 +14,8 @@ export default function ClaimMigrationPreview({ onOpenInKonten }) {
   const [transactions, setTransactions] = useState([])
   const [rules, setRules] = useState([])
   const [open, setOpen] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState(null)
   useEffect(() => {
     const subs = [
       ['accounts', setAccounts],
@@ -25,6 +27,38 @@ export default function ClaimMigrationPreview({ onOpenInKonten }) {
   }, [])
   const r = useMemo(() => analyzeClaimMigration({ accounts, categories, transactions, rules }), [accounts, categories, transactions, rules])
   const name = (id) => accounts.find((a) => a.id === id)?.name ?? (id || '—')
+
+  // The switch itself (decided by Markus, Nov 2026): categories first, then the bookings, the rules,
+  // and the three accounts last – so an interrupted run can simply be started again.
+  async function runSwitch() {
+    const plan = planClaimMigration({ accounts, categories, transactions, rules })
+    if (plan.blocked) {
+      setResult({ ok: false, text: `${plan.blocked} Buchungen zwischen Merkkonten oder ohne Gegenkonto – so nicht vorgesehen, bitte melden. Nichts geändert.` })
+      return
+    }
+    const ask = `Umstellung jetzt ausführen?\n\n${plan.bookings.length} Buchungen werden auf die Kategorie „Außenstände“ umgestellt, ${plan.ruleUpdates.length} Import-Regeln angepasst und die ${plan.deleteAccounts.length} Merkkonten gelöscht.\n\nVorher eine Sicherung herunterladen!`
+    if (!window.confirm(ask)) return
+    setBusy(true)
+    setResult(null)
+    try {
+      const ops = [
+        ...plan.categories.map((c) => (b) => b.set(doc(db, 'categories', c.id), c)),
+        ...plan.bookings.map((t) => (b) => b.set(doc(db, 'transactions', t.id), t)),
+        ...plan.ruleUpdates.map((r) => (b) => b.set(doc(db, 'categorizationRules', r.id), r.patch, { merge: true })),
+        ...plan.deleteAccounts.map((id) => (b) => b.delete(doc(db, 'accounts', id))),
+      ]
+      for (let i = 0; i < ops.length; i += 400) {
+        const batch = writeBatch(db)
+        ops.slice(i, i + 400).forEach((op) => op(batch))
+        await batch.commit()
+      }
+      setResult({ ok: true, text: `Umgestellt: ${plan.bookings.length} Buchungen, ${plan.ruleUpdates.length} Regeln, ${plan.deleteAccounts.length} Merkkonten gelöscht.` })
+    } catch (e) {
+      setResult({ ok: false, text: `Abgebrochen: ${e.message} – einfach noch einmal starten, bereits Umgestelltes bleibt.` })
+    }
+    setBusy(false)
+  }
+  if (r.receivableIds.length === 0 && !result) return null // switch done: nothing left to show
 
   const group = (key, title, explain, items) => (
     <div key={key} className="rounded-md border border-[var(--color-border)] px-3 py-2">
@@ -63,9 +97,9 @@ export default function ClaimMigrationPreview({ onOpenInKonten }) {
 
   return (
     <section className="flex flex-col gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
-      <h2 className="text-lg font-semibold">Umstellung Außenstände – Vorschau</h2>
+      <h2 className="text-lg font-semibold">Umstellung Außenstände</h2>
       <p className="text-sm text-[var(--color-text-muted)]">
-        Ändert nichts. Zeigt, welche Buchungen die Umstellung von den Merkkonten auf die Kategorie „Außenstände“ betrifft:{' '}
+        Die Merkkonten werden zur Kategorie „Außenstände“. Die Liste ändert nichts, erst der Knopf unten stellt um:{' '}
         {Object.entries(CLAIM_TARGETS).map(([acc, sub]) => `${name(acc)} → ${sub} (${r.byTarget[sub] ?? 0})`).join(' · ')}
       </p>
       {group('normal', 'normale Fälle', 'Merkkonto ↔ echtes Konto – werden einseitige Buchungen auf dem echten Konto', r.normal)}
@@ -77,6 +111,19 @@ export default function ClaimMigrationPreview({ onOpenInKonten }) {
         <b>{r.existingCategories.length}</b> bestehende Kategorien mit den neuen Namen
         {r.existingCategories.length ? `: ${r.existingCategories.map((c) => c.name).join(', ')}` : ''} – offene Frage 4 · <b>{r.rules.length}</b> Import-Regeln mit
         Gegenkonto auf einem Merkkonto
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        {r.receivableIds.length > 0 && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={runSwitch}
+            className="rounded-md bg-[var(--color-computed)] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {busy ? 'Stellt um…' : 'Umstellung ausführen'}
+          </button>
+        )}
+        {result && <span className={'text-sm ' + (result.ok ? 'text-[var(--color-income)]' : 'text-[var(--color-alert)]')}>{result.text}</span>}
       </div>
     </section>
   )
