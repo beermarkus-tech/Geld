@@ -796,6 +796,10 @@ Colors reuse the app's own green/amber/purple semantics (confirmed fine). Orient
 
 ---
 
+**Built Nov 2026 (Markus: "build it next, put it into the Dashboard for now; later further graphs, then probably sub-tabs"):** the Dashboard nav entry now shows this chart (`Dashboard.jsx`, geometry in `lib/status.js`), full list, no "most-deviating selection" card yet. Details as built: one bar per category with a Plan1 yearly total ≠ 0 (a category without a plan has no pace to measure and is left out); heights are "flat months" = amount ÷ (yearly Plan1 ÷ 12); **side** (blue expense / green income) follows the sign of the yearly Plan1 total (so Firmenwagen can be an income bar); actual = Σ booked lines of closed months only (up to the last month ticked in Verlauf, which is also the dashed line; without any ticked month: the previous calendar month); dark = actual up to the Budgetmonat dot, red = actual beyond it, light = the rest up to 12; the bar's top label is the remaining budget, the bottom label the actual (printed like 3,2k / 469). Filter Alle / Ausgaben / Einnahmen. **Clicking a bar** shows its figures and lets Markus choose its pacing mode (`pacingMode`, stored in `categoryYearSettings`; default fixed-profile) – until a place in planning exists for that choice. Savings-transfer (allocation tag) rows are not bars.
+
+---
+
 ## 3g. Außenstände (open claims & loans) — detailed spec
 
 **Role:** a single, generalized tracker for anything with money temporarily out and expected to come back — Airbus travel-expense claims, CPAM health-cost claims (on hold, §4), informal loans to/from friends and family, and the reimbursement side of Amazon returns — all the same mechanism, differing only in which receivable account and which (if any) claim-category tags are involved. What started as a Reisekosten/CPAM-specific design generalizes cleanly: every one of these is "tag the outflow, tag the eventual inflow the same way, watch for the two to net to zero."

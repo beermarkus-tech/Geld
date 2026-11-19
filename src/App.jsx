@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth'
 
 import { auth } from './firebase'
+import Dashboard from './Dashboard'
 import ImportExportScreen from './ImportExportScreen'
 import Konten from './Konten'
 import { AUTH_GIVE_UP_MS, waitForInitialAuthState } from './lib/authReady'
@@ -325,6 +326,10 @@ export default function App() {
             onBack={quickviewFrom === 'verlauf' ? goBackToVerlauf : null}
           />
         </div>
+        {/* Mounted once, only hidden — like the other data screens (Nov 2026). */}
+        <div className={view === 'dashboard' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
+          <Dashboard year={year} active={view === 'dashboard'} />
+        </div>
         {/* Mounted once, only hidden — like the other data screens (Oct 2026). */}
         <div className={view === 'aussenstaende' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
           <Aussenstaende onOpenInKonten={openInKonten} active={view === 'aussenstaende'} />
@@ -346,7 +351,7 @@ export default function App() {
             resolved Sept 2026 (Markus): a real nav entry exists for each
             from the start anyway, landing on a plain placeholder rather than
             being left out until its own phase ships. */}
-        {!['konten', 'verlauf', 'planung', 'quickview', 'urlaube', 'aussenstaende', 'importexport', 'settings'].includes(view) && (
+        {!['dashboard', 'konten', 'verlauf', 'planung', 'quickview', 'urlaube', 'aussenstaende', 'importexport', 'settings'].includes(view) && (
           <PlaceholderScreen title={ALL_ITEMS.find((i) => i.id === view)?.label ?? view} />
         )}
       </NavShell>
