@@ -1,4 +1,3 @@
-import ClaimMigrationPreview from './ClaimMigrationPreview'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { collection, onSnapshot } from 'firebase/firestore'
 
@@ -668,7 +667,6 @@ export default function Settings({ year, onOpenInKonten, onOpenInVerlauf }) {
       onScroll={(e) => ui.set('settings', 'scrollTop', e.currentTarget.scrollTop)}
       className="mx-auto flex w-full max-w-[1440px] flex-1 flex-col gap-4 overflow-y-auto px-4 py-4"
     >
-      <ClaimMigrationPreview onOpenInKonten={onOpenInKonten} />
       <PlanToleranceSetting />
       <section className="flex flex-col gap-3">
         <div className="flex flex-wrap items-baseline justify-between gap-3">

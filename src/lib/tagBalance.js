@@ -140,7 +140,7 @@ export function tagFilterMatchIds(tagId, tags) {
 //
 // @param {{fromAccountId: string|null, toAccountId: string|null}} tx
 // @param {{amountCents: number}} line
-// @param {string|Iterable<string>} receivableAccountIds  the Außenstände
+// @param {Set<string>|Iterable<string>} claimCategoryIds  the Außenstände sub-categories (formerly: the Außenstände
 //   account, or every `receivable` account (Außenstände, CPAM, Reisekosten
 //   Airbus — a claim's money sits on whichever of them it belongs to; a
 //   single hardcoded account made every CPAM/Airbus claim invisible,

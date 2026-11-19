@@ -21,9 +21,6 @@ export const CLAIM_SUBCATS = {
 /** The ids of the Außenstände sub-categories (whatever they are called today). */
 export const claimCategoryIds = (categories) => new Set(categories.filter((c) => c.parentCategoryId === CLAIM_GROUP_ID).map((c) => c.id))
 
-// The old Merkkonten — only still needed by the one-time switch (lib/claimMigration.js).
-export const receivableAccountIds = (accounts) => new Set(accounts.filter((a) => a.group === 'receivable').map((a) => a.id))
-
 // Every claim/loan tag: top-level tags typed Anspruch or Dienstreise, plus any
 // *untyped* tag used on a claim line (category Außenstände)
 // (a loan tag like "Dirk Sept" may never have been given a type). A tag with

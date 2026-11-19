@@ -268,7 +268,7 @@ const REPORTING_GROUPS = ['Barkonten', 'Bargeld', 'Sparkonten', 'Geldanlage', 'A
 // loan transactions onto it), the panel/filter code below simply finds no
 // transactions touching it and stays quietly inert.
 // (Since Oct 2026 the code reads *every* receivable account, lib/claims.js's
-// receivableAccountIds(), so CPAM/Airbus claims count too — no hardcoded id here.)
+// … superseded Nov 2026: claims are the category Außenstände, lib/claims.js.)
 
 // Keeps a split transaction's line rows glued to their parent under
 // *any* column's sort, not just Datum (Markus: sorting by a different
@@ -729,19 +729,10 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     const claims = claimOverview(tags, activeTransactions, claimCats)
     return { all: new Set(claims.map((c) => c.id)), open: new Set(claims.filter((c) => c.net !== 0).map((c) => c.id)) }
   }, [tags, activeTransactions, claimCats])
-  // Same Set object while its contents are unchanged, so the grid's cells are
-  // only refreshed when a claim really opens/closes — not on every save.
-  const stableOpenIdsRef = useRef(claimStatus.open)
-  if (stableOpenIdsRef.current.size !== claimStatus.open.size || [...claimStatus.open].some((id) => !stableOpenIdsRef.current.has(id))) {
-    stableOpenIdsRef.current = claimStatus.open
-  }
-  const openClaimIds = stableOpenIdsRef.current
   // Read inside the column definitions instead of closing over `year`, so
   // switching year does not rebuild every column (slow on a big grid).
   const yearRef = useRef(year)
   yearRef.current = year
-  const openClaimIdsRef = useRef(openClaimIds)
-  openClaimIdsRef.current = openClaimIds
 
   // Every used value again, ordered by when it was actually *applied* —
   // each transaction's own `updatedAt` (persistTx, above), not its booking
@@ -1671,9 +1662,6 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   useEffect(() => {
     gridRef.current?.api?.refreshCells({ force: true })
   }, [accountFilter])
-  useEffect(() => {
-    gridRef.current?.api?.refreshCells({ columns: ['unterkategorie'], force: true })
-  }, [openClaimIds])
   // A tag renamed or retyped (e.g. in Settings, Oct 2026) redraws the chips.
   useEffect(() => {
     gridRef.current?.api?.refreshCells({ columns: ['tags'], force: true })
@@ -2318,22 +2306,6 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
             ? needsEntryFor(p.data.__parent, p.data.__parent.lines[p.data.__lineIndex], 'unterkategorie')
             : (p.data.lines ?? []).length <= 1 && needsEntryFor(p.data, linesOf(p.data)[0], 'unterkategorie')
           return hole ? 'konten-needs-entry' : p.value === '—' ? 'text-[var(--color-text-muted)]' : undefined
-        },
-        // A small red dot for a line tied to a still-open claim/loan (spec
-        // §3a): on the Unterkategorie value, derived live — it clears itself
-        // once the claim's tag nets to zero. A split booking shows it when
-        // any of its lines is tied to one.
-        cellRenderer: (p) => {
-          const lines = p.data.__isLine ? [p.data.__parent.lines[p.data.__lineIndex]] : (p.data.lines ?? [])
-          const isOpen = lines.some((l) => (l?.tags ?? []).some((id) => openClaimIdsRef.current.has(id)))
-          return isOpen ? (
-            <span>
-              {p.value}
-              <span title="Offener Außenstand" className="ml-1.5 inline-block h-2 w-2 rounded-full bg-[var(--color-alert)]" />
-            </span>
-          ) : (
-            p.value
-          )
         },
         editable: (p) => (p.data.__isLine || (p.data.lines ?? []).length <= 1) && !isRowDeleted(p.data),
         cellEditor: CategoryEditor,

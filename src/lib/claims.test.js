@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { claimCategoryIds, claimLines, claimOverview, claimTagIds, claimTotal, receivableAccountIds, untaggedCards } from './claims'
+import { claimCategoryIds, claimLines, claimOverview, claimTagIds, claimTotal, untaggedCards } from './claims'
 import { tagFilterTotal } from './tagBalance'
 
 // Synthetic fixtures only. Since Nov 2026 a claim line is a line in an Außenstände sub-category on a
@@ -35,10 +35,6 @@ describe('claimCategoryIds', () => {
       { id: 'food', name: 'Lebensmittel', parentCategoryId: 'g' },
     ]
     expect([...claimCategoryIds(cats)]).toEqual([V])
-  })
-  it('receivableAccountIds() (only for the switch) takes every receivable-group account', () => {
-    const ids = receivableAccountIds([{ id: 'a', group: 'receivable' }, { id: 'b', group: 'cash' }, { id: 'c', group: 'receivable' }])
-    expect([...ids]).toEqual(['a', 'c'])
   })
 })
 
