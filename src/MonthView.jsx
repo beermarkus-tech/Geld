@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 
 import { centsToEuro } from './lib/format'
 import { SUBCAT_ORDER } from './lib/categoryOrder'
-import { monthDeviations, scopeMonths, waterfallSteps } from './lib/monthView'
+import { monthDeviations, scopeMonths, significantRows, SIGNIFICANT_SHARE, waterfallSteps } from './lib/monthView'
 import { shortAmount } from './lib/status'
 
 // Dashboard "Monat": where am I this month (or year to date), what is off, and which bookings
@@ -20,30 +20,31 @@ function Waterfall({ data }) {
   const levels = [start, end, ...steps.flatMap((s) => [s.from, s.to])]
   const lo = Math.min(0, ...levels)
   const hi = Math.max(0, ...levels)
-  const W = 70 + (steps.length + 2) * 84
-  const H = 250
-  const top = 20
-  const plotH = 150
+  const COL = 104
+  const W = 80 + (steps.length + 2) * COL
+  const H = 520
+  const top = 30
+  const plotH = 290
   const y = (v) => top + ((hi - v) / (hi - lo || 1)) * plotH
   const bar = (i, from, to, color, label, value) => {
-    const x = 60 + i * 84
+    const x = 70 + i * COL
     const y1 = y(Math.max(from, to))
     const h = Math.max(2, Math.abs(y(from) - y(to)))
     return (
       <g key={label + i}>
-        <rect x={x} y={y1} width={54} height={h} fill={color} rx="2" />
-        <text x={x + 27} y={y1 - 5} textAnchor="middle" fontSize="11" fill="var(--color-text)">
+        <rect x={x} y={y1} width={70} height={h} fill={color} rx="3" />
+        <text x={x + 35} y={y1 - 7} textAnchor="middle" fontSize="15" fontWeight="600" fill="var(--color-text)">
           {value}
         </text>
-        <text transform={`translate(${x + 30},${top + plotH + 14}) rotate(-30)`} textAnchor="end" fontSize="11" fill="var(--color-text)">
+        <text transform={`translate(${x + 40},${top + plotH + 20}) rotate(-30)`} textAnchor="end" fontSize="14" fill="var(--color-text)">
           {label.length > 18 ? `${label.slice(0, 17)}…` : label}
         </text>
       </g>
     )
   }
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ minWidth: W, width: '100%', maxHeight: 280 }} role="img" aria-label="Von Plan zu Ist">
-      <line x1="54" x2={W - 6} y1={y(0)} y2={y(0)} stroke="var(--color-border)" />
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ minWidth: W, width: '100%', maxWidth: Math.max(W, 900) }} role="img" aria-label="Von Plan zu Ist">
+      <line x1="60" x2={W - 6} y1={y(0)} y2={y(0)} stroke="var(--color-border)" />
       {bar(0, 0, start, NEUTRAL, 'Plan', shortAmount(start))}
       {steps.map((s, i) => bar(i + 1, s.from, s.to, s.delta < 0 ? BAD : GOOD, s.label, (s.delta > 0 ? '+' : '') + shortAmount(s.delta)))}
       {bar(steps.length + 1, 0, end, NEUTRAL, 'Ist', shortAmount(end))}
@@ -64,9 +65,10 @@ export default function MonthView({ categories, budgets, transactions, yearNum, 
     [categories, budgets, transactions, yearNum, scope, m],
   )
   const wf = useMemo(() => waterfallSteps(data), [data])
-  const visible = data.rows.filter((r) => Math.abs(r.delta) >= 100)
-  const shown = showAll ? visible : visible.slice(0, 8)
-  const maxDelta = Math.max(1, ...visible.map((r) => Math.abs(r.delta)))
+  // Only what is worth naming gets a row (≥ 20 % of the gross deviation, at least three); the rest hides behind a link.
+  const { big, small } = useMemo(() => significantRows(data.rows), [data])
+  const shown = showAll ? [...big, ...small].sort((a, b) => a.delta - b.delta) : big.slice().sort((a, b) => a.delta - b.delta)
+  const maxDelta = Math.max(1, ...[...big, ...small].map((r) => Math.abs(r.delta)))
   const open = (txIds) => onOpenInKonten?.({ txIds, from: 'dashboard' })
 
   const pill = (active, label, onClick) => (
@@ -118,7 +120,7 @@ export default function MonthView({ categories, budgets, transactions, yearNum, 
 
       {data.rows.length > 0 && (
         <div className="overflow-x-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
-          <div className="px-1 pb-1 text-xs text-[var(--color-text-muted)]">Von Plan zu Ist – die größten Abweichungen</div>
+          <div className="px-1 pb-1 text-xs text-[var(--color-text-muted)]">Von Plan zu Ist – nur Abweichungen ab {Math.round(SIGNIFICANT_SHARE * 100)} % der Summe aller Abweichungen (mindestens drei), der Rest unter „Übrige“</div>
           <Waterfall data={wf} />
         </div>
       )}
@@ -167,9 +169,9 @@ export default function MonthView({ categories, budgets, transactions, yearNum, 
             )}
           </div>
         ))}
-        {visible.length > 8 && (
+        {small.length > 0 && (
           <button type="button" onClick={() => setShowAll((v) => !v)} className="self-start text-sm text-[var(--color-computed)] underline">
-            {showAll ? 'Weniger anzeigen' : `Alle ${visible.length} anzeigen`}
+            {showAll ? 'Nur die wichtigen zeigen' : `${small.length} kleinere Abweichungen anzeigen`}
           </button>
         )}
       </div>

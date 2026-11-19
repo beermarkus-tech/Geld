@@ -63,19 +63,33 @@ export function monthDeviations({ categories, budgets, transactions, year, month
 }
 
 /**
- * Steps from the planned result to the actual one: the `top` largest deviations by size, the rest
- * folded into "Übrige". Every step carries the running level before and after it.
+ * Which deviations are worth naming (Markus, Nov 2026: "less than 20 % is not worth mentioning").
+ * The share is taken of the *gross* deviation Σ|delta|, not the net one: a net near zero (big
+ * overspends cancelled by big savings) would otherwise make everything look important. Always at
+ * least `minCount` items are kept so the list never comes out empty.
  */
-export function waterfallSteps({ rows, planTotal, actualTotal }, top = 6) {
+export const SIGNIFICANT_SHARE = 0.2
+export function significantRows(rows, share = SIGNIFICANT_SHARE, minCount = 3) {
   const sorted = rows.filter((r) => r.delta !== 0).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
-  const shown = sorted.slice(0, top)
-  const rest = sorted.slice(top).reduce((s, r) => s + r.delta, 0)
+  const gross = sorted.reduce((s, r) => s + Math.abs(r.delta), 0)
+  const big = sorted.filter((r, i) => i < minCount || Math.abs(r.delta) >= gross * share)
+  const small = sorted.filter((r) => !big.includes(r))
+  return { big, small, gross }
+}
+
+/**
+ * Steps from the planned result to the actual one: the significant deviations, the rest folded
+ * into one "Übrige" step. Every step carries the running level before and after it.
+ */
+export function waterfallSteps({ rows, planTotal, actualTotal }) {
+  const { big, small } = significantRows(rows)
+  const rest = small.reduce((s, r) => s + r.delta, 0)
   const steps = []
   let level = planTotal
-  for (const r of shown) {
+  for (const r of big) {
     steps.push({ key: r.id, label: r.name, from: level, to: level + r.delta, delta: r.delta })
     level += r.delta
   }
-  if (rest !== 0) steps.push({ key: 'rest', label: 'Übrige', from: level, to: level + rest, delta: rest })
+  if (small.length) steps.push({ key: 'rest', label: `Übrige (${small.length})`, from: level, to: level + rest, delta: rest })
   return { start: planTotal, steps, end: actualTotal }
 }

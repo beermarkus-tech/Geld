@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { monthDeviations, scopeMonths, waterfallSteps } from './monthView'
+import { monthDeviations, scopeMonths, significantRows, waterfallSteps } from './monthView'
 
 const cats = [
   { id: 'g', name: 'G', parentCategoryId: null },
@@ -46,11 +46,21 @@ describe('monthDeviations', () => {
   })
 })
 
-describe('waterfallSteps', () => {
-  it('runs from plan to actual; the smaller deviations fold into "Übrige"', () => {
-    const r = monthDeviations({ categories: cats, budgets, transactions: txs, year: 2026, months: [3] })
-    const w = waterfallSteps(r, 2)
-    expect(w.steps.map((s) => s.label)).toEqual(['Urlaube', 'Lebensmittel', 'Übrige'])
+describe('significantRows / waterfallSteps', () => {
+  const r = monthDeviations({ categories: cats, budgets, transactions: txs, year: 2026, months: [3] })
+  it('keeps what is at least 20 % of the gross deviation, but always the top three', () => {
+    // deviations −500, −400, −200, −150 → gross 1.250 €, threshold 250 €
+    const { big, small } = significantRows(r.rows)
+    expect(big.map((x) => x.id)).toEqual(['trip', 'food', 'pay']) // top three kept although 'pay' is below 250
+    expect(small.map((x) => x.id)).toEqual(['gift'])
+    const many = Array.from({ length: 10 }, (_, i) => ({ id: `c${i}`, delta: -100 - i }))
+    expect(significantRows(many).big).toHaveLength(3)
+    const lopsided = [{ id: 'a', delta: -100000 }, ...Array.from({ length: 5 }, (_, i) => ({ id: `s${i}`, delta: -1000 }))]
+    expect(significantRows(lopsided).big.map((x) => x.id)).toEqual(['a', 's0', 's1'])
+  })
+  it('the waterfall runs from plan to actual; the small ones are folded into "Übrige"', () => {
+    const w = waterfallSteps(r)
+    expect(w.steps.map((s) => s.label)).toEqual(['Urlaube', 'Lebensmittel', 'Gehalt', 'Übrige (1)'])
     expect(w.steps.at(-1).to).toBe(w.end)
     expect(w.start).toBe(r.planTotal)
   })
