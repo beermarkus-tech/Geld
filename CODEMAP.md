@@ -289,4 +289,4 @@ To regenerate: export each year's sheet from Markus's Google Drive as `.xlsx` (t
 
 - `src/lib/backup.js` (+ `backup.test.js`): the list of Firestore collections the Sicherung covers (all 11), restore planning and export warnings; `BackupScreen.jsx` uses it. The test fails when the app starts using a collection that is not listed.
 
-- `src/Dashboard.jsx` (+ `lib/status.js`, `lib/status.test.js`): the Dashboard screen – at the moment only the "Status" chart (SPEC §3f); mounted once in App.jsx, hidden otherwise. `statusBars()` turns categories + Plan1 budgets + bookings + the last closed month into bar geometry; the SVG is drawn in the component.
+- `src/Dashboard.jsx`: the Dashboard screen – loads the data once and holds two sub-tabs; mounted once in App.jsx, hidden otherwise. **Monat**: `MonthView.jsx` + `lib/monthView.js` (+ test) – deviations per category with the bookings behind them, step chart. **Status**: `StatusChart.jsx` + `lib/status.js` (+ test) – the 12-month normalised bars (SPEC §3f). `lib/planCheck.js`'s `categoryActualIndex` (shared with Verlauf) supplies the booked lines.

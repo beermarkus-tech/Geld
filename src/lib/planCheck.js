@@ -46,7 +46,7 @@ export function categoryActualIndex(transactions, year) {
       slot.total += line.amountCents ?? 0
       // Details as Konten shows them: a split line's own, else the booking's.
       const detail = String((tx.lines.length > 1 && line.note) || tx.detail || '').trim()
-      slot.lines.push({ cents: line.amountCents ?? 0, tags: line.tags ?? [], detail, txId: tx.id })
+      slot.lines.push({ cents: line.amountCents ?? 0, tags: line.tags ?? [], detail, txId: tx.id, label: tx.displayLabel || tx.rawDescription || '', date: tx.date })
     }
   }
   const slotOf = (categoryId, month) => byCat.get(categoryId)?.[month - 1]

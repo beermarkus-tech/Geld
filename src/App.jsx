@@ -328,7 +328,7 @@ export default function App() {
         </div>
         {/* Mounted once, only hidden — like the other data screens (Nov 2026). */}
         <div className={view === 'dashboard' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
-          <Dashboard year={year} active={view === 'dashboard'} />
+          <Dashboard year={year} active={view === 'dashboard'} onOpenInKonten={openInKonten} />
         </div>
         {/* Mounted once, only hidden — like the other data screens (Oct 2026). */}
         <div className={view === 'aussenstaende' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
