@@ -7,6 +7,7 @@
 //    The bars are the Prognose; Jahresanfang/Jahresende are stacked: Barkonten (cash as in the
 //    main chart) + one segment per savings pot (allocation tag).
 //  - potLocations(): "Wo liegt das Geld" – per savings pot, which account holds its money.
+import { isAnchorTransaction } from './balance'
 import { budgetTopLineMonths, progMonths } from './budget'
 import { ALLOCATION_TAG_ORDER, isBudgetPlannedTag } from './categoryOrder'
 import { forecastSeries, planTargets } from './forecast'
@@ -64,7 +65,10 @@ export function yearBalance({ accounts, categories, tags, budgets, transactions,
     }
     return cents
   }
-  const startParts = [{ id: 'cash', name: 'Barkonten', cents: series.start.cash }, ...pots.map((t) => ({ id: t.id, name: t.name, cents: tagBalance(t.id, startDate, transactions, tags) }))]
+  // The start as jahresanfang() takes it: everything up to 31 Dec of the year before, plus the opening
+  // balances of the very first year, which are dated 1 Jan (Nov 2026: 2025's start bar showed every pot at 0).
+  const startTx = transactions.filter((tx) => tx.date <= startDate || (isAnchorTransaction(tx) && tx.date <= `${year}-01-01`))
+  const startParts = [{ id: 'cash', name: 'Barkonten', cents: series.start.cash }, ...pots.map((t) => ({ id: t.id, name: t.name, cents: tagBalance(t.id, '9999-12-31', startTx, tags) }))]
   const endParts = [{ id: 'cash', name: 'Barkonten', cents: series.months[11].prog }, ...pots.map((t) => ({ id: t.id, name: t.name, cents: potEnd(t) }))]
   return { versions, startParts, endParts }
 }

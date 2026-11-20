@@ -2502,3 +2502,9 @@ Markus: 2025's Prognose ended at 12,7 k€, 2026 starts at 22,2 k€. Cause on t
 **Noticed, not chased:** the 2025 Jahresbilanz end segments add up to 1,00 € less than Jahresanfang + Einnahmen − Ausgaben (74.059,60 vs 74.060,60) – some 1 € booked outside the planning rows on a pot account; not looked into.
 
 **Next:** Markus checks 2025 in the Prognose tab on the live data (it should end at 22,2 k€).
+
+## Session 37, continued a hundred-and-ninety-fourth time — 2026-11-21 — The "1 €" and the year boundaries
+
+- **Correction to the previous entry:** there is no 1 € difference – the end segments of the 2025 Jahresbilanz add up to exactly 74.060,60 €; the 74.059,60 was a hand-addition mistake (also told to Markus).
+- **Real bug found while checking:** 2025's Jahresanfang bar showed every pot at 0 – the first year's opening balances are dated 01.01.2025 and `yearBalance()` read the pots at 31.12.2024. Now it takes the start like `jahresanfang()` (up to 31 Dec of the year before, plus 1 Jan opening balances) (+ test). On the backup the start bar is now 67.279,79 € = the total.
+- **Red line at the year boundaries (backup):** 2025 Dez = 22.160,54 = 2026 start ✓. 2026 Dez = 4,7 k€ but 2027 start = 43,1 k€: 2027 starts from the real balance on 31.12.2026, which today is just the current balance (Nov/Dec not booked yet), while 2026's Prog still contains Plan1 for Nov/Dec (incl. the big planned transfer into Anlage Familie). Once Nov/Dec are booked and closed they meet (the month checks guarantee it). **Open, awaiting Markus:** while the previous year is not fully closed, should the next year start from the previous year's Prognose end instead?

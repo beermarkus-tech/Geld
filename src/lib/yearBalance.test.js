@@ -72,3 +72,15 @@ describe('potLocations', () => {
     expect(r.pots[1]).toMatchObject({ total: 400000, parts: [{ name: 'Aktien', cents: 300000 }, { name: 'Crypto', cents: 100000 }] })
   })
 })
+
+describe('the first year', () => {
+  it('counts the opening balances dated 1 Jan into the start bar', () => {
+    const txs = [
+      tx('o1', '2026-01-01', 'jahresabschluss', 'bnp', 1000000, []),
+      tx('o2', '2026-01-01', 'jahresabschluss', 'livret', 200000, [{ amountCents: 200000, tags: ['sparen-familie'] }]),
+    ]
+    const r = yearBalance({ ...input, transactions: txs, closedMonths: [] })
+    expect(r.startParts.find((p) => p.id === 'sparen-familie').cents).toBe(200000)
+    expect(r.startParts.reduce((s, p) => s + p.cents, 0)).toBe(r.versions.prog.start)
+  })
+})
