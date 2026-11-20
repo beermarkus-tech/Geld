@@ -48,7 +48,7 @@ export default function ForecastChart({ accounts, categories, tags, budgets, tra
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
         <h2 className="text-lg font-semibold">Prognose {yearNum}</h2>
         <span className="text-sm text-[var(--color-text-muted)]">
-          Linien: Barkonten + Bargeld (linke Achse) · Balken: Geldanlage + Sparkonten (rechte Achse) · abgeschlossene Monate gebucht, offene aus der Planung
+          Linien: Barkonten + Bargeld + offene Außenstände am Jahresanfang (linke Achse) · Balken: Geldanlage + Sparkonten (rechte Achse) · abgeschlossene Monate gebucht, offene aus der Planung
         </span>
       </div>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-[var(--color-text-muted)]">
@@ -83,7 +83,8 @@ export default function ForecastChart({ accounts, categories, tags, budgets, tra
                 <rect x={x} y={yA} width={BAR_W} height={Math.max(0, yR(0) - yA)} fill={ANLAGE} />
                 <rect x={x} y={yS} width={BAR_W} height={Math.max(0, yA - yS)} fill={SPAR} />
                 <text x={cx(i)} y={yR(0) - 6} textAnchor="middle" fontSize="11" fill="var(--color-income)">{kEuro(p.geldanlage)}</text>
-                <text x={cx(i)} y={yS + 14} textAnchor="middle" fontSize="11" fill="var(--color-income)">{kEuro(p.sparkonten)}</text>
+                {/* at the bottom of the light segment, as in Markus's Sheet – less in the way of the lines */}
+                <text x={cx(i)} y={yA - 6} textAnchor="middle" fontSize="11" fill="var(--color-income)">{kEuro(p.sparkonten)}</text>
                 <text x={cx(i)} y={TOP + PLOT_H + 22} textAnchor="middle" fontSize="13" fontWeight={p.closed ? 600 : 400} fill="var(--color-text)">{LABELS[i]}</text>
               </g>
             )

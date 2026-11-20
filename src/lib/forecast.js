@@ -1,6 +1,6 @@
 // Dashboard "Prognose" chart (spec.md §3d, built Nov 2026 after Markus's Sheet): month by month,
 // from the start of the year (31 Dec of the year before) to December,
-//  - three lines for the cash (reportingGroups Barkonten + Bargeld):
+//  - three lines for the cash (reportingGroups Barkonten + Bargeld, plus the Außenstände still open at the start):
 //      Plan0 and Plan1: the real start + every month's planned result from Verlauf
 //                       (income − expenses − Rücklagen transfers, all Plan rows of that version);
 //      Prognose:        the real start + Verlauf's Prog line (booked figures in months ticked as
@@ -11,6 +11,7 @@
 import { balance, jahresanfang } from './balance'
 import { budgetTopLineMonths, progMonths } from './budget'
 import { isBudgetPlannedTag, isKnownSubcat } from './categoryOrder'
+import { claimCategoryIds, claimTotal } from './claims'
 
 export const CASH_GROUPS = ['Barkonten', 'Bargeld']
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
@@ -58,7 +59,10 @@ export function forecastSeries({ accounts, categories, tags, budgets, transactio
     budgetTopLineMonths('allocationTagId', t.id, 'plan1', year, budgets).months.forEach((v, i) => (plannedInto[group][i] -= v))
   }
 
-  const start = { cash: sumStart(cashIds), geldanlage: sumStart(anlageIds), sparkonten: sumStart(sparIds) }
+  // The cash start includes what was still owed to us (open Außenstände) on 31 Dec, as in Markus's
+  // Sheet: claim bookings are not planning rows, so the Prog line runs "cash + open claims" anyway.
+  const openClaims = claimTotal(transactions, claimCategoryIds(categories), `${year - 1}-12-31`)
+  const start = { cash: sumStart(cashIds) + openClaims, geldanlage: sumStart(anlageIds), sparkonten: sumStart(sparIds), openClaims }
   const lv = { plan0: start.cash, plan1: start.cash, prog: start.cash, geldanlage: start.geldanlage, sparkonten: start.sparkonten }
   const months = MONTHS.map((m) => {
     const closed = closedMonths.includes(m)

@@ -36,7 +36,7 @@ const transactions = [
 describe('forecastSeries', () => {
   const r = forecastSeries({ accounts, categories, tags, budgets, transactions, year: 2026, closedMonths: [1] })
   it('starts from the real balances at the end of the year before', () => {
-    expect(r.start).toEqual({ cash: 1000000, geldanlage: 3000000, sparkonten: 2000000 })
+    expect(r.start).toEqual({ cash: 1000000, geldanlage: 3000000, sparkonten: 2000000, openClaims: 0 })
   })
   it('Plan lines add each month’s planned result (incl. Rücklagen transfers) to the start', () => {
     expect(r.months.slice(0, 3).map((x) => x.plan1)).toEqual([1300000, 1550000, 1800000])
@@ -52,6 +52,16 @@ describe('forecastSeries', () => {
     expect(r.months[0]).toMatchObject({ closed: true, geldanlage: 3010000, sparkonten: 2000000 })
     expect(r.months[1]).toMatchObject({ closed: false, geldanlage: 3010000, sparkonten: 2050000 })
     expect(r.months[2].sparkonten).toBe(2100000)
+  })
+})
+
+describe('open Außenstände at the start', () => {
+  it('count into the cash start (they come back as money; claim bookings are no planning rows)', () => {
+    const cats = [...categories, { id: 'aussenstaende-kategorie', name: 'Außenstände', parentCategoryId: null }, { id: 'aussenstaende-verliehen', name: 'Verliehen', parentCategoryId: 'aussenstaende-kategorie' }]
+    const lent = tx('l', '2025-11-02', 'bnp', null, -120000, [{ amountCents: -120000, categoryId: 'aussenstaende-verliehen', tags: ['dirk'] }])
+    const r = forecastSeries({ accounts, categories: cats, tags, budgets, transactions: [...transactions, lent], year: 2026, closedMonths: [] })
+    expect(r.start.openClaims).toBe(120000)
+    expect(r.start.cash).toBe(1000000 - 120000 + 120000)
   })
 })
 
