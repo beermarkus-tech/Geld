@@ -743,6 +743,10 @@ Colors reuse the app's own green/amber/purple semantics (confirmed fine). Orient
 
 ---
 
+**Main chart built Nov 2026 (Markus, from his Sheet; Dashboard sub-tab "Prognose", the first one and the default):** month by month, Start (31 Dec of the year before) + Jan…Dez. **Lines (left axis), cash = reportingGroups Barkonten + Bargeld:** Plan0 (dashed) and Plan1 (black) = the real start balance + each month's planned result from Verlauf (all planning rows of that version: income − expenses − Rücklagen transfers); **Prognose (red) = the real start + Verlauf's Prog line** (booked figures in months ticked as closed, Plan1 in open ones) – the same figure the month-end closing has to agree with (automatic checks to follow). **Bars (right axis), stacked:** Geldanlage (dark green) and Sparkonten (light green) – the real month-end balance in closed months; in open months the month before plus that month's planned Rücklagen transfers (Plan1) into the accounts of that group (a tag counts toward the group of its first reconciliation account). No Puffer is deducted. Every point and bar segment carries its value ("22,2 k€"). Follows the year selected in the header. Logic: `lib/forecast.js`; drawing: `ForecastChart.jsx`. The top-right summary and the fund-location chart are not built yet.
+
+---
+
 ## 3e. Quickview — detailed spec
 
 **Role:** a pure past-transaction deep-dive — no plan, no Verlauf, no Budget/Prognose header, nothing computed or compared. Select a category (or breakdown/allocation tag — same unified selection as before), see what was actually spent against it, month by month, real Konten transactions only.

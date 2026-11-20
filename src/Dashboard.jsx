@@ -2,29 +2,36 @@ import { useEffect, useState } from 'react'
 import { collection, doc, onSnapshot } from 'firebase/firestore'
 
 import { db } from './firebase'
+import ForecastChart from './ForecastChart'
 import MonthView from './MonthView'
 import StatusChart from './StatusChart'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { currentMonthMarker } from './lib/status'
 import ui from './lib/uiState'
+import { useTags } from './TagsProvider'
 
 // Dashboard (spec.md §1b.2): sub-tabs, each one view of "where am I".
+//  - Prognose (first, Nov 2026): cash lines Plan0/Plan1/Prognose + Geldanlage/Sparkonten bars (§3d)
 //  - Monat: this month / year to date against Plan1, biggest deviations with the bookings behind them
 //  - Status: the 12-month normalised pace chart (spec.md §3f)
 // Both read the same data, loaded once here.
 export default function Dashboard({ year, active = true, onOpenInKonten }) {
   const syncWhenVisible = useDeferWhileHidden(active)
   const yearNum = Number(year)
+  const { tags } = useTags()
+  const [accounts, setAccounts] = useState([])
   const [categories, setCategories] = useState([])
   const [budgets, setBudgets] = useState([])
   const [yearSettings, setYearSettings] = useState([])
   const [transactions, setTransactions] = useState([])
   const [closedMonths, setClosedMonths] = useState([])
-  const [tab, setTab] = useState(() => (ui.get('dashboard', 'tab') === 'status' ? 'status' : 'month'))
-  useEffect(() => ui.set('dashboard', 'tab', tab), [tab])
+  // Prognose is the first sub-tab and what the Dashboard opens with until another one is picked (Nov 2026).
+  const [tab, setTab] = useState(() => (['month', 'status'].includes(ui.get('dashboard', 'subtab')) ? ui.get('dashboard', 'subtab') : 'prognose'))
+  useEffect(() => ui.set('dashboard', 'subtab', tab), [tab])
 
   useEffect(() => {
     const unsubs = [
+      onSnapshot(collection(db, 'accounts'), (s) => setAccounts(s.docs.map((d) => d.data()))),
       onSnapshot(collection(db, 'categories'), (s) => setCategories(s.docs.map((d) => d.data()))),
       onSnapshot(collection(db, 'budgets'), (s) => setBudgets(s.docs.map((d) => d.data()))),
       onSnapshot(collection(db, 'categoryYearSettings'), (s) => setYearSettings(s.docs.map((d) => d.data()))),
@@ -46,6 +53,7 @@ export default function Dashboard({ year, active = true, onOpenInKonten }) {
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex gap-2 border-b border-[var(--color-border)] px-4 pt-3">
         {[
+          ['prognose', 'Prognose'],
           ['month', 'Monat'],
           ['status', 'Status'],
         ].map(([id, label]) => (
@@ -62,7 +70,9 @@ export default function Dashboard({ year, active = true, onOpenInKonten }) {
           </button>
         ))}
       </div>
-      {tab === 'month' ? (
+      {tab === 'prognose' ? (
+        <ForecastChart accounts={accounts} categories={categories} tags={tags} budgets={budgets} transactions={transactions} yearNum={yearNum} closedMonths={closedMonths} />
+      ) : tab === 'month' ? (
         <MonthView categories={categories} budgets={budgets} transactions={transactions} yearNum={yearNum} defaultMonth={month} onOpenInKonten={onOpenInKonten} />
       ) : (
         <StatusChart categories={categories} budgets={budgets} yearSettings={yearSettings} transactions={transactions} yearNum={yearNum} month={month} />
