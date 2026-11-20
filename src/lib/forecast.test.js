@@ -73,3 +73,20 @@ describe('helpers', () => {
     expect(niceStep(7230000, 4)).toBe(2000000)
   })
 })
+
+describe('booked Tagesgeld transfers', () => {
+  it('count in the Prognose of closed months only, never in the Plan lines', () => {
+    const accs = [...accounts, { id: 'tg', reportingGroup: 'Sparkonten' }]
+    const tgs = [...tags, { id: 'tagesgeld', class: 'allocation', reconciliationTargetAccountIds: ['tg'] }]
+    const txs = [
+      ...transactions,
+      tx('tg0', '2025-12-31', null, 'tg', 500000, [{ amountCents: 500000, tags: ['tagesgeld'] }]),
+      tx('tg1', '2026-01-15', 'tg', 'bnp', 200000, [{ amountCents: 200000, tags: ['tagesgeld'] }]),
+    ]
+    const base = forecastSeries({ accounts: accs, categories, tags: tgs, budgets, transactions, year: 2026, closedMonths: [1] })
+    const r = forecastSeries({ accounts: accs, categories, tags: tgs, budgets, transactions: txs, year: 2026, closedMonths: [1] })
+    expect(r.months[0].prog - base.months[0].prog).toBe(200000)
+    expect(r.months[0].plan1).toBe(base.months[0].plan1)
+    expect(r.months[0].prog).toBe(1000000 + 400000 - 120000 + 200000)
+  })
+})

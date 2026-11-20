@@ -73,6 +73,13 @@ describe('allocationMonthActual()', () => {
     expect(allocationMonthActual('sparen-sophia', 2025, 6, [withdrawal], [SPAREN_SOPHIA])).toBe(4000)
   })
 
+  it('an expense paid straight from the pot account is a withdrawal (+), interest received there a deposit (−)', () => {
+    const paid = { date: '2025-12-15', fromAccountId: 'livret-a-sparen', toAccountId: null, lines: [{ amountCents: -29000, categoryId: 'hobbys', tags: ['sparen-sophia'] }] }
+    const interest = { date: '2025-12-31', fromAccountId: null, toAccountId: 'livret-a-sparen', lines: [{ amountCents: 11136, categoryId: 'zinsen', tags: ['sparen-sophia'] }] }
+    expect(allocationMonthActual('sparen-sophia', 2025, 12, [paid], [SPAREN_SOPHIA])).toBe(29000)
+    expect(allocationMonthActual('sparen-sophia', 2025, 12, [interest], [SPAREN_SOPHIA])).toBe(-11136)
+  })
+
   it('only counts lines dated in the given month', () => {
     const contribution = {
       date: '2025-05-01',

@@ -53,8 +53,17 @@ export function allocationMonthActual(allocationTagId, year, month, transactions
     // Opening-balance anchors are balances, not a period's bookings.
     if (isAnchorTransaction(tx)) continue
     if (!tx.date.startsWith(prefix)) continue
+    const isTransfer = Boolean(tx.fromAccountId && tx.toAccountId)
     for (const line of tx.lines ?? []) {
       if (!(line.tags ?? []).includes(allocationTagId)) continue
+      // A one-sided line (paid straight from / received straight into a pot's account) already
+      // carries its natural sign – add it as is, exactly like tagBalance() does. The −/+ position
+      // rule below is for transfers only; applying it here flipped an expense paid from the pot
+      // (Nov 2026: 2025's "Feelharmonia", −290 € from Livret A Tagesgeld, counted twice in Prog).
+      if (!isTransfer) {
+        if (targets.has(tx.fromAccountId) || targets.has(tx.toAccountId)) delta += line.amountCents
+        continue
+      }
       if (targets.has(tx.fromAccountId)) delta -= line.amountCents
       if (targets.has(tx.toAccountId)) delta += line.amountCents
     }

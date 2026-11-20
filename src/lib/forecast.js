@@ -4,7 +4,8 @@
 //      Plan0 and Plan1: the real start + every month's planned result from Verlauf
 //                       (income − expenses − Rücklagen transfers, all Plan rows of that version);
 //      Prognose:        the real start + Verlauf's Prog line (booked figures in months ticked as
-//                       closed, Plan1 in the open ones) – what the month-end closing must agree with;
+//                       closed, Plan1 in the open ones, plus booked Tagesgeld transfers in closed
+//                       months) – what the month-end closing must agree with;
 //  - two stacked bars for Geldanlage and Sparkonten: the real month-end balance in closed months,
 //    in open months the month before + that month's planned Rücklagen transfers (Plan1) into the
 //    accounts of that group.
@@ -50,6 +51,14 @@ export function forecastSeries({ accounts, categories, tags, budgets, transactio
   for (const t of targets) {
     const p1 = budgetTopLineMonths(t.key, t.id, 'plan1', year, budgets).months
     progMonths(t.key, t.id, p1, closedMonths, year, transactions, tags).forEach((v, i) => (prog[i] += v))
+  }
+  // Booked Tagesgeld transfers count in Prog (Nov 2026, Markus, "option A"): Tagesgeld is parked cash,
+  // never planned (so not in the Plan lines), but money really moved between Barkonten and Tagesgeld
+  // must show in the Prognose of closed months, or it drifts from the real cash (2025: +6.735,34 €).
+  // Open months add nothing (there is no plan for it).
+  const zeros = Array(12).fill(0)
+  for (const t of tags.filter((x) => x.class === 'allocation' && !isBudgetPlannedTag(x))) {
+    progMonths('allocationTagId', t.id, zeros, closedMonths, year, transactions, tags).forEach((v, i) => (prog[i] += v))
   }
   // planned Rücklagen transfers (Plan1) per month into each group: a − planned amount is money put aside
   const plannedInto = { Geldanlage: Array(12).fill(0), Sparkonten: Array(12).fill(0) }

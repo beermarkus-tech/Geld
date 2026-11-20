@@ -2494,3 +2494,11 @@ No code change. The open item from the previous entry is answered unless Markus 
 ## Session 37, continued a hundred-and-ninety-second time — 2026-11-21 — Planung's Jahresanfang lost the open Außenstände
 
 Markus: Planung's 2026 start showed 20,95 k€, the Prognose chart 22,2 k€. The difference is exactly the claims still open on 31.12.2025 (1.202,48 €). Cause: Planung summed the reportingGroups Barkonten + Bargeld + **Außenstände** – the last group had no accounts left after the Nov 2026 switch (claims are a category now), so it silently counted 0. Fixed in `Planung.jsx`: Barkonten + Bargeld + `claimTotal()` at 31 Dec of the year before, as SPEC §2.8's Budget formula already says (that line now notes how). This also raises Planung's Budget by the same amount. 268 tests, lint, build pass.
+
+## Session 37, continued a hundred-and-ninety-third time — 2026-11-21 — 2025's year end = 2026's start (Tagesgeld in Prog, pot-actual sign fix)
+
+Markus: 2025's Prognose ended at 12,7 k€, 2026 starts at 22,2 k€. Cause on the 19.11 backup (Prog vs real cash, 2025): 8 booked transfers between BNP and Livret A Tagesgeld (+6.735,34 € net) that the Prog line never saw – Tagesgeld is no planning row. **Markus chose option A:** booked Tagesgeld transfers count in Prog in closed months; the Plan lines stay without Tagesgeld (`lib/forecast.js`, + test). Remaining −636,26 € came from a **bug in `allocationMonthActual()`** (`lib/budget.js`): a one-sided booking on a pot's account (an expense paid straight from it: 06.06.2025 "DOT" −28,13 € from Crypto/Anlage Familie, 15.12.2025 "Feelharmonia" −290 € from Tagesgeld) had its pot actual flipped, so Prog counted it twice. Fixed like `tagBalance()` was in Sept 2026 (+ test). This also corrects Verlauf's 2025 Rücklagen Ist for those months (Anlage Familie June: +28,13 instead of −28,13). Result on the backup: 2025 ends at 22.160,54 € = 2026's start; every 2025 and 2026 month check is 0. SPEC §2.6 note and §3d updated. 270 tests, lint, build pass.
+
+**Noticed, not chased:** the 2025 Jahresbilanz end segments add up to 1,00 € less than Jahresanfang + Einnahmen − Ausgaben (74.059,60 vs 74.060,60) – some 1 € booked outside the planning rows on a pot account; not looked into.
+
+**Next:** Markus checks 2025 in the Prognose tab on the live data (it should end at 22,2 k€).
