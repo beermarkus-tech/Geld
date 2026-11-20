@@ -566,10 +566,10 @@ function PufferCell({ cents, onSave, label, navCol }) {
 // One comment cell: a plain textarea that grows with its content, so the
 // row grows with it (Oct 2026, Markus: "the cells will have to expand
 // flexibly with the content of the comments"). Like a grid cell it is only
-// *selected* by a single click; a double click (or Enter/F2) starts editing
-// (Oct 2026, Markus). Enter saves, Shift+Enter adds a line, Escape drops the
-// unsaved change; clicking away saves too (and so does the screen going
-// away mid-edit).
+// *selected* by a single click; a double click (or Enter/F2, or simply typing) starts editing
+// (Oct 2026, Markus). While editing, the arrow keys move the text cursor, Enter adds a line and
+// Escape saves and leaves the text (Nov 2026, Markus – as in Verlauf); clicking away saves too
+// (and so does the screen going away mid-edit).
 function CommentBox({ y, target, c, cell = true, navCol }) {
   const saved = c.commentFor.get(`${y}:${target.targetId}`) ?? ''
   const [draft, setDraft] = useState(saved)
@@ -645,11 +645,9 @@ function CommentBox({ y, target, c, cell = true, navCol }) {
           }
           return
         }
+        // Same as Verlauf's comment box (Nov 2026, Markus): Enter is a line break, Esc saves and
+        // leaves the text (the cell stays selected, so the arrow keys move between cells again).
         if (e.key === 'Escape') {
-          setDraft(saved)
-          latest.current = { draft: saved, saved }
-          setEditing(false)
-        } else if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault()
           commit()
           setEditing(false)
