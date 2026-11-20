@@ -2490,3 +2490,7 @@ Markus: the Sheet takes the figures straight from Konten – as the app does (ta
 - Correction to the previous entry and to what Markus was told: the pot totals were *not* all the same as the Sheet's – they differ for the reasons above.
 
 No code change. The open item from the previous entry is answered unless Markus wants the chart limited the way the Sheet is.
+
+## Session 37, continued a hundred-and-ninety-second time — 2026-11-21 — Planung's Jahresanfang lost the open Außenstände
+
+Markus: Planung's 2026 start showed 20,95 k€, the Prognose chart 22,2 k€. The difference is exactly the claims still open on 31.12.2025 (1.202,48 €). Cause: Planung summed the reportingGroups Barkonten + Bargeld + **Außenstände** – the last group had no accounts left after the Nov 2026 switch (claims are a category now), so it silently counted 0. Fixed in `Planung.jsx`: Barkonten + Bargeld + `claimTotal()` at 31 Dec of the year before, as SPEC §2.8's Budget formula already says (that line now notes how). This also raises Planung's Budget by the same amount. 268 tests, lint, build pass.

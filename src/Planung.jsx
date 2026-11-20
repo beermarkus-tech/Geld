@@ -4,6 +4,7 @@ import { collection, doc, onSnapshot, setDoc } from 'firebase/firestore'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { db } from './firebase'
 import { jahresanfang } from './lib/balance'
+import { claimCategoryIds, claimTotal } from './lib/claims'
 import {
   allocationMonthActual,
   budgetTopLineMonths,
@@ -29,7 +30,10 @@ import ui from './lib/uiState'
 // Jahresanfang's starting cash (§3c, resolved Sept 2026, Markus): every
 // account in these three reportingGroups, balance on Dec 31 of the prior
 // year — Sparkonten (incl. Livret A Tagesgeld)/Geldanlage stay out.
-const START_CASH_GROUPS = ['Barkonten', 'Bargeld', 'Außenstände']
+// Außenstände were a third group of accounts until Nov 2026; since they are a category (lib/claims.js)
+// the claims still open on that day are added via claimTotal() instead (Markus noticed Planung's 2026
+// start was 1.202,48 € lower than the Prognose chart's 22,2 k€ – exactly the open claims).
+const START_CASH_GROUPS = ['Barkonten', 'Bargeld']
 
 const LENSES = [
   { id: 'plan0', label: 'Plan0' },
@@ -293,7 +297,9 @@ export default function Planung({ year, active = true }) {
     const ausgabenInklTotal = total('Ausgaben inkl. Rücklagen', [...ausgabenGroups.flatMap((g) => g.rows), ...ruecklagen])
 
     const startCashAccounts = accounts.filter((a) => START_CASH_GROUPS.includes(a.reportingGroup))
-    const startCash = (y) => startCashAccounts.reduce((a, acc) => a + jahresanfang(acc.id, y, transactions), 0)
+    const claimCats = claimCategoryIds(categories)
+    const startCash = (y) =>
+      startCashAccounts.reduce((a, acc) => a + jahresanfang(acc.id, y, transactions), 0) + claimTotal(transactions, claimCats, `${y - 1}-12-31`)
     const puffer = (y) => settingsByYear[y]?.minCashBufferCents ?? 0
 
     function summary(y, col) {
