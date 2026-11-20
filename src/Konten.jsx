@@ -651,6 +651,9 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       const wrapper = gridWrapperRef.current
       if (!wrapper || wrapper.contains(document.activeElement)) return
       if (document.activeElement?.closest?.('[data-sidebar]')) return // browsing the sidebar
+      // typing in a field (search box, …): the arrows move the text cursor there
+      const tag = document.activeElement?.tagName
+      if (tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'SELECT' || document.activeElement?.isContentEditable) return
       restoreLastFocusDirect()
     }
     window.addEventListener('keydown', onKeyDown, true)

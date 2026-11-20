@@ -2442,3 +2442,7 @@ Markus ran the switch on the live data ("funktioniert"). Removed the one-time co
 ## Session 37, continued a hundred-and-eighty-fourth time — 2026-11-20 — 2027 in the year selector
 
 Markus wants to start planning 2027. The header's years (computed in Konten) now always include the next calendar year; the default year on load is the newest year that has started (so the app does not open on the empty 2027). Browser-checked with the harness: 2026 and 2027 in the header, Verlauf 2027 shows the empty Plan1/Plan0 grid ready for input.
+
+## Session 37, continued a hundred-and-eighty-fifth time — 2026-11-20 — Arrow keys inside Verlauf's comment box
+
+Markus: the arrow keys must move the text cursor inside the comment box. Cause: Verlauf's "restore grid focus on an arrow key" listener (capture phase) pulled focus back to the grid whenever focus was outside it – also from the textarea. It now leaves arrows alone while a text field / select has focus; the same guard added to Konten's equivalent listener (its search box had the same problem). Enter (line break) and Esc (save and back to the cell) unchanged. Browser-checked with the harness: Left/Up/Right/Down move the cursor in "abc⏎def", Esc saves and returns to the cell.

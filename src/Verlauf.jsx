@@ -749,6 +749,9 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
       const wrapper = gridWrapperRef.current
       if (!wrapper || wrapper.contains(document.activeElement)) return
       if (document.activeElement?.closest?.('[data-sidebar]')) return // browsing the sidebar
+      // typing in a field (the comment box, Nov 2026, Markus): the arrows move the text cursor there
+      const tag = document.activeElement?.tagName
+      if (tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'SELECT' || document.activeElement?.isContentEditable) return
       if (lastFocusedRowIdRef.current) focusRowNow(lastFocusedRowIdRef.current, focusedColIdRef.current)
     }
     window.addEventListener('keydown', onKeyDown, true)
