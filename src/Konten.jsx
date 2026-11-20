@@ -1628,8 +1628,11 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     })
   }, [transactions])
 
+  // Every year with bookings, plus always the coming calendar year (Nov 2026, Markus: "add 2027
+  // so I can start my planning in Verlauf") – a year to plan in exists before its first booking.
   const years = useMemo(() => {
     const set = new Set(transactions.map((t) => t.date.slice(0, 4)))
+    if (set.size > 0) set.add(String(new Date().getFullYear() + 1))
     return [...set].sort()
   }, [transactions])
 
@@ -1644,7 +1647,11 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // (below) always overrides this.
   useEffect(() => {
     // also when the remembered year has no data any more
-    if (years.length > 0 && (year === null || !years.includes(String(year)))) onYearChange(years[years.length - 1])
+    // (the newest year that has started, not the empty planning year ahead)
+    if (years.length > 0 && (year === null || !years.includes(String(year)))) {
+      const now = String(new Date().getFullYear())
+      onYearChange([...years].reverse().find((y) => y <= now) ?? years[years.length - 1])
+    }
   }, [years, year, onYearChange])
 
   // AG Grid's own change detection is keyed on row-data identity, not on

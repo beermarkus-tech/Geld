@@ -521,6 +521,8 @@ Open question raised by Markus: the totality of existing budgeting apps tested s
 
 **Google search for an Empfänger (Nov 2026, Markus):** a **🔍 Suchen** button next to "+ Neue Buchung" in Konten opens a Google search for the Empfänger of the selected row (a split line searches its booking's Empfänger; falls back to the bank text). It opens one small, reusable browser window (`window.open`, named "geld-suche"); a real embedded browser inside the page is not possible because Google refuses to be framed – on a tablet it opens as the device's browser/in-app browser view. The toggle "Kürzlich gelöscht" is now just **Gelöscht**.
 
+**Years in the year selector (Nov 2026, Markus: "add 2027 so I can start my planning"):** every year that has bookings, **plus always the coming calendar year** (in 2026: 2027), so planning in Verlauf/Planung can start before the first booking. On opening, the app picks the newest year that has already started, not the empty year ahead.
+
 **No auto-sort, anywhere (Nov 2026, Markus):** no table re-sorts itself. Editing a value – or creating a booking with "+ Neue Buchung" – never moves a row to its sorted place; it stays where it is until the table is sorted by hand (header click or the sort shortcut), which sorts once and becomes the new fixed order. Rows that appear from elsewhere (another device, an import) are slotted in after the row that precedes them in the sorted order. Same in Regeln and the Bank-Import grid (`lib/stickyOrder.js`).
 
 **Confirmed column order (grid and phone-card layout alike):** Datum → Konto → Empfänger → Betrag → Kategorie → Unterkategorie → Details → Tags.

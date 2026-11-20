@@ -2438,3 +2438,7 @@ Markus answered: no bookings between Merkkonten or without counter account (conf
 ## Session 37, continued a hundred-and-eighty-third time — 2026-11-19 — Switch done; migration code and red dot removed
 
 Markus ran the switch on the live data ("funktioniert"). Removed the one-time code: `ClaimMigrationPreview.jsx`, `lib/claimMigration.js` (+ test), `receivableAccountIds()`, the Settings entry; `ANCHOR_ACCOUNT_ID` private again. Removed the red "open claim" dot on Konten's Unterkategorie cells (and its refresh plumbing) – not wanted. Lint/tests (251)/build green.
+
+## Session 37, continued a hundred-and-eighty-fourth time — 2026-11-20 — 2027 in the year selector
+
+Markus wants to start planning 2027. The header's years (computed in Konten) now always include the next calendar year; the default year on load is the newest year that has started (so the app does not open on the empty 2027). Browser-checked with the harness: 2026 and 2027 in the header, Verlauf 2027 shows the empty Plan1/Plan0 grid ready for input.
