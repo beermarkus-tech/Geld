@@ -77,6 +77,32 @@ export function tagJahresende(tagId, year, transactions, tags) {
   return tagBalance(tagId, `${year}-12-31`, transactions, tags)
 }
 
+/** tagBalance() split by the target account that holds the money (Dashboard's "Wo liegt das Geld",
+ * spec.md §3d, Nov 2026): the same contributions, each credited to the target account on its side.
+ * The values add up to tagBalance() exactly. @returns {Object<string, number>} accountId → cents */
+export function tagBalanceByAccount(tagId, asOfDate, transactions, tags) {
+  const tag = tags.find((t) => t.id === tagId)
+  const targets = new Set(tag?.reconciliationTargetAccountIds ?? [])
+  const out = {}
+  const add = (id, cents) => (out[id] = (out[id] ?? 0) + cents)
+  if (targets.size === 0) return out
+  for (const tx of transactions) {
+    if (tx.date > asOfDate) continue
+    const isTransfer = Boolean(tx.fromAccountId && tx.toAccountId)
+    for (const line of tx.lines ?? []) {
+      if (!(line.tags ?? []).includes(tagId)) continue
+      if (!isTransfer) {
+        const side = targets.has(tx.fromAccountId) ? tx.fromAccountId : targets.has(tx.toAccountId) ? tx.toAccountId : null
+        if (side) add(side, line.amountCents)
+        continue
+      }
+      if (targets.has(tx.fromAccountId)) add(tx.fromAccountId, -line.amountCents)
+      if (targets.has(tx.toAccountId)) add(tx.toAccountId, line.amountCents)
+    }
+  }
+  return out
+}
+
 // The general "what's the total for whatever tag I'm currently filtering
 // by" figure (spec.md §3a's grid-wide tag filter, Sept 2026) — distinct
 // from tagBalance() above, which is specifically for *allocation* tags and

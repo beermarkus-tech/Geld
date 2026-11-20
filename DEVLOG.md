@@ -2470,3 +2470,14 @@ Cause of the Prognose ≠ Kontostand gap Markus's comparison found (Sep +2.371,4
 **Still open (awaiting Markus):** the Tagesgeld planned rows excluded from the Plan lines; the Prognose top-right summary and fund-location chart; keep or drop the Status tab.
 
 **Next:** Markus presses "Vorzeichen korrigieren (6)" in Konten and checks that the Monatsprüfung under the Prognose chart shows ✓ everywhere.
+
+## Session 37, continued a hundred-and-ninetieth time — 2026-11-20 — Jahresbilanz and Wo liegt das Geld
+
+Markus decided: Tagesgeld's planned rows stay out of the Plan lines (already so, now in SPEC §3d); the Status tab stays for now. Then, from his Sheet, he agreed to all proposals for the two remaining Prognose charts. **Built (SPEC §3d):** `YearCharts.jsx` + `lib/yearBalance.js` (+ test), `tagBalanceByAccount()` in `lib/tagBalance.js`, colour tokens `--series-1…8` (validated categorical palette, light + dark) in `index.css`. Dashboard's Prognose tab now scrolls as one page: main chart, the two charts side by side (stacked on a phone), then the Monatsprüfung.
+- **Jahresbilanz:** bars = Prognose, lines Plan0/Plan1/Prognose; transfers into pots are no Ausgabe. On the 19.11 backup (signs fixed, sandbox only): Plan0 74,1 → 133,8 / 144,2 → 63,7 k€ (matches the Sheet), Plan1 → 179,3 / 160,7 → 92,7, Prognose → 184,7 / 157,6 → 101,1; the stacked end segments add up to exactly 101,1.
+- **Wo liegt das Geld:** at the end of the last closed month (31.10.2026 in the backup). Computed from the bookings it gives Anlage Familie = ESOP 41 % · Aktien 40 % · Edelmetalle 16 % · Crypto 3 % and Anlage Sophia = Aktien 47 % · Edelmetalle 33 % · Crypto 21 % – **different from Markus's Sheet** (ESOP 94 % / Crypto 6 %, Crypto 100 %). The Sheet probably assigns accounts to pots another way; to be compared with Markus.
+- Browser-checked on desktop (light, dark) and at phone width (no sideways scroll). 268 tests, lint, build pass.
+
+**Open (awaiting Markus):** the Anlage Familie / Anlage Sophia split differs from the Sheet (above) – which one is right?
+
+**Next:** Markus looks at both charts with his live data.

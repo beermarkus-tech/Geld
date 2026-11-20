@@ -4,6 +4,7 @@ import { collection, doc, onSnapshot } from 'firebase/firestore'
 import { db } from './firebase'
 import ForecastChart from './ForecastChart'
 import MonthChecks from './MonthChecks'
+import YearCharts from './YearCharts'
 import MonthView from './MonthView'
 import StatusChart from './StatusChart'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
@@ -13,7 +14,7 @@ import { useTags } from './TagsProvider'
 
 // Dashboard (spec.md §1b.2): sub-tabs, each one view of "where am I".
 //  - Prognose (first, Nov 2026): cash lines Plan0/Plan1/Prognose + Geldanlage/Sparkonten bars (§3d),
-//    with the month-end checks under it (MonthChecks)
+//    then Jahresbilanz + Wo liegt das Geld (YearCharts), then the month-end checks (MonthChecks)
 //  - Monat: this month / year to date against Plan1, biggest deviations with the bookings behind them
 //  - Status: the 12-month normalised pace chart (spec.md §3f)
 // Both read the same data, loaded once here.
@@ -50,6 +51,7 @@ export default function Dashboard({ year, active = true, onOpenInKonten }) {
   }, [yearNum])
 
   const month = currentMonthMarker(closedMonths, yearNum)
+  const forecastProps = { accounts, categories, tags, budgets, transactions, yearNum, closedMonths }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -73,10 +75,12 @@ export default function Dashboard({ year, active = true, onOpenInKonten }) {
         ))}
       </div>
       {tab === 'prognose' ? (
-        <>
-          <ForecastChart accounts={accounts} categories={categories} tags={tags} budgets={budgets} transactions={transactions} yearNum={yearNum} closedMonths={closedMonths} />
-          <MonthChecks accounts={accounts} categories={categories} tags={tags} budgets={budgets} transactions={transactions} yearNum={yearNum} closedMonths={closedMonths} />
-        </>
+        // Main chart, then Jahresbilanz + Wo liegt das Geld side by side, then the month-end checks (Nov 2026).
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <ForecastChart {...forecastProps} />
+          <YearCharts {...forecastProps} />
+          <MonthChecks {...forecastProps} />
+        </div>
       ) : tab === 'month' ? (
         <MonthView categories={categories} budgets={budgets} transactions={transactions} yearNum={yearNum} defaultMonth={month} onOpenInKonten={onOpenInKonten} />
       ) : (

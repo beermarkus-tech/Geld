@@ -44,7 +44,7 @@ export default function ForecastChart({ accounts, categories, tags, budgets, tra
   stepL = stepL || 1
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
+    <div className="flex flex-col gap-3 px-4 py-4">
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
         <h2 className="text-lg font-semibold">Prognose {yearNum}</h2>
         <span className="text-sm text-[var(--color-text-muted)]">
