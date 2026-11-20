@@ -2481,3 +2481,12 @@ Markus decided: Tagesgeld's planned rows stay out of the Plan lines (already so,
 **Open (awaiting Markus):** the Anlage Familie / Anlage Sophia split differs from the Sheet (above) – which one is right?
 
 **Next:** Markus looks at both charts with his live data.
+
+## Session 37, continued a hundred-and-ninety-first time — 2026-11-21 — "Wo liegt das Geld" vs the Sheet: explained
+
+Markus: the Sheet takes the figures straight from Konten – as the app does (tagged bookings per account). Checked on the 19.11 backup; the differences are not in the logic:
+- The Sheet's chart has only the accounts Crypto, ESOP, Livret A Sparen, Livret A Tagesgeld – **Aktien and Edelmetalle are missing there**. The parts both show agree: Anlage Sophia Crypto 3.550 € (Sheet 3,6 k€), Anlage Familie ESOP 7.605 € + Crypto 480 € (Sheet 8,1 k€ = 94 % / 6 %). The app adds Aktien and Edelmetalle (Anlage Sophia 17,2 k€, Anlage Familie 18,3 k€ in total).
+- The Sheet's chart stands at the **end of August** (Sparen Sophia 2,1 k€, Steuern 4,9 k€, Sparen Julia 2,1 k€ are exactly the app's 31.08 values); the app uses the end of the last closed month (31.10).
+- Correction to the previous entry and to what Markus was told: the pot totals were *not* all the same as the Sheet's – they differ for the reasons above.
+
+No code change. The open item from the previous entry is answered unless Markus wants the chart limited the way the Sheet is.
