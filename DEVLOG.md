@@ -2458,3 +2458,15 @@ Markus's answers: start = real balance at 31 Dec of the year before (no Puffer);
 ## Session 37, continued a hundred-and-eighty-eighth time — 2026-11-20 — Prognose: start incl. open Außenstände; Sparkonten labels at the bottom
 
 The 1,2 k€ gap at Start was **not** the vouchers (CheqVac 1.880 € and eCESU are already Bargeld and counted): it is exactly the open Außenstände on 31.12.2025 (79,99 + 876,22 + 246,27 = 1.202,48 €), which Markus's Sheet counts into its Barkonten line. Logically right too: claim bookings are not planning rows, so the Prog line already moves as "cash + open claims". `forecastSeries` now adds `claimTotal(…, 31 Dec of the year before)` to the cash start (test added). Sparkonten value labels moved to the bottom of the light segment. Checked visually with the (pre-switch) backup – the +1,2 k€ itself only shows with the live, switched data; Markus to confirm Start = 22,2 k€.
+
+## Session 37, continued a hundred-and-eighty-ninth time — 2026-11-20 — Sign rule, sign fix, automatic month-end checks
+
+Cause of the Prognose ≠ Kontostand gap Markus's comparison found (Sep +2.371,40, Oct +2.472,76): Konten's Betrag kept the typed sign on one-sided bookings, so a "+" typed on an outflow counted as money out in the balance but as money in for the category actuals / Prog line. **Built (PLAN.md Phase 3 area, SPEC §2.6, §3a needs-entry, §3d):**
+- **Sign rule:** Betrag on a one-sided booking now follows the side (only Von = minus, only Nach = plus), whatever is typed (`lib/sign.js`, `signedForSides`).
+- **Cleanup:** third needs-entry rule + chip **Vorzeichen** (yellow Betrag cell) and a button **"Vorzeichen korrigieren (n)"** in the Konten toolbar that flips total and lines of every such booking after a confirm; it only shows while there are any. In Markus's 19.11 backup it finds **6** bookings: the 5 from the analysis plus 27.11.2025 "Bangalore nicht eingereicht" (+125,87 from BNP, a written-off travel cost that should be −125,87; affects 2025's figures).
+- **Month-end checks:** table under the Prognose chart (`MonthChecks.jsx`, `lib/monthChecks.js`): Prognose = Kontostand and Unterkonten = Geldanlage / Sparkonten per closed month, ✓ or the difference in yellow.
+- Checked against the backup (sandbox only, not committed; Merkkonten counted as cash to stand in for the switch): before the fix Sep 2.371,40 / Oct 2.472,76, all other months and all Unterkonten checks 0; after flipping the 6 bookings every check is 0. 264 tests, lint, build pass.
+
+**Still open (awaiting Markus):** the Tagesgeld planned rows excluded from the Plan lines; the Prognose top-right summary and fund-location chart; keep or drop the Status tab.
+
+**Next:** Markus presses "Vorzeichen korrigieren (6)" in Konten and checks that the Monatsprüfung under the Prognose chart shows ✓ everywhere.

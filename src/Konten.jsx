@@ -12,6 +12,7 @@ import { centsToEuro } from './lib/format'
 import { newRowPrefill } from './lib/newRowPrefill'
 import { createStickyOrder, makeStickyPostSort } from './lib/stickyOrder'
 import { linesOf, missingColumns, needsEntryChips } from './lib/needsEntry'
+import { fixSign, signMismatch, signedForSides } from './lib/sign'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { withRemainder } from './lib/split'
 import { registerScreenCursor } from './lib/screenCursor'
@@ -726,6 +727,13 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   const needsCtx = useMemo(() => ({ claimCategoryIds: claimCats, tagById }), [claimCats, tagById])
   const needsEntryFor = (tx, line, col) => missingColumns(tx, line, needsCtx).has(col)
   const needsChips = useMemo(() => needsEntryChips(transactions, needsCtx), [transactions, needsCtx])
+  // One-sided bookings whose sign contradicts their side (lib/sign.js) and the one-click fix for them.
+  const signFixIds = useMemo(() => activeTransactions.filter(signMismatch).map((t) => t.id), [activeTransactions])
+  const fixSigns = () => {
+    const list = activeTransactions.filter(signMismatch)
+    if (!window.confirm(`Bei ${list.length} Buchung(en) das Vorzeichen umdrehen? Nur Von = minus, nur Nach = plus.`)) return
+    for (const tx of list) persistTx(fixSign(tx))
+  }
   // a chip is "on" while the grid shows exactly its bookings
   const chipActive = (chip) => idFilter && idFilter.size === chip.ids.length && chip.ids.every((id) => idFilter.has(id))
   const claimStatus = useMemo(() => {
@@ -2178,8 +2186,10 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         // Typed relative to the same "reference account" the display uses
         // (the filtered account if any, else Konto1). Two real accounts
         // always store a positive magnitude regardless of the typed sign
-        // (§2.6); a single-sided row keeps exactly the typed sign. A line
-        // row's amount is stored exactly as typed, no sign remapping.
+        // (§2.6); a single-sided row takes its sign from its side (Nov 2026,
+        // Markus): only Von = always minus, only Nach = always plus, whatever
+        // was typed (lib/sign.js). A line row's amount is stored exactly as
+        // typed, no sign remapping.
         valueSetter: (p) => {
           const cents = parseEuroInput(p.newValue)
           if (cents === null) return false
@@ -2190,7 +2200,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           }
           const { fromAccountId, toAccountId } = p.data
           if (!fromAccountId && !toAccountId) return false
-          p.data.amountCents = fromAccountId && toAccountId ? Math.abs(cents) : cents
+          p.data.amountCents = signedForSides(cents, fromAccountId, toAccountId)
           return true
         },
         cellEditor: 'agTextCellEditor',
@@ -2202,7 +2212,10 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         // than carving out an exception here. `p.value` is already the
         // resolved signed amount (this column's own valueGetter above), so
         // no separate recomputation is needed.
-        cellClass: (p) => 'text-right tabular-figure' + (accountFilter && p.value < 0 ? ' text-[var(--color-expense)]' : ''),
+        // Yellow when a one-sided booking's stored sign contradicts its side (lib/sign.js).
+        cellClass: (p) =>
+          'text-right tabular-figure' +
+          (!p.data.__isLine && signMismatch(p.data) ? ' konten-needs-entry' : accountFilter && p.value < 0 ? ' text-[var(--color-expense)]' : ''),
         // The parent, once split, is a fixed total that splitting only
         // ever redistributes (persistTx's own comment) — not directly
         // editable there anymore. A line is editable unless it's the
@@ -2935,6 +2948,17 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
               {chip.label} ({chip.ids.length})
             </button>
           ))}
+          {/* One-off cleanup (Nov 2026): bookings saved before the sign rule, flipped in one go. */}
+          {signFixIds.length > 0 && (
+            <button
+              type="button"
+              onClick={fixSigns}
+              title="Dreht bei diesen Buchungen das Vorzeichen um: nur Von = minus, nur Nach = plus"
+              className="rounded-md border border-[var(--color-border)] px-3 py-1 text-sm font-medium text-[var(--color-text)] hover:bg-[var(--color-bg)]"
+            >
+              Vorzeichen korrigieren ({signFixIds.length})
+            </button>
+          )}
           {(accountFilter || anyColumnFilter || idFilter) && (
             <button
               type="button"

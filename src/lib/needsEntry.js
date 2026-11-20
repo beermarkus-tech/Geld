@@ -1,4 +1,5 @@
 import { CLAIM_TYPES } from './tagTypes'
+import { signMismatch } from './sign'
 
 // "Needs an entry" (Nov 2026, Markus): a cell that must still be filled is shown bright yellow.
 // Derived live from the booking – nothing is stored, so the signal vanishes by itself once the
@@ -33,6 +34,12 @@ export const NEEDS_ENTRY_RULES = [
       return (line.tags ?? []).some((id) => isClaimLike(ctx.tagById[id])) ? null : 'tags'
     },
   },
+  {
+    id: 'sign',
+    label: 'Vorzeichen passt nicht zum Konto (nur Von = minus, nur Nach = plus)',
+    // Booking-level (the same answer for every line); the cell is Betrag.
+    check: (tx) => (signMismatch(tx) ? 'betrag' : null),
+  },
 ]
 
 /** The column ids still missing an entry on one line of a booking. */
@@ -58,6 +65,7 @@ export function bookingsNeedingEntry(transactions, ctx) {
 // A booking belongs to a sub-category chip when one of its lines is in that Außenstände sub-category.
 const inCat = (tx, id) => (tx.lines ?? []).some((l) => l.categoryId === id)
 export const NEEDS_ENTRY_CHIPS = [
+  { key: 'sign', label: 'Vorzeichen', test: (tx) => signMismatch(tx) },
   { key: 'amazon', label: 'Amazon', test: (tx) => /amazon|\bamz/i.test(`${tx.displayLabel ?? ''} ${tx.rawDescription ?? ''}`) },
   { key: 'cpam', label: 'CPAM', test: (tx) => inCat(tx, 'aussenstaende-cpam') },
   { key: 'verliehen', label: 'Verliehen', test: (tx) => inCat(tx, 'aussenstaende-verliehen') },

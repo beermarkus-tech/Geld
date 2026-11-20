@@ -3,6 +3,7 @@ import { collection, doc, onSnapshot } from 'firebase/firestore'
 
 import { db } from './firebase'
 import ForecastChart from './ForecastChart'
+import MonthChecks from './MonthChecks'
 import MonthView from './MonthView'
 import StatusChart from './StatusChart'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
@@ -11,7 +12,8 @@ import ui from './lib/uiState'
 import { useTags } from './TagsProvider'
 
 // Dashboard (spec.md §1b.2): sub-tabs, each one view of "where am I".
-//  - Prognose (first, Nov 2026): cash lines Plan0/Plan1/Prognose + Geldanlage/Sparkonten bars (§3d)
+//  - Prognose (first, Nov 2026): cash lines Plan0/Plan1/Prognose + Geldanlage/Sparkonten bars (§3d),
+//    with the month-end checks under it (MonthChecks)
 //  - Monat: this month / year to date against Plan1, biggest deviations with the bookings behind them
 //  - Status: the 12-month normalised pace chart (spec.md §3f)
 // Both read the same data, loaded once here.
@@ -71,7 +73,10 @@ export default function Dashboard({ year, active = true, onOpenInKonten }) {
         ))}
       </div>
       {tab === 'prognose' ? (
-        <ForecastChart accounts={accounts} categories={categories} tags={tags} budgets={budgets} transactions={transactions} yearNum={yearNum} closedMonths={closedMonths} />
+        <>
+          <ForecastChart accounts={accounts} categories={categories} tags={tags} budgets={budgets} transactions={transactions} yearNum={yearNum} closedMonths={closedMonths} />
+          <MonthChecks accounts={accounts} categories={categories} tags={tags} budgets={budgets} transactions={transactions} yearNum={yearNum} closedMonths={closedMonths} />
+        </>
       ) : tab === 'month' ? (
         <MonthView categories={categories} budgets={budgets} transactions={transactions} yearNum={yearNum} defaultMonth={month} onOpenInKonten={onOpenInKonten} />
       ) : (
