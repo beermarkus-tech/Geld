@@ -11,6 +11,7 @@ import {
   budgetTopLineMonths,
   categoryMonthActual,
   planungSummary,
+  progBaseMonths,
   progMonths,
   regularShare,
   splitYear,
@@ -224,9 +225,9 @@ export default function Planung({ year, active = true }) {
     // Plan1, exactly as Verlauf shows that year.
     function yearValue(targetKey, targetId, y, which) {
       if (which !== 'prog') return budgetTopLineMonths(targetKey, targetId, which, y, budgets).yearTotal
-      const plan1 = budgetTopLineMonths(targetKey, targetId, 'plan1', y, budgets).months
       const closedMonths = settingsByYear[y]?.closedMonths ?? []
-      return progMonths(targetKey, targetId, plan1, closedMonths, y, transactions, tags).reduce((a, b) => a + b, 0)
+      // open months: Plan1, or Plan0 for a row without any Plan1 figure yet (lib/budget.js progBaseMonths)
+      return progMonths(targetKey, targetId, progBaseMonths(targetKey, targetId, y, budgets), closedMonths, y, transactions, tags).reduce((a, b) => a + b, 0)
     }
 
     function refActualMonths(targetKey, targetId) {

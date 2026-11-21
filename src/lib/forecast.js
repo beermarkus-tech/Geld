@@ -10,7 +10,7 @@
 //    in open months the month before + that month's planned Rücklagen transfers (Plan1) into the
 //    accounts of that group.
 import { balance, jahresanfang } from './balance'
-import { budgetTopLineMonths, progMonths } from './budget'
+import { budgetTopLineMonths, progBaseMonths, progMonths } from './budget'
 import { isBudgetPlannedTag, isKnownSubcat } from './categoryOrder'
 import { claimCategoryIds, claimStart } from './claims'
 
@@ -70,8 +70,8 @@ export function forecastSeries({ accounts, categories, tags, budgets, transactio
   const plan1 = months12('plan1')
   const prog = Array(12).fill(0)
   for (const t of targets) {
-    const p1 = budgetTopLineMonths(t.key, t.id, 'plan1', year, budgets).months
-    progMonths(t.key, t.id, p1, closedMonths, year, transactions, tags).forEach((v, i) => (prog[i] += v))
+    // open months: Plan1, or Plan0 for a row without any Plan1 figure yet (progBaseMonths)
+    progMonths(t.key, t.id, progBaseMonths(t.key, t.id, year, budgets), closedMonths, year, transactions, tags).forEach((v, i) => (prog[i] += v))
   }
   // Booked Tagesgeld transfers count in Prog (Nov 2026, Markus, "option A"): Tagesgeld is parked cash,
   // never planned (so not in the Plan lines), but money really moved between Barkonten and Tagesgeld
@@ -86,7 +86,8 @@ export function forecastSeries({ accounts, categories, tags, budgets, transactio
   for (const t of tags.filter((x) => x.class === 'allocation' && isBudgetPlannedTag(x))) {
     const group = groupOf[(t.reconciliationTargetAccountIds ?? [])[0]]
     if (!plannedInto[group]) continue
-    budgetTopLineMonths('allocationTagId', t.id, 'plan1', year, budgets).months.forEach((v, i) => (plannedInto[group][i] -= v))
+    // the same plan the Prog line uses for this pot, so line and bars stay consistent
+    progBaseMonths('allocationTagId', t.id, year, budgets).forEach((v, i) => (plannedInto[group][i] -= v))
   }
 
   // The cash start includes what was still owed to us (open Außenstände) on 31 Dec, as in Markus's

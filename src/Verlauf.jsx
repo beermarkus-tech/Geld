@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { collection, deleteDoc, doc, onSnapshot, setDoc, writeBatch } from 'firebase/firestore'
 import { closedByYearOf } from './lib/forecast'
+import { plan1Contents, planCopyOps } from './lib/planCopy'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { TAG_RENAME_MESSAGES } from './lib/tagRename'
 import { qualifiedTagName } from './lib/tagStyle'
@@ -15,6 +16,7 @@ import {
   breakdownGroupAllocationMonthActual,
   budgetBreakdownLineMonths,
   budgetTopLineMonths,
+  progBaseMonths,
   progMonths as progMonthsFor,
 } from './lib/budget'
 import { ALLOCATION_TAG_ORDER, GROUP_ORDER, SUBCAT_ORDER, isBudgetPlannedTag, isKnownSubcat } from './lib/categoryOrder'
@@ -496,6 +498,10 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // the cursor is on drives the comment field in the header row.
   const [cellComments, setCellComments] = useState([])
   const [commentCell, setCommentCell] = useState(null)
+  // The row the cursor is on (any column) – drives the "Plan0 → Plan1" button, shown only on a Plan0 row.
+  const [cursorRowId, setCursorRowId] = useState(null)
+  // The pending "overwrite Plan1?" question: { row, contents } (lib/planCopy.js).
+  const [confirmCopy, setConfirmCopy] = useState(null)
   const commentInputRef = useRef(null)
   // Keyboard-shortcuts help popover (Markus, same design as Konten's own
   // (i) icon) — hover shows the list, Ctrl+I toggles it without the mouse,
@@ -671,6 +677,13 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         setBlockOverrides(new Map())
         return
       }
+      // Ctrl+Shift+P (Nov 2026, Markus): "Plan0 → Plan1" for the Plan0 row the cursor is on.
+      if (active && (e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault()
+        const row = planCopyRef.current?.cursorRow()
+        if (row?.planVersion === 'plan0') planCopyRef.current.start(row)
+        return
+      }
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'p') {
         e.preventDefault()
         setShowPlan0((v) => !v)
@@ -699,6 +712,24 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [shortcutsOpen, active, onOpenQuickview])
+
+  useEffect(() => {
+    if (!confirmCopy) return
+    const onKeyDown = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        e.stopPropagation()
+        acceptConfirmCopy()
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        closeConfirmCopy()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the handlers read the current confirmCopy
+  }, [confirmCopy])
 
   useEffect(() => {
     if (!confirmRemoveRow) return
@@ -1032,7 +1063,8 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // Plan0's.
   function planLineRows(groupName, section, subcatName, targetKey, targetId, isAllocation) {
     const plan1Top = budgetTopLineMonths(targetKey, targetId, 'plan1', yearNum, budgets)
-    const prog = progMonths(targetId, plan1Top.months, isAllocation)
+    // open months: Plan1, or Plan0 while this row has no Plan1 figure yet (Nov 2026, lib/budget.js progBaseMonths)
+    const prog = progMonths(targetId, progBaseMonths(targetKey, targetId, yearNum, budgets), isAllocation)
     const common = { groupName, section, subcatName, targetKey, targetId, isAllocation }
     const rowIdBase = `${targetKey}:${targetId}`
     const progRowId = `${rowIdBase}:Prog`
@@ -1056,7 +1088,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     if (showPlanung) {
       const lastYear = yearNum - 1
       const lastPlan1 = budgetTopLineMonths(targetKey, targetId, 'plan1', lastYear, budgets)
-      const lastProg = progMonthsFor(targetKey, targetId, lastPlan1.months, lastYearClosedMonths, lastYear, transactions, tags)
+      const lastProg = progMonthsFor(targetKey, targetId, progBaseMonths(targetKey, targetId, lastYear, budgets), lastYearClosedMonths, lastYear, transactions, tags)
       for (const r of rows) {
         if (r.rowLabel === 'Prog') r.lastYearTotal = lastProg.reduce((a, b) => a + b, 0)
         else if (r.rowLabel === 'Plan1') r.lastYearTotal = lastPlan1.yearTotal
@@ -1304,6 +1336,38 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // the plan0 or plan1 cell of that hidden block, same column"), via
   // `claimPendingFocus()`, picked up by the settle effect above once the
   // removal actually lands.
+  // "Plan0 → Plan1" (Nov 2026, Markus): copies the cursor row's whole Plan0 of this year – months,
+  // breakdown lines, cell comments – onto its Plan1, replacing it. Asks first when Plan1 holds anything.
+  function startPlanCopy(row) {
+    if (!row || row.planVersion !== 'plan0') return
+    const input = { budgets, cellComments, year: yearNum, targetKey: row.targetKey, targetId: row.targetId }
+    const contents = plan1Contents(input)
+    if (contents.hasAnything) setConfirmCopy({ row, contents })
+    else runPlanCopy(row)
+  }
+  function runPlanCopy(row) {
+    const ops = planCopyOps({ budgets, cellComments, year: yearNum, targetKey: row.targetKey, targetId: row.targetId })
+    const batch = writeBatch(db)
+    for (const id of ops.deleteBudgetIds) batch.delete(doc(db, 'budgets', id))
+    for (const b of ops.writeBudgets) batch.set(doc(db, 'budgets', b.id), b)
+    for (const id of ops.deleteCommentIds) batch.delete(doc(db, 'cellComments', id))
+    for (const c of ops.writeComments) batch.set(doc(db, 'cellComments', c.id), c)
+    batch.commit()
+    focusRowNow(row.rowId)
+  }
+  function closeConfirmCopy() {
+    const row = confirmCopy?.row
+    setConfirmCopy(null)
+    if (row) focusRowNow(row.rowId)
+  }
+  function acceptConfirmCopy() {
+    const row = confirmCopy?.row
+    setConfirmCopy(null)
+    if (row) runPlanCopy(row)
+  }
+  const planCopyRef = useRef(null)
+  planCopyRef.current = { start: startPlanCopy, cursorRow: () => rowData.find((r) => r.rowId === lastFocusedRowIdRef.current) }
+
   function closeConfirmRemove() {
     const row = confirmRemoveRow
     setConfirmRemoveRow(null)
@@ -2014,6 +2078,8 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
 
   // The comment field only works on a cell that is currently displayed.
   const commentRow = commentCell ? rowData.find((r) => r.rowId === commentCell.rowId) : null
+  const cursorRow = cursorRowId ? rowData.find((r) => r.rowId === cursorRowId) : null
+  const cursorPlan0Row = cursorRow?.planVersion === 'plan0' ? cursorRow : null
   const activeCommentCell = commentRow ? commentCell : null
   const commentDescription = commentRow
     ? [
@@ -2054,6 +2120,18 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
           <input type="checkbox" checked={showPlan0} onChange={(e) => setShowPlan0(e.target.checked)} />
           Plan0 anzeigen
         </label>
+        {/* Only while the cursor is on a Plan0 row (Nov 2026, Markus). */}
+        {cursorPlan0Row && (
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => startPlanCopy(cursorPlan0Row)}
+            title="Kopiert Plan0 dieser Zeile (Monate, Aufschlüsselung, Kommentare) auf Plan1 und ersetzt Plan1 (Strg+Umschalt+P)"
+            className="rounded-md border border-[var(--color-border)] px-3 py-1 text-sm hover:bg-[var(--color-bg)]"
+          >
+            Plan0 → Plan1: {cursorPlan0Row.subcatName} <span className="text-xs text-[var(--color-text-muted)]">(Strg+Umschalt+P)</span>
+          </button>
+        )}
         <label className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
           <input
             type="checkbox"
@@ -2159,6 +2237,9 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
                   <b>Strg+P</b> — Plan0 anzeigen
                 </li>
                 <li>
+                  <b>Strg+Umschalt+P</b> — Plan0 der Zeile auf Plan1 kopieren (nur auf einer Plan0-Zeile; ersetzt Plan1)
+                </li>
+                <li>
                   <b>Strg+K</b> — Kommentar zur markierten Zelle schreiben (Enter = neue Zeile, Esc = speichern und zurück zur Zelle)
                 </li>
                 <li>
@@ -2244,6 +2325,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
             const rowId = gridApiRef.current?.getDisplayedRowAtIndex(e.rowIndex)?.data?.rowId
             if (rowId) {
               lastFocusedRowIdRef.current = rowId
+              setCursorRowId(rowId)
               onFocusChange?.({ rowId, colId })
               // A name cell carries no comment (only numbers do).
               setCommentCell(colId === 'rowTitle' ? null : { rowId, colId })
@@ -2402,6 +2484,38 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
           design") — a real, permanent loss of that line's planned
           figures, same "no undo" reasoning Abmelden's own modal already
           exists for. */}
+      {/* "Plan0 → Plan1" safety question (Nov 2026): Enter = Überschreiben, Esc = Abbrechen. */}
+      {confirmCopy && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center" onClick={closeConfirmCopy}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div role="alertdialog" aria-modal="true" className="relative flex w-full max-w-md flex-col gap-4 rounded-lg bg-[var(--color-surface)] p-5" onClick={(e) => e.stopPropagation()}>
+            <p className="text-sm">
+              Plan1 von „{confirmCopy.row.subcatName}“ ({yearNum}) enthält bereits
+              {' '}
+              {[
+                `Werte (Summe ${centsToWholeEuro(confirmCopy.contents.total)} €)`,
+                confirmCopy.contents.lineCount ? `${confirmCopy.contents.lineCount} Aufschlüsselungszeile(n)` : null,
+                confirmCopy.contents.commentCount ? `${confirmCopy.contents.commentCount} Kommentar(e)` : null,
+              ]
+                .filter(Boolean)
+                .join(', ')}
+              . Mit Plan0 überschreiben? Das kann nicht rückgängig gemacht werden.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeConfirmCopy}
+                className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]"
+              >
+                Abbrechen (Esc)
+              </button>
+              <button type="button" onClick={acceptConfirmCopy} className="rounded-md bg-[var(--color-alert)] px-3 py-1.5 text-sm font-medium text-white">
+                Überschreiben (Enter)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {confirmRemoveRow && (
         <div className="fixed inset-0 z-30 flex items-center justify-center" onClick={closeConfirmRemove}>
           <div className="absolute inset-0 bg-black/40" />

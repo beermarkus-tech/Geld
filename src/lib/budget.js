@@ -230,6 +230,23 @@ export function breakdownGroupAllocationMonthActual(allocationTagId, tagIds, yea
   return delta === 0 ? 0 : -delta
 }
 
+/** Whether a row (category or pot) has any non-zero figure in this plan version and year. */
+export function hasPlanFigures(targetKey, targetId, planVersion, year, budgets) {
+  return budgetRowsFor(budgets, targetKey, targetId, planVersion, year).some((b) => b.plannedAmountCents)
+}
+
+/** The plan Prog follows in a row's open months (Nov 2026, Markus, "per row"): Plan1 once that row has
+ *  any Plan1 figure in the year, otherwise Plan0 – so a year planned only in Plan0 (2027) already has a
+ *  Prognose. Rows are revised one by one (Verlauf's "Plan0 → Plan1" copy). @returns 'plan1' | 'plan0' */
+export function progPlanVersion(targetKey, targetId, year, budgets) {
+  return hasPlanFigures(targetKey, targetId, 'plan1', year, budgets) ? 'plan1' : 'plan0'
+}
+
+/** The monthly figures Prog uses for the open months of one row (see progPlanVersion). */
+export function progBaseMonths(targetKey, targetId, year, budgets) {
+  return budgetTopLineMonths(targetKey, targetId, progPlanVersion(targetKey, targetId, year, budgets), year, budgets).months
+}
+
 // Prog for one category/allocation tag, per month (spec.md §3b): a closed
 // month is the real Konten actual; an open month mirrors Plan1 for that
 // same month ("if nothing changes, this is what will happen"). Shared by

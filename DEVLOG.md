@@ -2533,3 +2533,12 @@ Markus: switching years had become sluggish. Measured in the browser (production
 ## Session 37, continued a hundred-and-ninety-eighth time — 2026-11-21 — Verlauf: year switch in one step
 
 Markus: on a year switch Verlauf showed the numbers first and the ticks/colours a moment later. Cause: Verlauf re-subscribed to settings/{year} *after* the switch, so it drew once with the old year's closed months and again when the new ones arrived. Now it subscribes to the whole `settings` collection once (`closedByYearOf`, as Dashboard/Planung) and reads this year's and last year's closed months from it; the header/cell redraw for a year or closed-month change runs in a layout effect (before paint). Measured frame by frame (backup, production build): before, the old year's ticks showed at ~0,27 s and the right ones at ~0,75–0,95 s; now a single update at ~0,5 s with the right ticks. Ticking/unticking months re-checked. 276 tests, lint, build pass.
+
+## Session 37, continued a hundred-and-ninety-ninth time — 2026-11-21 — Prog falls back to Plan0 per row; "Plan0 → Plan1" copy
+
+Markus plans 2027 in Plan0 only, so Prog (open months = Plan1) was empty. **Decided and built (SPEC §3b):**
+- **Prog per row:** open months use Plan1 if that row (category/pot) has any non-zero Plan1 figure in the year, else Plan0 (`progPlanVersion`/`progBaseMonths` in `lib/budget.js`). Wired into every Prog computation: Verlauf (incl. last year's Prog column), Planung, `forecastSeries()` (line and the planned bars, so they stay consistent), `yearBalance()` (Prog Einnahmen/Ausgaben and planned pot ends). 2025/2026 unchanged (every row has Plan1 there).
+- **"Plan0 → Plan1" button** in Verlauf's toolbar, shown only while the cursor is on a Plan0 row, shortcut Strg+Umschalt+P (listed under Strg+I): copies the row's Plan0 months, breakdown lines and cell comments onto Plan1, replacing Plan1 (one batch, `lib/planCopy.js` + test). Safety question when Plan1 holds anything (sum, breakdown lines, comments), Enter = Überschreiben, Esc = Abbrechen (capture phase, so the grid never starts editing).
+- Harness-checked on the backup (2026 "Sonstige Einnahmen": Plan1 with 4 breakdown lines and a comment): button only on Plan0 rows; question lists "Summe 56.038 €, 4 Aufschlüsselungszeile(n), 1 Kommentar(e)"; Esc leaves Plan1 unchanged; Enter makes Plan1 = Plan0; no cell left in edit mode. 280 tests, lint, build pass.
+
+**Not browser-checked:** a 2027 Prognose built from Plan0 (the backup has no 2027 plan) – covered by unit tests only.

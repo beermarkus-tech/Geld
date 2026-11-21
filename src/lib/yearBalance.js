@@ -8,7 +8,7 @@
 //    main chart) + one segment per savings pot (allocation tag).
 //  - potLocations(): "Wo liegt das Geld" – per savings pot, which account holds its money.
 import { isAnchorTransaction } from './balance'
-import { budgetTopLineMonths, progMonths } from './budget'
+import { budgetTopLineMonths, progBaseMonths, progMonths } from './budget'
 import { ALLOCATION_TAG_ORDER, isBudgetPlannedTag } from './categoryOrder'
 import { forecastSeries, planTargets } from './forecast'
 import { tagBalance, tagBalanceByAccount } from './tagBalance'
@@ -41,9 +41,8 @@ export function yearBalance({ accounts, categories, tags, budgets, transactions,
   const income = incomeCategoryIds(categories)
   const cats = planTargets(categories, tags).filter((t) => t.key === 'categoryId')
   const yearOf = (version, id) => {
-    const p1 = budgetTopLineMonths('categoryId', id, 'plan1', year, budgets).months
-    if (version === 'prog') return sum(progMonths('categoryId', id, p1, closedMonths, year, transactions, tags))
-    return sum(version === 'plan1' ? p1 : budgetTopLineMonths('categoryId', id, version, year, budgets).months)
+    if (version === 'prog') return sum(progMonths('categoryId', id, progBaseMonths('categoryId', id, year, budgets), closedMonths, year, transactions, tags))
+    return sum(budgetTopLineMonths('categoryId', id, version, year, budgets).months)
   }
   const versions = {}
   for (const v of ['plan0', 'plan1', 'prog']) {
@@ -70,7 +69,7 @@ export function yearBalance({ accounts, categories, tags, budgets, transactions,
   const potEnd = (t) => {
     let cents = potBase(t)
     if (isBudgetPlannedTag(t)) {
-      const planned = budgetTopLineMonths('allocationTagId', t.id, 'plan1', year, budgets).months
+      const planned = progBaseMonths('allocationTagId', t.id, year, budgets)
       for (let m = lastClosed + 1; m <= 12; m++) cents -= planned[m - 1]
     }
     return cents

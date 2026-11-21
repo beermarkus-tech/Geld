@@ -109,3 +109,13 @@ describe('provisional start (the year before still has open months)', () => {
     expect(closedByYearOf([{ id: '2026', closedMonths: [1] }, { id: 'app' }])).toEqual({ 2026: [1] })
   })
 })
+
+describe('a year planned only in Plan0', () => {
+  it('the Prognose follows Plan0 in open months (per row, while the row has no Plan1 figure)', () => {
+    const only0 = [...[1, 2, 3].map((m) => b('plan0', 'categoryId', 'food', m, -150000)), ...[1, 2, 3].map((m) => b('plan1', 'categoryId', 'pay', m, 400000))]
+    const r = forecastSeries({ accounts, categories, tags, budgets: only0, transactions, year: 2026, closedMonths: [] })
+    // food follows Plan0 (−1.500 a month), pay follows its Plan1 (+4.000)
+    expect(r.months[0].prog - r.start.cash).toBe(400000 - 150000)
+    expect(r.months[0].plan1 - r.start.cash).toBe(400000)
+  })
+})
