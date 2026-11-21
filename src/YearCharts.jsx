@@ -117,7 +117,6 @@ function Jahresbilanz({ yb, colorOf, yearNum }) {
           {stacked(yb.endParts, 3)}
           {totals.map((c, i) => (
             <g key={COLS[i]}>
-              <text x={cx(i) + barW / 2 + 4} y={y(c) + 4} fontSize="11.5" fontWeight="600" fill="var(--color-text)">{kEuro(c)}</text>
               <text x={cx(i)} y={TOP + PLOT_H + 22} textAnchor="middle" fontSize="12.5" fill="var(--color-text)">{i === 0 && yb.provisional ? 'Jahresanfang (vorl.)' : COLS[i]}</text>
             </g>
           ))}
@@ -129,6 +128,15 @@ function Jahresbilanz({ yb, colorOf, yearNum }) {
               <title>{`${COLS[i]}: Prognose ${kEuro(point(v.prog)[i])} · Plan1 ${kEuro(point(v.plan1)[i])} · Plan0 ${kEuro(point(v.plan0)[i])}`}</title>
               <circle cx={cx(i)} cy={y(point(v.prog)[i])} r="4" fill={PROG} stroke="var(--color-surface)" strokeWidth="2" />
               <rect x={cx(i) - colW / 2} y={TOP} width={colW} height={PLOT_H} fill="transparent" />
+            </g>
+          ))}
+          {/* drawn last, so the lines never cover them */}
+          {totals.map((c, i) => (
+            <g key={`total${i}`} pointerEvents="none">
+              {/* the bar's total, centred on top of it (Markus, Nov 2026); a surface halo keeps it readable where a line crosses */}
+              <text x={cx(i)} y={y(c) - 7} textAnchor="middle" fontSize="12" fontWeight="600" fill="var(--color-text)" stroke="var(--color-surface)" strokeWidth="3" style={{ paintOrder: 'stroke' }}>
+                {kEuro(c)}
+              </text>
             </g>
           ))}
         </svg>
