@@ -6,6 +6,49 @@
 
 import { isAnchorTransaction } from './balance'
 
+// Speed (Nov 2026, Markus: switching years had become slow – 2 to 4 s): every month actual below used
+// to scan *all* bookings, once per category/pot and month. The bookings are now sorted into month
+// buckets once per transactions array (opening-balance anchors left out, as every actual here skips
+// them), and each actual only walks its own month. Same for the plan rows: indexed once per budgets
+// array. Cached by array identity (WeakMap) – a new snapshot is a new array, so nothing goes stale.
+const monthBuckets = new WeakMap()
+/** The non-anchor bookings dated in one month ("YYYY-MM"). */
+export function bookingsInMonth(transactions, year, month) {
+  let byMonth = monthBuckets.get(transactions)
+  if (!byMonth) {
+    byMonth = new Map()
+    for (const tx of transactions) {
+      if (!tx.date || isAnchorTransaction(tx)) continue
+      const ym = tx.date.slice(0, 7)
+      let list = byMonth.get(ym)
+      if (!list) byMonth.set(ym, (list = []))
+      list.push(tx)
+    }
+    monthBuckets.set(transactions, byMonth)
+  }
+  return byMonth.get(`${year}-${String(month).padStart(2, '0')}`) ?? []
+}
+
+const budgetIndexes = new WeakMap()
+/** The plan rows of one year, plan version and target (`categoryId` or `allocationTagId`). */
+function budgetRowsFor(budgets, targetKey, targetId, planVersion, year) {
+  let idx = budgetIndexes.get(budgets)
+  if (!idx) {
+    idx = new Map()
+    for (const b of budgets) {
+      for (const key of ['categoryId', 'allocationTagId']) {
+        if (b[key] == null) continue
+        const k = `${key}|${b[key]}|${b.planVersion}|${b.year}`
+        let list = idx.get(k)
+        if (!list) idx.set(k, (list = []))
+        list.push(b)
+      }
+    }
+    budgetIndexes.set(budgets, idx)
+  }
+  return idx.get(`${targetKey}|${targetId}|${planVersion}|${year}`) ?? []
+}
+
 // A category's actual for one month — Σ every line's own signed amount
 // where that line's categoryId matches, dated in that month (spec.md §3b:
 // "Σ transactions where categoryId == X and date in month"). Runs over
@@ -17,12 +60,9 @@ import { isAnchorTransaction } from './balance'
 // @param {number} month  1-12
 // @param {Array} transactions
 export function categoryMonthActual(categoryId, year, month, transactions) {
-  const prefix = `${year}-${String(month).padStart(2, '0')}`
   let total = 0
-  for (const tx of transactions) {
-    // Opening-balance anchors are balances, not a period's bookings.
-    if (isAnchorTransaction(tx)) continue
-    if (!tx.date.startsWith(prefix)) continue
+  // Opening-balance anchors are balances, not a period's bookings (left out of the month buckets).
+  for (const tx of bookingsInMonth(transactions, year, month)) {
     for (const line of tx.lines ?? []) {
       if (line.categoryId === categoryId) total += line.amountCents
     }
@@ -47,12 +87,9 @@ export function categoryMonthActual(categoryId, year, month, transactions) {
 export function allocationMonthActual(allocationTagId, year, month, transactions, tags) {
   const tag = tags.find((t) => t.id === allocationTagId)
   const targets = new Set(tag?.reconciliationTargetAccountIds ?? [])
-  const prefix = `${year}-${String(month).padStart(2, '0')}`
   let delta = 0
-  for (const tx of transactions) {
-    // Opening-balance anchors are balances, not a period's bookings.
-    if (isAnchorTransaction(tx)) continue
-    if (!tx.date.startsWith(prefix)) continue
+  // Opening-balance anchors are balances, not a period's bookings (left out of the month buckets).
+  for (const tx of bookingsInMonth(transactions, year, month)) {
     const isTransfer = Boolean(tx.fromAccountId && tx.toAccountId)
     for (const line of tx.lines ?? []) {
       if (!(line.tags ?? []).includes(allocationTagId)) continue
@@ -105,7 +142,7 @@ function sumBudgetRows(rows) {
 // @param {Array} budgets
 // @returns {{months: number[], yearTotal: number}} months has 12 entries, Jan..Dec
 export function budgetTopLineMonths(targetKey, targetId, planVersion, year, budgets) {
-  const rows = budgets.filter((b) => b.year === year && b.planVersion === planVersion && b[targetKey] === targetId)
+  const rows = budgetRowsFor(budgets, targetKey, targetId, planVersion, year)
   const breakdownRows = rows.filter((b) => b.breakdownTagId != null)
   const source = breakdownRows.length > 0 ? breakdownRows : rows.filter((b) => b.breakdownTagId == null)
   return sumBudgetRows(source)
@@ -123,9 +160,7 @@ export function budgetTopLineMonths(targetKey, targetId, planVersion, year, budg
 // @param {number} year
 // @param {Array} budgets
 export function budgetBreakdownLineMonths(targetKey, targetId, breakdownTagId, planVersion, year, budgets) {
-  const rows = budgets.filter(
-    (b) => b.year === year && b.planVersion === planVersion && b[targetKey] === targetId && b.breakdownTagId === breakdownTagId,
-  )
+  const rows = budgetRowsFor(budgets, targetKey, targetId, planVersion, year).filter((b) => b.breakdownTagId === breakdownTagId)
   return sumBudgetRows(rows)
 }
 
@@ -142,12 +177,9 @@ export function budgetBreakdownLineMonths(targetKey, targetId, breakdownTagId, p
 // @param {number} month  1-12
 // @param {Array} transactions
 export function breakdownGroupMonthActual(categoryId, tagIds, year, month, transactions) {
-  const prefix = `${year}-${String(month).padStart(2, '0')}`
   let total = 0
-  for (const tx of transactions) {
-    // Opening-balance anchors are balances, not a period's bookings.
-    if (isAnchorTransaction(tx)) continue
-    if (!tx.date.startsWith(prefix)) continue
+  // Opening-balance anchors are balances, not a period's bookings (left out of the month buckets).
+  for (const tx of bookingsInMonth(transactions, year, month)) {
     for (const line of tx.lines ?? []) {
       if (line.categoryId !== categoryId) continue
       if (!(line.tags ?? []).some((t) => tagIds.has(t))) continue
@@ -180,14 +212,17 @@ export function breakdownGroupMonthActual(categoryId, tagIds, year, month, trans
 export function breakdownGroupAllocationMonthActual(allocationTagId, tagIds, year, month, transactions, tags) {
   const tag = tags.find((t) => t.id === allocationTagId)
   const targets = new Set(tag?.reconciliationTargetAccountIds ?? [])
-  const prefix = `${year}-${String(month).padStart(2, '0')}`
   let delta = 0
-  for (const tx of transactions) {
-    // Opening-balance anchors are balances, not a period's bookings.
-    if (isAnchorTransaction(tx)) continue
-    if (!tx.date.startsWith(prefix)) continue
+  // Opening-balance anchors are balances, not a period's bookings (left out of the month buckets).
+  for (const tx of bookingsInMonth(transactions, year, month)) {
+    const isTransfer = Boolean(tx.fromAccountId && tx.toAccountId)
     for (const line of tx.lines ?? []) {
       if (!(line.tags ?? []).some((t) => tagIds.has(t))) continue
+      // one-sided: natural sign, as in allocationMonthActual() (same Nov 2026 fix)
+      if (!isTransfer) {
+        if (targets.has(tx.fromAccountId) || targets.has(tx.toAccountId)) delta += line.amountCents
+        continue
+      }
       if (targets.has(tx.fromAccountId)) delta -= line.amountCents
       if (targets.has(tx.toAccountId)) delta += line.amountCents
     }

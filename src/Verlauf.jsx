@@ -51,14 +51,18 @@ const MONTH_LABELS = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', '
 // stopPropagation on click: the header cell itself has its own click
 // handling (would otherwise fire for a plain header click too, e.g. any
 // future sort/menu behavior), and the checkbox shouldn't trigger it.
-function MonthHeader({ displayName, month, closedMonths, onToggle }) {
+function MonthHeader({ displayName, month, getLive }) {
+  // The year's closed months and the toggle are read through a getter on Verlauf's `live` ref (the
+  // column definitions stay the same across years, and AG Grid copies header params, so a plain ref
+  // would be frozen at its first value); Verlauf calls refreshHeader() when they change.
+  const live = getLive()
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-0.5">
       <span>{displayName}</span>
       <input
         type="checkbox"
-        checked={closedMonths.includes(month)}
-        onChange={() => onToggle(month)}
+        checked={live.closedMonths.includes(month)}
+        onChange={() => getLive().toggleMonthClosed(month)}
         onClick={(e) => e.stopPropagation()}
       />
     </div>
@@ -1478,7 +1482,16 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     if (active) gridApiRef.current?.refreshCells({ columns: ['rowTitle'], force: true })
   }, [tagById, active])
   const live = useRef({})
-  live.current = { persistBudgetMonth, renameRow, tagToLabel, tagById, replaceOptionsFor, replaceBreakdownTag, percent: tolerancePercent }
+  live.current = { persistBudgetMonth, renameRow, tagToLabel, tagById, replaceOptionsFor, replaceBreakdownTag, percent: tolerancePercent, closedMonths, yearNum, toggleMonthClosed }
+  // Speed (Nov 2026): the column definitions no longer depend on the year or the closed months (a new
+  // set made AG Grid rebuild every cell on each year switch, ~1 s) – they read both through `live`,
+  // and this redraws the headers and cells when either changes.
+  useEffect(() => {
+    const api = gridApiRef.current
+    if (!api) return
+    api.refreshHeader()
+    api.refreshCells({ force: true })
+  }, [closedMonths, yearNum])
   // Plan1's colours depend on bookings and plan figures, which change the row
   // data but not the cell value AG Grid compares — so those cells are redrawn
   // whenever the rows are rebuilt.
@@ -1503,7 +1516,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
       // index.css; AG Grid has no built-in "centered header" class.
       headerClass: 'verlauf-month-header',
       headerComponent: MonthHeader,
-      headerComponentParams: { month: i + 1, closedMonths, onToggle: toggleMonthClosed },
+      headerComponentParams: { month: i + 1, getLive: () => live.current },
       valueGetter: (p) => p.data.months[i],
       valueFormatter: (p) => formatMonthCell(p.value),
       cellClass: (p) =>
@@ -1511,7 +1524,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
           commentsRef.current.has(`${p.data.rowId}|m${i + 1}`) ? ' has-cell-comment' : ''
         }`,
       cellStyle: (p) => {
-        const isClosed = closedMonths.includes(i + 1)
+        const isClosed = live.current.closedMonths.includes(i + 1)
         // Real vertical centering (Markus, Sept 2026: "center the text /
         // values inside the breakdown rows vertically, like all other
         // rows") — turned out to be a pre-existing gap on *every* row, not
@@ -1549,7 +1562,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
           style.backgroundColor = 'var(--color-breakdown-tint)'
           if (p.data.rowLabel === 'Plan0-breakdown') style.fontStyle = 'italic'
         }
-        applyCheckStyle(style, monthCheck(p.data, i, closedMonths, live.current.percent))
+        applyCheckStyle(style, monthCheck(p.data, i, live.current.closedMonths, live.current.percent))
         return style
       },
       // Flexed rather than a fixed width (Markus, Sept 2026: "configure the
@@ -1873,7 +1886,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         // "Planung" checkbox is on. One figure per Prog/Plan1/Plan0 row;
         // breakdown and rollup rows stay blank. Its own color (the app's
         // blue "computed" token) tells it apart from this year's figures.
-        headerName: String(yearNum - 1),
+        headerValueGetter: () => String(live.current.yearNum - 1),
         colId: 'lastYear',
         pinned: 'left',
         hide: !showPlanung,
@@ -1905,7 +1918,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
       {
         // This year's number in the header (Oct 2026, Markus) — next to
         // the "letztes Jahr" column's own header it reads as a pair.
-        headerName: String(yearNum),
+        headerValueGetter: () => String(live.current.yearNum),
         colId: 'label',
         pinned: 'left',
         headerClass: 'verlauf-month-header',
@@ -1959,7 +1972,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
             if (p.data.rowLabel === 'Plan0-breakdown') style.fontStyle = 'italic'
           }
           // Plan1's year figure is judged over the ticked months only.
-          applyCheckStyle(style, yearCheck(p.data, closedMonths, live.current.percent))
+          applyCheckStyle(style, yearCheck(p.data, live.current.closedMonths, live.current.percent))
           return style
         },
         valueGetter: (p) => (p.data.yearTotal === 0 ? '' : centsToWholeEuro(p.data.yearTotal)),
@@ -2003,8 +2016,8 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         },
       },
     ]
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- cellStyle/cellRenderer callbacks close over closedMonths; budgets/tags are read through `live` (above)
-  }, [closedMonths, yearNum, showPlanung])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- year, closed months, budgets and tags are read through `live` (above)
+  }, [showPlanung])
 
   // The comment field only works on a cell that is currently displayed.
   const commentRow = commentCell ? rowData.find((r) => r.rowId === commentCell.rowId) : null

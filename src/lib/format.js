@@ -2,8 +2,12 @@
 // currency sign (callers add "€" themselves where the layout calls for
 // it). Pulled out of Konten.jsx (Sept 2026) once Verlauf needed the exact
 // same formatting, rather than letting a second copy grow independently.
+// One formatter each, made once: toLocaleString() builds a new one on every call, which added up to
+// noticeable time when a whole grid redraws (Nov 2026, year switching). Same output.
+const EURO = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const WHOLE_EURO = new Intl.NumberFormat('de-DE')
 export function centsToEuro(cents) {
-  return (cents / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return EURO.format(cents / 100)
 }
 
 // Whole-euro rounding (Verlauf, Sept 2026, Markus: "round all values to
@@ -11,7 +15,7 @@ export function centsToEuro(cents) {
 // figures where cent precision isn't the point; never used for anything
 // that writes back to Firestore, where cents stay exact (§2.1).
 export function centsToWholeEuro(cents) {
-  return Math.round(cents / 100).toLocaleString('de-DE')
+  return WHOLE_EURO.format(Math.round(cents / 100))
 }
 
 // Parses a whole-euro input's typed text back into cents (Verlauf's

@@ -45,6 +45,8 @@ export default function App() {
   const verlaufYear = useValueWhileVisible(year, view === 'verlauf')
   const planungYear = useValueWhileVisible(year, view === 'planung')
   const quickviewYear = useValueWhileVisible(year, view === 'quickview')
+  // The Dashboard too (Nov 2026: its Prognose charts recomputed on every year switch while hidden).
+  const dashboardYear = useValueWhileVisible(year, view === 'dashboard')
   // The cursor's last known position on each of these two grid screens
   // (Markus: "generally, save the cursor position both in konten and
   // verlauf, and place the cursor there again upon switching") — has to
@@ -328,7 +330,7 @@ export default function App() {
         </div>
         {/* Mounted once, only hidden — like the other data screens (Nov 2026). */}
         <div className={view === 'dashboard' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
-          <Dashboard year={year} active={view === 'dashboard'} onOpenInKonten={openInKonten} />
+          <Dashboard year={dashboardYear} active={view === 'dashboard'} onOpenInKonten={openInKonten} />
         </div>
         {/* Mounted once, only hidden — like the other data screens (Oct 2026). */}
         <div className={view === 'aussenstaende' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
