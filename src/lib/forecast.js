@@ -12,7 +12,7 @@
 import { balance, jahresanfang } from './balance'
 import { budgetTopLineMonths, progMonths } from './budget'
 import { isBudgetPlannedTag, isKnownSubcat } from './categoryOrder'
-import { claimCategoryIds, claimTotal } from './claims'
+import { claimCategoryIds, claimStart } from './claims'
 
 export const CASH_GROUPS = ['Barkonten', 'Bargeld']
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
@@ -91,7 +91,7 @@ export function forecastSeries({ accounts, categories, tags, budgets, transactio
 
   // The cash start includes what was still owed to us (open Außenstände) on 31 Dec, as in Markus's
   // Sheet: claim bookings are not planning rows, so the Prog line runs "cash + open claims" anyway.
-  const openClaims = claimTotal(transactions, claimCategoryIds(categories), `${year - 1}-12-31`)
+  const openClaims = claimStart(transactions, claimCategoryIds(categories), year)
   let start = { cash: sumStart(cashIds) + openClaims, geldanlage: sumStart(anlageIds), sparkonten: sumStart(sparIds), openClaims, provisional: false }
   if (isProvisionalStart(year, closedByYear, budgets)) {
     const prev = forecastSeries({ accounts, categories, tags, budgets, transactions, year: year - 1, closedMonths: closedByYear[year - 1] ?? [], closedByYear })

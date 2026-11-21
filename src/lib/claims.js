@@ -1,3 +1,4 @@
+import { isAnchorTransaction } from './balance'
 import { CLAIM_TYPES } from './tagTypes'
 import { isClaimLike } from './needsEntry'
 import { claimLineContribution, tagFilterMatchIds } from './tagBalance'
@@ -187,4 +188,16 @@ export function claimTotal(transactions, claimCats, asOfDate = '9999-12-31', cat
     }
   }
   return total
+}
+
+/** The claims still open at the start of a year – taken like jahresanfang(): everything up to 31 Dec of
+ *  the year before, plus the very first year's opening balances, which are dated 1 Jan (Nov 2026: the
+ *  2025 openings of the former Merkkonten, 2.528,76 €, were missed, so 2025's Prognose ended at 19,6
+ *  instead of 22,2 k€). */
+export function claimStart(transactions, claimCats, year) {
+  const yearStart = `${year}-01-01`
+  return claimTotal(
+    transactions.filter((tx) => tx.date <= `${year - 1}-12-31` || (isAnchorTransaction(tx) && tx.date <= yearStart)),
+    claimCats,
+  )
 }

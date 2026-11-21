@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { claimCategoryIds, claimLines, claimOverview, claimTagIds, claimTotal, untaggedCards } from './claims'
+import { claimCategoryIds, claimLines, claimOverview, claimStart, claimTagIds, claimTotal, untaggedCards } from './claims'
 import { tagFilterTotal } from './tagBalance'
 
 // Synthetic fixtures only. Since Nov 2026 a claim line is a line in an Außenstände sub-category on a
@@ -144,5 +144,18 @@ describe('untaggedCards', () => {
     expect(cards.map((c) => c.id)).toEqual([`untagged:${V}`, `untagged:${C}`])
     expect(cards[0]).toMatchObject({ name: 'Verliehen', net: 5000 - 700, txIds: ['a', 'd'], untagged: true })
     expect(cards[1]).toMatchObject({ name: 'CPAM', net: 1000 })
+  })
+})
+
+describe('claimStart', () => {
+  it('counts the first year’s opening claims dated 1 Jan, like jahresanfang()', () => {
+    const cats = new Set(['aussenstaende-cpam'])
+    const txs = [
+      { id: 'o', date: '2025-01-01', fromAccountId: 'jahresabschluss', toAccountId: null, amountCents: -80263, lines: [{ amountCents: -80263, categoryId: 'aussenstaende-cpam', tags: [] }] },
+      { id: 'n', date: '2025-01-01', fromAccountId: 'bnp', toAccountId: null, amountCents: -1000, lines: [{ amountCents: -1000, categoryId: 'aussenstaende-cpam', tags: [] }] },
+      { id: 'later', date: '2025-03-01', fromAccountId: 'bnp', toAccountId: null, amountCents: -500, lines: [{ amountCents: -500, categoryId: 'aussenstaende-cpam', tags: [] }] },
+    ]
+    expect(claimStart(txs, cats, 2025)).toBe(80263)
+    expect(claimStart(txs, cats, 2026)).toBe(80263 + 1000 + 500)
   })
 })
