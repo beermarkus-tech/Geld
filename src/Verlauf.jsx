@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { collection, deleteDoc, doc, onSnapshot, setDoc, writeBatch } from 'firebase/firestore'
+import { closedByYearOf } from './lib/forecast'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { TAG_RENAME_MESSAGES } from './lib/tagRename'
 import { qualifiedTagName } from './lib/tagStyle'
@@ -39,6 +40,8 @@ const VERLAUF_DEFAULT_COL_DEF = { suppressMovable: true, sortable: false, filter
 ModuleRegistry.registerModules([AllCommunityModule])
 syncAgGridColorScheme()
 
+// a stable empty list, so a year without settings does not look like a change on every render
+const NO_MONTHS = []
 const MONTH_LABELS = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
 
 // The month-close "ok" switch, embedded directly in that month's own
@@ -456,7 +459,8 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   const tagActions = useTagActions()
   const [transactions, setTransactions] = useState([])
   const [budgets, setBudgets] = useState([])
-  const [closedMonths, setClosedMonths] = useState([])
+  // closedMonths per year (settings/{year}); this year's and last year's are read from it below
+  const [closedByYear, setClosedByYear] = useState({})
   // Plan1's colour tolerance in percent (Settings › Verlauf, lib/usePlanTolerance.js).
   const [tolerancePercent] = usePlanTolerance()
   // Global controls (spec.md §3b): Plan0's own show/hide, and (Sept 2026)
@@ -487,7 +491,6 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   const [showPlanung, setShowPlanung] = useState(() => readBoolSetting(SHOW_PLANUNG_KEY, false))
   // Last year's own month-close switches (settings/{year−1}) — what makes
   // last year's Prog read exactly as Verlauf shows that year itself.
-  const [lastYearClosedMonths, setLastYearClosedMonths] = useState([])
   // Per-cell comments (Oct 2026, Markus): one short note per month/total
   // cell, stored in the `cellComments` collection (spec.md §2.7d). The cell
   // the cursor is on drives the comment field in the header row.
@@ -793,23 +796,12 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     return () => unsubs.forEach((u) => u())
   }, [])
 
-  // settings/{year} is a single document, not a collection — its own
-  // subscription, re-pointed whenever the global year selector changes.
-  useEffect(() => {
-    if (!year) return
-    const unsub = onSnapshot(doc(db, 'settings', String(year)), (snap) => {
-      setClosedMonths(snap.exists() ? (snap.data().closedMonths ?? []) : [])
-    })
-    return unsub
-  }, [year])
-
-  useEffect(() => {
-    if (!year) return
-    const unsub = onSnapshot(doc(db, 'settings', String(Number(year) - 1)), (snap) => {
-      setLastYearClosedMonths(snap.exists() ? (snap.data().closedMonths ?? []) : [])
-    })
-    return unsub
-  }, [year])
+  // Every year's closed months, subscribed once (Nov 2026, Markus: on a year switch the numbers appeared
+  // first and the ticks/colours a moment later – the screen used to re-subscribe to settings/{year} after
+  // the switch and drew twice). Now the new year's closed months are already there when it renders.
+  useEffect(() => onSnapshot(collection(db, 'settings'), (snap) => setClosedByYear(closedByYearOf(snap.docs.map((d) => ({ id: d.id, ...d.data() }))))), [])
+  const closedMonths = closedByYear[Number(year)] ?? NO_MONTHS
+  const lastYearClosedMonths = closedByYear[Number(year) - 1] ?? NO_MONTHS
 
   function toggleMonthClosed(month) {
     const next = closedMonths.includes(month) ? closedMonths.filter((m) => m !== month) : [...closedMonths, month].sort((a, b) => a - b)
@@ -1485,8 +1477,9 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   live.current = { persistBudgetMonth, renameRow, tagToLabel, tagById, replaceOptionsFor, replaceBreakdownTag, percent: tolerancePercent, closedMonths, yearNum, toggleMonthClosed }
   // Speed (Nov 2026): the column definitions no longer depend on the year or the closed months (a new
   // set made AG Grid rebuild every cell on each year switch, ~1 s) – they read both through `live`,
-  // and this redraws the headers and cells when either changes.
-  useEffect(() => {
+  // and this redraws the headers and cells when either changes – before the browser paints, so the
+  // numbers and their ticks/colours appear together.
+  useLayoutEffect(() => {
     const api = gridApiRef.current
     if (!api) return
     api.refreshHeader()

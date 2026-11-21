@@ -2529,3 +2529,7 @@ Markus: switching years had become sluggish. Measured in the browser (production
 - Also fixed in passing: `breakdownGroupAllocationMonthActual()` had the same one-sided sign bug as `allocationMonthActual()` (fixed in the 193rd entry) – a Rücklagen breakdown's "(automatisch)" row for an expense paid straight from the pot account.
 
 **After:** Konten ~0,08 s, Planung ~0,15 s, Dashboard ~0,35–0,55 s, Verlauf ~0,75–0,85 s (what remains is AG Grid's own layout work). All backup checks unchanged (2025 → 22.160,54, 2027 start 4.663,72, every month check 0). 276 tests, lint, build pass.
+
+## Session 37, continued a hundred-and-ninety-eighth time — 2026-11-21 — Verlauf: year switch in one step
+
+Markus: on a year switch Verlauf showed the numbers first and the ticks/colours a moment later. Cause: Verlauf re-subscribed to settings/{year} *after* the switch, so it drew once with the old year's closed months and again when the new ones arrived. Now it subscribes to the whole `settings` collection once (`closedByYearOf`, as Dashboard/Planung) and reads this year's and last year's closed months from it; the header/cell redraw for a year or closed-month change runs in a layout effect (before paint). Measured frame by frame (backup, production build): before, the old year's ticks showed at ~0,27 s and the right ones at ~0,75–0,95 s; now a single update at ~0,5 s with the right ticks. Ticking/unticking months re-checked. 276 tests, lint, build pass.
