@@ -19,10 +19,10 @@ const PLAN = 'var(--color-text)'
 const ANLAGE = 'color-mix(in srgb, var(--color-income) 42%, var(--color-surface))'
 const SPAR = 'color-mix(in srgb, var(--color-income) 18%, var(--color-surface))'
 
-export default function ForecastChart({ accounts, categories, tags, budgets, transactions, yearNum, closedMonths }) {
+export default function ForecastChart({ accounts, categories, tags, budgets, transactions, yearNum, closedMonths, closedByYear }) {
   const data = useMemo(
-    () => forecastSeries({ accounts, categories, tags, budgets, transactions, year: yearNum, closedMonths }),
-    [accounts, categories, tags, budgets, transactions, yearNum, closedMonths],
+    () => forecastSeries({ accounts, categories, tags, budgets, transactions, year: yearNum, closedMonths, closedByYear }),
+    [accounts, categories, tags, budgets, transactions, yearNum, closedMonths, closedByYear],
   )
   const pts = [{ m: 0, plan0: data.start.cash, plan1: data.start.cash, prog: data.start.cash, geldanlage: data.start.geldanlage, sparkonten: data.start.sparkonten }, ...data.months]
 
@@ -50,6 +50,11 @@ export default function ForecastChart({ accounts, categories, tags, budgets, tra
         <span className="text-sm text-[var(--color-text-muted)]">
           Linien: Barkonten + Bargeld + offene Außenstände am Jahresanfang (linke Achse) · Balken: Geldanlage + Sparkonten (rechte Achse) · abgeschlossene Monate gebucht, offene aus der Planung
         </span>
+        {data.start.provisional && (
+          <span className="rounded px-2 py-0.5 text-xs font-medium" style={{ background: 'var(--color-needs-entry)', color: '#1f1a00' }}>
+            Start vorläufig: Prognose-Jahresende {yearNum - 1} ({yearNum - 1} hat noch offene Monate)
+          </span>
+        )}
       </div>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-[var(--color-text-muted)]">
         <Legend><span className="inline-block w-6 border-t-[3px] border-[var(--color-text)]" /> Plan1</Legend>
@@ -85,7 +90,7 @@ export default function ForecastChart({ accounts, categories, tags, budgets, tra
                 <text x={cx(i)} y={yR(0) - 6} textAnchor="middle" fontSize="11" fill="var(--color-income)">{kEuro(p.geldanlage)}</text>
                 {/* at the bottom of the light segment, as in Markus's Sheet – less in the way of the lines */}
                 <text x={cx(i)} y={yA - 6} textAnchor="middle" fontSize="11" fill="var(--color-income)">{kEuro(p.sparkonten)}</text>
-                <text x={cx(i)} y={TOP + PLOT_H + 22} textAnchor="middle" fontSize="13" fontWeight={p.closed ? 600 : 400} fill="var(--color-text)">{LABELS[i]}</text>
+                <text x={cx(i)} y={TOP + PLOT_H + 22} textAnchor="middle" fontSize="13" fontWeight={p.closed ? 600 : 400} fill="var(--color-text)">{i === 0 && data.start.provisional ? 'Start (vorl.)' : LABELS[i]}</text>
               </g>
             )
           })}

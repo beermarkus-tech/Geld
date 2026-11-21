@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { forecastSeries, kEuro, niceStep } from './forecast'
+import { closedByYearOf, forecastSeries, isProvisionalStart, kEuro, niceStep } from './forecast'
 
 const accounts = [
   { id: 'bnp', reportingGroup: 'Barkonten' },
@@ -36,7 +36,7 @@ const transactions = [
 describe('forecastSeries', () => {
   const r = forecastSeries({ accounts, categories, tags, budgets, transactions, year: 2026, closedMonths: [1] })
   it('starts from the real balances at the end of the year before', () => {
-    expect(r.start).toEqual({ cash: 1000000, geldanlage: 3000000, sparkonten: 2000000, openClaims: 0 })
+    expect(r.start).toEqual({ cash: 1000000, geldanlage: 3000000, sparkonten: 2000000, openClaims: 0, provisional: false })
   })
   it('Plan lines add each month’s planned result (incl. Rücklagen transfers) to the start', () => {
     expect(r.months.slice(0, 3).map((x) => x.plan1)).toEqual([1300000, 1550000, 1800000])
@@ -88,5 +88,24 @@ describe('booked Tagesgeld transfers', () => {
     expect(r.months[0].prog - base.months[0].prog).toBe(200000)
     expect(r.months[0].plan1).toBe(base.months[0].plan1)
     expect(r.months[0].prog).toBe(1000000 + 400000 - 120000 + 200000)
+  })
+})
+
+describe('provisional start (the year before still has open months)', () => {
+  it('starts from the year before’s Prognose year end while it has open months, else from the real balance', () => {
+    const b2027 = [...budgets, { ...budgets[0], year: 2027 }]
+    const prev = forecastSeries({ accounts, categories, tags, budgets: b2027, transactions, year: 2026, closedMonths: [1] })
+    const open = forecastSeries({ accounts, categories, tags, budgets: b2027, transactions, year: 2027, closedByYear: { 2026: [1] } })
+    expect(open.start).toMatchObject({ provisional: true, cash: prev.months[11].prog, sparkonten: prev.months[11].sparkonten })
+    const closed = forecastSeries({ accounts, categories, tags, budgets: b2027, transactions, year: 2027, closedByYear: { 2026: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] } })
+    expect(closed.start.provisional).toBe(false)
+  })
+  it('the first year (nothing planned the year before) always starts from its real opening balances', () => {
+    expect(isProvisionalStart(2026, { 2025: [] }, budgets)).toBe(false)
+    expect(isProvisionalStart(2027, { 2026: [1] }, budgets)).toBe(true)
+    expect(isProvisionalStart(2027, null, budgets)).toBe(false)
+  })
+  it('reads closedMonths per year from settings documents', () => {
+    expect(closedByYearOf([{ id: '2026', closedMonths: [1] }, { id: 'app' }])).toEqual({ 2026: [1] })
   })
 })

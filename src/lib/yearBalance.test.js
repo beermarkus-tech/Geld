@@ -84,3 +84,14 @@ describe('the first year', () => {
     expect(r.startParts.reduce((s, p) => s + p.cents, 0)).toBe(r.versions.prog.start)
   })
 })
+
+describe('provisional start', () => {
+  it('the start bar is the year before’s end bar while that year has open months', () => {
+    const b = [...budgets, { ...budgets[0], year: 2027 }]
+    const prev = yearBalance({ ...input, budgets: b })
+    const r = yearBalance({ ...input, budgets: b, year: 2027, closedMonths: [], closedByYear: { 2026: [1] } })
+    expect(r.provisional).toBe(true)
+    expect(r.startParts).toEqual(prev.endParts)
+    expect(r.startParts.reduce((s, p) => s + p.cents, 0)).toBe(r.versions.prog.start)
+  })
+})

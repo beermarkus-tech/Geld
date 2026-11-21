@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { collection, doc, onSnapshot } from 'firebase/firestore'
+import { useEffect, useMemo, useState } from 'react'
+import { collection, onSnapshot } from 'firebase/firestore'
 
 import { db } from './firebase'
 import ForecastChart from './ForecastChart'
@@ -8,6 +8,7 @@ import YearCharts from './YearCharts'
 import MonthView from './MonthView'
 import StatusChart from './StatusChart'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
+import { closedByYearOf } from './lib/forecast'
 import { currentMonthMarker } from './lib/status'
 import ui from './lib/uiState'
 import { useTags } from './TagsProvider'
@@ -27,7 +28,9 @@ export default function Dashboard({ year, active = true, onOpenInKonten }) {
   const [budgets, setBudgets] = useState([])
   const [yearSettings, setYearSettings] = useState([])
   const [transactions, setTransactions] = useState([])
-  const [closedMonths, setClosedMonths] = useState([])
+  // closedMonths of every year (settings/{year}) – this year's drive the charts, the year before's decide
+  // whether this year starts provisionally from its Prognose end (lib/forecast.js isProvisionalStart).
+  const [closedByYear, setClosedByYear] = useState({})
   // Prognose is the first sub-tab and what the Dashboard opens with until another one is picked (Nov 2026).
   const [tab, setTab] = useState(() => (['month', 'status'].includes(ui.get('dashboard', 'subtab')) ? ui.get('dashboard', 'subtab') : 'prognose'))
   useEffect(() => ui.set('dashboard', 'subtab', tab), [tab])
@@ -45,13 +48,11 @@ export default function Dashboard({ year, active = true, onOpenInKonten }) {
     ]
     return () => unsubs.forEach((u) => u())
   }, [])
-  useEffect(() => {
-    if (!yearNum) return undefined
-    return onSnapshot(doc(db, 'settings', String(yearNum)), (s) => setClosedMonths(s.exists() ? (s.data().closedMonths ?? []) : []))
-  }, [yearNum])
+  useEffect(() => onSnapshot(collection(db, 'settings'), (s) => setClosedByYear(closedByYearOf(s.docs.map((d) => ({ id: d.id, ...d.data() }))))), [])
+  const closedMonths = useMemo(() => closedByYear[yearNum] ?? [], [closedByYear, yearNum])
 
   const month = currentMonthMarker(closedMonths, yearNum)
-  const forecastProps = { accounts, categories, tags, budgets, transactions, yearNum, closedMonths }
+  const forecastProps = { accounts, categories, tags, budgets, transactions, yearNum, closedMonths, closedByYear }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

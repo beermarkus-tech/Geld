@@ -5,6 +5,7 @@ import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { db } from './firebase'
 import { jahresanfang } from './lib/balance'
 import { claimCategoryIds, claimTotal } from './lib/claims'
+import { closedByYearOf, forecastSeries, isProvisionalStart } from './lib/forecast'
 import {
   allocationMonthActual,
   budgetTopLineMonths,
@@ -157,17 +158,18 @@ export default function Planung({ year, active = true }) {
     return () => unsubs.forEach((u) => u())
   }, [])
 
-  // Both years' settings/{year} documents — each year has its own Puffer,
-  // and the planning year's closedMonths drives the Prog lens.
-  useEffect(() => {
-    if (!year) return
-    const unsubs = [refYear, planYear].map((y) =>
-      onSnapshot(doc(db, 'settings', String(y)), (snap) => {
-        setSettingsByYear((prev) => ({ ...prev, [y]: snap.exists() ? snap.data() : {} }))
+  // Every year's settings/{year} document — each year has its own Puffer, the planning year's
+  // closedMonths drives the Prog lens, and the year before's decide whether a year's Jahresanfang is
+  // provisional (Nov 2026, lib/forecast.js isProvisionalStart) – so all years, not just the two shown.
+  useEffect(
+    () =>
+      onSnapshot(collection(db, 'settings'), (snap) => {
+        const next = {}
+        for (const d of snap.docs) if (/^\d{4}$/.test(d.id)) next[Number(d.id)] = d.data()
+        setSettingsByYear(next)
       }),
-    )
-    return () => unsubs.forEach((u) => u())
-  }, [year, refYear, planYear])
+    [],
+  )
 
   function chooseLens(id) {
     setLens(id)
@@ -298,13 +300,21 @@ export default function Planung({ year, active = true }) {
 
     const startCashAccounts = accounts.filter((a) => START_CASH_GROUPS.includes(a.reportingGroup))
     const claimCats = claimCategoryIds(categories)
+    // While the year before still has open months, a year starts from the year before's Prognose year
+    // end (Nov 2026, Markus: "for planning 2027 take the prognosed year-end result of the ongoing year,
+    // not the current month") – the same figure as the Prognose chart's Dezember / next year's Start.
+    const closedByYear = closedByYearOf(settingsByYear)
+    const provisional = (y) => isProvisionalStart(y, closedByYear, budgets)
     const startCash = (y) =>
-      startCashAccounts.reduce((a, acc) => a + jahresanfang(acc.id, y, transactions), 0) + claimTotal(transactions, claimCats, `${y - 1}-12-31`)
+      provisional(y)
+        ? forecastSeries({ accounts, categories, tags, budgets, transactions, year: y, closedMonths: closedByYear[y] ?? [], closedByYear }).start.cash
+        : startCashAccounts.reduce((a, acc) => a + jahresanfang(acc.id, y, transactions), 0) + claimTotal(transactions, claimCats, `${y - 1}-12-31`)
     const puffer = (y) => settingsByYear[y]?.minCashBufferCents ?? 0
 
     function summary(y, col) {
       return {
         year: y,
+        provisional: provisional(y),
         jahresanfangRaw: startCash(y),
         puffer: puffer(y),
         ausgaben: ausgabenTotal[col],
@@ -848,7 +858,14 @@ function ReportTable({ report, savePuffer, ...c }) {
         </tr>
       </thead>
       <tbody>
-        <BandRow label="Alle Barkonten" refValue={ref.jahresanfangRaw} planValue={plan.jahresanfangRaw} color="var(--color-computed)" showComments={showComments} />
+        {/* "vorl." = the year before still has open months: its Prognose year end, not a real balance (Nov 2026) */}
+        <BandRow
+          label="Alle Barkonten"
+          refValue={ref.provisional ? { node: <span title={`Prognose-Jahresende ${ref.year - 1} (noch offene Monate)`}>{euro(ref.jahresanfangRaw)} (vorl.)</span> } : ref.jahresanfangRaw}
+          planValue={plan.provisional ? { node: <span title={`Prognose-Jahresende ${plan.year - 1} (noch offene Monate)`}>{euro(plan.jahresanfangRaw)} (vorl.)</span> } : plan.jahresanfangRaw}
+          color="var(--color-computed)"
+          showComments={showComments}
+        />
         <BandRow
           label="Puffer"
           refValue={{ node: <PufferCell cents={ref.puffer} onSave={(v) => savePuffer(refYear, v)} label={`Puffer ${refYear}`} navCol={0} /> }}
@@ -963,7 +980,7 @@ function ReportCards({ report, savePuffer, ...c }) {
         <div className="mb-1 font-semibold">Jahresanfang</div>
         {[ref, plan].map((s) => (
           <div key={s.year} className="flex flex-col gap-0.5 border-t border-[var(--color-border)] py-1 first-of-type:border-t-0">
-            <Line label={`Alle Barkonten ${s.year}`} value={euro(s.jahresanfangRaw)} color="var(--color-computed)" />
+            <Line label={`Alle Barkonten ${s.year}${s.provisional ? ' (vorläufig)' : ''}`} value={euro(s.jahresanfangRaw)} color="var(--color-computed)" />
             <Line label="Puffer" value={<PufferCell cents={s.puffer} onSave={(v) => savePuffer(s.year, v)} label={`Puffer ${s.year}`} />} />
             <Line label="Jahresanfang" value={euro(s.startCash)} color="var(--color-computed)" />
           </div>

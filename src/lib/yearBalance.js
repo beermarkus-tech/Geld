@@ -35,8 +35,8 @@ export function asOfDate(year, closedMonths = []) {
  *             startParts: Array<{id, name, cents}>, endParts: Array<{id, name, cents}> }}
  *   every figure in cents; parts[0] is always Barkonten (id 'cash')
  */
-export function yearBalance({ accounts, categories, tags, budgets, transactions, year, closedMonths = [] }) {
-  const series = forecastSeries({ accounts, categories, tags, budgets, transactions, year, closedMonths })
+export function yearBalance({ accounts, categories, tags, budgets, transactions, year, closedMonths = [], closedByYear = null }) {
+  const series = forecastSeries({ accounts, categories, tags, budgets, transactions, year, closedMonths, closedByYear })
   const start = series.start.cash + series.start.geldanlage + series.start.sparkonten
   const income = incomeCategoryIds(categories)
   const cats = planTargets(categories, tags).filter((t) => t.key === 'categoryId')
@@ -57,28 +57,37 @@ export function yearBalance({ accounts, categories, tags, budgets, transactions,
   const startDate = `${year - 1}-12-31`
   const realDate = asOfDate(year, closedMonths)
   const lastClosed = Math.max(0, ...closedMonths)
+  // The start as jahresanfang() takes it: everything up to 31 Dec of the year before, plus the opening
+  // balances of the very first year, which are dated 1 Jan (Nov 2026: 2025's start bar showed every pot at 0).
+  const startTx = transactions.filter((tx) => tx.date <= startDate || (isAnchorTransaction(tx) && tx.date <= `${year}-01-01`))
+  // A provisional start (the year before still has open months) is the year before's Prognose end.
+  const startParts = series.start.provisional
+    ? yearBalance({ accounts, categories, tags, budgets, transactions, year: year - 1, closedMonths: closedByYear[year - 1] ?? [], closedByYear }).endParts
+    : [{ id: 'cash', name: 'Barkonten', cents: series.start.cash }, ...pots.map((t) => ({ id: t.id, name: t.name, cents: tagBalance(t.id, '9999-12-31', startTx, tags) }))]
+  // A provisional year with nothing closed yet builds on its (provisional) start, not on today's balances.
+  const potBase = (t) =>
+    series.start.provisional && lastClosed === 0 ? (startParts.find((p) => p.id === t.id)?.cents ?? 0) : tagBalance(t.id, realDate, transactions, tags)
   const potEnd = (t) => {
-    let cents = tagBalance(t.id, realDate, transactions, tags)
+    let cents = potBase(t)
     if (isBudgetPlannedTag(t)) {
       const planned = budgetTopLineMonths('allocationTagId', t.id, 'plan1', year, budgets).months
       for (let m = lastClosed + 1; m <= 12; m++) cents -= planned[m - 1]
     }
     return cents
   }
-  // The start as jahresanfang() takes it: everything up to 31 Dec of the year before, plus the opening
-  // balances of the very first year, which are dated 1 Jan (Nov 2026: 2025's start bar showed every pot at 0).
-  const startTx = transactions.filter((tx) => tx.date <= startDate || (isAnchorTransaction(tx) && tx.date <= `${year}-01-01`))
-  const startParts = [{ id: 'cash', name: 'Barkonten', cents: series.start.cash }, ...pots.map((t) => ({ id: t.id, name: t.name, cents: tagBalance(t.id, '9999-12-31', startTx, tags) }))]
   const endParts = [{ id: 'cash', name: 'Barkonten', cents: series.months[11].prog }, ...pots.map((t) => ({ id: t.id, name: t.name, cents: potEnd(t) }))]
-  return { versions, startParts, endParts }
+  return { versions, startParts, endParts, provisional: series.start.provisional }
 }
 
 /**
  * @returns {{ date, pots: Array<{ id, name, total, parts: Array<{ accountId, name, cents }> }> }}
  *   pots holding nothing are left out; parts largest first
  */
-export function potLocations({ accounts, tags, transactions, year, closedMonths = [] }) {
-  const date = asOfDate(year, closedMonths)
+export function potLocations({ accounts, tags, transactions, year, closedMonths = [], closedByYear = null }) {
+  // Nothing closed yet and the year before still open (a provisional year): its last closed month is the
+  // newest real figure – "31 Dec" of the year before would be a date that has not happened yet.
+  const prevOpen = closedMonths.length === 0 && closedByYear && (closedByYear[year - 1] ?? []).length > 0 && (closedByYear[year - 1] ?? []).length < 12
+  const date = prevOpen ? asOfDate(year - 1, closedByYear[year - 1]) : asOfDate(year, closedMonths)
   const nameOf = Object.fromEntries(accounts.map((a) => [a.id, a.name]))
   const pots = savingsPots(tags)
     .map((t) => {

@@ -26,11 +26,32 @@ export function planTargets(categories, tags) {
   ]
 }
 
+/** closedMonths per year from the settings documents ({ '2026': {closedMonths}, … } or an array of docs with id). */
+export function closedByYearOf(settingsDocs) {
+  const out = {}
+  for (const [id, data] of Array.isArray(settingsDocs) ? settingsDocs.map((d) => [d.id, d]) : Object.entries(settingsDocs ?? {})) {
+    if (/^\d{4}$/.test(String(id))) out[Number(id)] = data?.closedMonths ?? []
+  }
+  return out
+}
+
 /**
- * @returns {{ start: {cash, geldanlage, sparkonten}, months: Array<{ m, plan0, plan1, prog, geldanlage, sparkonten, closed }> }}
+ * Whether a year starts *provisionally* from the year before's Prognose end (Nov 2026, Markus: "for
+ * planning 2027 take the prognosed year-end result of the ongoing year, not the current month"):
+ * true while the year before still has open months – and was planned at all (2024 has no plan, so
+ * 2025, the first year, starts from its real opening balances).
+ */
+export function isProvisionalStart(year, closedByYear, budgets) {
+  if (!closedByYear) return false
+  return (closedByYear[year - 1] ?? []).length < 12 && budgets.some((b) => b.year === year - 1)
+}
+
+/**
+ * @param closedByYear  optional { year: closedMonths } – enables the provisional start (above)
+ * @returns {{ start: {cash, geldanlage, sparkonten, provisional}, months: Array<{ m, plan0, plan1, prog, geldanlage, sparkonten, closed }> }}
  *   every figure in cents; `plan0/plan1/prog` are cash balances at the month's end
  */
-export function forecastSeries({ accounts, categories, tags, budgets, transactions, year, closedMonths = [] }) {
+export function forecastSeries({ accounts, categories, tags, budgets, transactions, year, closedMonths = [], closedByYear = null }) {
   const groupOf = Object.fromEntries(accounts.map((a) => [a.id, a.reportingGroup]))
   const idsIn = (groups) => accounts.filter((a) => groups.includes(a.reportingGroup) && a.tracked !== false).map((a) => a.id)
   const cashIds = idsIn(CASH_GROUPS)
@@ -71,7 +92,12 @@ export function forecastSeries({ accounts, categories, tags, budgets, transactio
   // The cash start includes what was still owed to us (open Außenstände) on 31 Dec, as in Markus's
   // Sheet: claim bookings are not planning rows, so the Prog line runs "cash + open claims" anyway.
   const openClaims = claimTotal(transactions, claimCategoryIds(categories), `${year - 1}-12-31`)
-  const start = { cash: sumStart(cashIds) + openClaims, geldanlage: sumStart(anlageIds), sparkonten: sumStart(sparIds), openClaims }
+  let start = { cash: sumStart(cashIds) + openClaims, geldanlage: sumStart(anlageIds), sparkonten: sumStart(sparIds), openClaims, provisional: false }
+  if (isProvisionalStart(year, closedByYear, budgets)) {
+    const prev = forecastSeries({ accounts, categories, tags, budgets, transactions, year: year - 1, closedMonths: closedByYear[year - 1] ?? [], closedByYear })
+    const dec = prev.months[11]
+    start = { cash: dec.prog, geldanlage: dec.geldanlage, sparkonten: dec.sparkonten, openClaims, provisional: true }
+  }
   const lv = { plan0: start.cash, plan1: start.cash, prog: start.cash, geldanlage: start.geldanlage, sparkonten: start.sparkonten }
   const months = MONTHS.map((m) => {
     const closed = closedMonths.includes(m)

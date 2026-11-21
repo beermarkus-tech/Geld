@@ -18,12 +18,15 @@ const seriesColor = (i) => `var(--series-${(i % 8) + 1})`
 const pct = (part, total) => `${Math.round((100 * part) / total)} %`
 const dateDe = (iso) => iso.split('-').reverse().join('.')
 
-export default function YearCharts({ accounts, categories, tags, budgets, transactions, yearNum, closedMonths }) {
+export default function YearCharts({ accounts, categories, tags, budgets, transactions, yearNum, closedMonths, closedByYear }) {
   const yb = useMemo(
-    () => yearBalance({ accounts, categories, tags, budgets, transactions, year: yearNum, closedMonths }),
-    [accounts, categories, tags, budgets, transactions, yearNum, closedMonths],
+    () => yearBalance({ accounts, categories, tags, budgets, transactions, year: yearNum, closedMonths, closedByYear }),
+    [accounts, categories, tags, budgets, transactions, yearNum, closedMonths, closedByYear],
   )
-  const loc = useMemo(() => potLocations({ accounts, tags, transactions, year: yearNum, closedMonths }), [accounts, tags, transactions, yearNum, closedMonths])
+  const loc = useMemo(
+    () => potLocations({ accounts, tags, transactions, year: yearNum, closedMonths, closedByYear }),
+    [accounts, tags, transactions, yearNum, closedMonths, closedByYear],
+  )
   // one colour per part id (Barkonten first, then the pots), shared by both charts
   const colorOf = Object.fromEntries(yb.startParts.map((p, i) => [p.id, seriesColor(i)]))
   return (
@@ -88,7 +91,9 @@ function Jahresbilanz({ yb, colorOf, yearNum }) {
     <section className="flex flex-col gap-2">
       <div className="flex flex-wrap items-baseline gap-x-3">
         <h3 className="text-base font-semibold">Jahresbilanz {yearNum}</h3>
-        <span className="text-xs text-[var(--color-text-muted)]">Balken: Prognose · Sparen in einen Topf ist keine Ausgabe</span>
+        <span className="text-xs text-[var(--color-text-muted)]">
+          Balken: Prognose · Sparen in einen Topf ist keine Ausgabe{yb.provisional ? ` · Jahresanfang vorläufig (Prognose-Jahresende ${yearNum - 1})` : ''}
+        </span>
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--color-text-muted)]">
         <Legend><span className="inline-block w-5 border-t-2 border-dashed border-[var(--color-text)]" /> Plan0</Legend>
@@ -113,7 +118,7 @@ function Jahresbilanz({ yb, colorOf, yearNum }) {
           {totals.map((c, i) => (
             <g key={COLS[i]}>
               <text x={cx(i) + barW / 2 + 4} y={y(c) + 4} fontSize="11.5" fontWeight="600" fill="var(--color-text)">{kEuro(c)}</text>
-              <text x={cx(i)} y={TOP + PLOT_H + 22} textAnchor="middle" fontSize="12.5" fill="var(--color-text)">{COLS[i]}</text>
+              <text x={cx(i)} y={TOP + PLOT_H + 22} textAnchor="middle" fontSize="12.5" fill="var(--color-text)">{i === 0 && yb.provisional ? 'Jahresanfang (vorl.)' : COLS[i]}</text>
             </g>
           ))}
           <path d={path(v.plan0)} fill="none" stroke={PLAN} strokeWidth="2" strokeDasharray="8 5" />
