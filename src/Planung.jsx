@@ -83,6 +83,8 @@ const SECTION_COLOR = {
   ausgaben: 'var(--color-expense)',
   ruecklagen: 'var(--color-savings)',
   anlage: 'var(--color-income)',
+  // the Ausgaben block's headline (Nov 2026): a slightly darker blue
+  ausgabenHead: 'var(--color-computed)',
 }
 
 // Section background tint — the same tokens Verlauf's category columns use
@@ -93,6 +95,7 @@ const SECTION_TINT = {
   ausgaben: 'var(--color-alert-tint)',
   ruecklagen: 'var(--color-savings-tint)',
   anlage: 'var(--color-anlage-tint)',
+  ausgabenHead: 'color-mix(in srgb, var(--color-computed) 14%, var(--color-surface))',
 }
 
 // The yellow band (aus Rücklagen entnommen, Budget, Ausgaben, in Rücklagen einbezahlt, Jahresergebnis)
@@ -109,6 +112,7 @@ const SECTION_TINT_STRONG = {
   ausgaben: 'color-mix(in srgb, var(--color-alert-tint) 86%, var(--color-alert))',
   ruecklagen: 'color-mix(in srgb, var(--color-savings-tint) 86%, var(--color-savings))',
   anlage: 'color-mix(in srgb, var(--color-anlage-tint) 82%, var(--color-income))',
+  ausgabenHead: 'color-mix(in srgb, var(--color-computed) 24%, var(--color-surface))',
 }
 
 // Jahresergebnis (was "Ausgaben vs. Budget") — "should be near zero"; negative means the plan
@@ -347,7 +351,9 @@ export default function Planung({ year, active = true, onOpenInVerlauf }) {
     // The grand total above the per-group breakdown (§3c: "Ausgaben +
     // Rücklagen is the grand total row that sits just above the per-group
     // breakdown").
-    const ausgabenInklTotal = total('Ausgaben inkl. in Rücklagen einbezahlt', [...ausgabenGroups.flatMap((g) => g.rows), ...directions.map((d) => d.inRow)])
+    // The headline of the Ausgaben block (Nov 2026, Markus): the Ausgaben only – the Rücklagen are
+    // their own section with their own totals.
+    const ausgabenInklTotal = total('Ausgaben', ausgabenGroups.flatMap((g) => g.rows))
 
     const startCashAccounts = accounts.filter((a) => START_CASH_GROUPS.includes(a.reportingGroup) && !isInvestmentCashAccount(a))
     // Investment Cash at the start of a year (the same figure as the Dashboard's lightest green)
@@ -982,7 +988,7 @@ function ReportTable({ report, savePuffer, ...c }) {
         />
 
         <BlockGap showComments={showComments} />
-        <GroupHeader t={report.ausgabenInklTotal} section="ausgaben" showComments={showComments} />
+        <GroupHeader t={report.ausgabenInklTotal} section="ausgabenHead" showComments={showComments} />
         {report.ausgabenGroups.map((g) => (
           <Group key={g.name} t={g.total} rows={g.rows} section="ausgaben" c={c} />
         ))}
@@ -1109,7 +1115,7 @@ function ReportCards({ report, savePuffer, ...c }) {
         <Line label="= Jahresergebnis" value={euro(plan.ausgabenVsBudget)} color={deltaColor(plan.ausgabenVsBudget)} />
       </div>
 
-      <CardGroupHeader t={report.ausgabenInklTotal} section="ausgaben" />
+      <CardGroupHeader t={report.ausgabenInklTotal} section="ausgabenHead" />
       {report.ausgabenGroups.map((g) => (
         <CardSection key={g.name} t={g.total} section="ausgaben" rows={g.rows} c={c} />
       ))}

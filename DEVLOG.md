@@ -2584,3 +2584,7 @@ Markus: Planung need not break the Rücklagen down per pot – Eingang/Ausgang o
 ## Session 37, continued two-hundred-and-eighth time — 2026-11-22 — Back to the per-pot Eingang/Ausgang rows (Build 326)
 
 Misunderstanding corrected: Markus liked the per-pot split (Build 326) – by "not broken down by tag" he meant not showing Verlauf's breakdown lines in Planung, which had not been planned anyway. `Planung.jsx` and the SPEC §2.8 paragraph restored to Build 326; the previous entry's header-only variant is withdrawn. (Build 326's figures were already checked with the totals script: all add up.)
+
+## Session 37, continued two-hundred-and-ninth time — 2026-11-22 — Planung: "Ausgaben" headline
+
+Markus: keep Ausgaben and Rücklagen separate – the header above the Ausgaben groups is now "Ausgaben" (Ausgaben only, = the band's "− Ausgaben"), in a slightly darker blue (`ausgabenHead` section style; phone card too). Totals script re-run: all add up. 289 tests, lint, build pass.
