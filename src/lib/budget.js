@@ -149,26 +149,37 @@ export function allocationMonthActual(allocationTagId, year, month, transactions
 export function rowFlows({ targetKey, targetId, which, year, closedMonths = [], budgets, transactions, tags }) {
   let inflow = 0
   let outflow = 0
-  const add = (v) => (v > 0 ? (outflow += v) : (inflow += v))
+  // per month too (for Planung's Regulär/Einmal split of a split row); a plan figure without month counts only in the totals
+  const inMonths = Array(12).fill(0)
+  const outMonths = Array(12).fill(0)
+  const add = (v, month) => {
+    if (v > 0) {
+      outflow += v
+      if (month) outMonths[month - 1] += v
+    } else {
+      inflow += v
+      if (month) inMonths[month - 1] += v
+    }
+  }
   const planDocs = (version) => {
     const rows = budgetRowsFor(budgets, targetKey, targetId, version, year)
     const lines = rows.filter((b) => b.breakdownTagId != null)
     return lines.length > 0 ? lines : rows.filter((b) => b.breakdownTagId == null)
   }
   if (which !== 'prog') {
-    for (const b of planDocs(which)) add(b.plannedAmountCents ?? 0)
-    return { inflow, outflow }
+    for (const b of planDocs(which)) add(b.plannedAmountCents ?? 0, b.month)
+    return { inflow, outflow, inMonths, outMonths }
   }
   const docs = planDocs(progPlanVersion(targetKey, targetId, year, budgets))
   for (let m = 1; m <= 12; m++) {
     if (closedMonths.includes(m)) {
       // the actual's sign convention: − = paid in (the pot grew)
-      if (targetKey === 'allocationTagId') for (const c of allocationContributions(targetId, year, m, transactions, tags)) add(-c)
+      if (targetKey === 'allocationTagId') for (const c of allocationContributions(targetId, year, m, transactions, tags)) add(-c, m)
     } else {
-      for (const b of docs) if (b.month === m) add(b.plannedAmountCents ?? 0)
+      for (const b of docs) if (b.month === m) add(b.plannedAmountCents ?? 0, m)
     }
   }
-  return { inflow, outflow }
+  return { inflow, outflow, inMonths, outMonths }
 }
 
 // A category or allocation tag's top-line Plan0/Plan1 value, per month —

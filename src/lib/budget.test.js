@@ -406,11 +406,11 @@ describe('rowFlows() — Rücklagen split by direction', () => {
   const base = { targetKey: 'allocationTagId', targetId: 'steuern', year: 2026, tags }
   it('keeps pure + and pure − breakdown lines apart, even in the same month', () => {
     const budgets = [doc('plan1', 3, -17000, 'ruecklagen'), doc('plan1', 3, 400000, 'ausgleich'), doc('plan1', 4, -17000, 'ruecklagen')]
-    expect(rowFlows({ ...base, which: 'plan1', budgets, transactions: [] })).toEqual({ inflow: -34000, outflow: 400000 })
+    expect(rowFlows({ ...base, which: 'plan1', budgets, transactions: [] })).toMatchObject({ inflow: -34000, outflow: 400000 })
   })
   it('a row without breakdown lines splits by month', () => {
     const budgets = [doc('plan0', 1, -17000), doc('plan0', 2, 200000)]
-    expect(rowFlows({ ...base, which: 'plan0', budgets, transactions: [] })).toEqual({ inflow: -17000, outflow: 200000 })
+    expect(rowFlows({ ...base, which: 'plan0', budgets, transactions: [] })).toMatchObject({ inflow: -17000, outflow: 200000 })
   })
   it('Prog: a closed month splits booking by booking, an open month uses the plan', () => {
     const budgets = [doc('plan1', 2, -17000)]
@@ -418,6 +418,9 @@ describe('rowFlows() — Rücklagen split by direction', () => {
       { id: 'a', date: '2026-01-05', fromAccountId: 'bnp', toAccountId: 'livret', amountCents: 17000, lines: [{ amountCents: 17000, tags: ['steuern'] }] },
       { id: 'b', date: '2026-01-20', fromAccountId: 'livret', toAccountId: 'bnp', amountCents: 300000, lines: [{ amountCents: 300000, tags: ['steuern'] }] },
     ]
-    expect(rowFlows({ ...base, which: 'prog', closedMonths: [1], budgets, transactions })).toEqual({ inflow: -17000 - 17000, outflow: 300000 })
+    const f = rowFlows({ ...base, which: 'prog', closedMonths: [1], budgets, transactions })
+    expect(f).toMatchObject({ inflow: -17000 - 17000, outflow: 300000 })
+    expect(f.inMonths.slice(0, 2)).toEqual([-17000, -17000])
+    expect(f.outMonths[0]).toBe(300000)
   })
 })

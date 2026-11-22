@@ -309,10 +309,45 @@ export default function Planung({ year, active = true, onOpenInVerlauf }) {
     const fixkostenTotal = total('Fixkosten', fixkosten)
     const ausgabenTotal = total('Ausgaben gesamt', ausgabenGroups.flatMap((g) => g.rows))
     const ruecklagenTotal = total('Rücklagen', ruecklagen)
+    // Each Rücklagen row split by direction (Nov 2026, Markus; lib/budget.js rowFlows): money paid in
+    // and money taken out. A row with both directions in a year column is shown as two rows; the
+    // section's header shows both totals, and "Ausgaben inkl. Rücklagen" counts only what is paid in
+    // (what is taken out is a Budget source). Regulär/Einmal per direction, from last year's actual months.
+    const closedOf = (y) => settingsByYear[y]?.closedMonths ?? []
+    const ALL_MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
+    const directions = ruecklagen.map((r) => {
+      const flows = (which, year, closedMonths) => rowFlows({ targetKey: r.targetKey, targetId: r.targetId, which, year, closedMonths, budgets, transactions, tags: ptags })
+      const fRef = flows('prog', refYear, closedOf(refYear))
+      const fPlan = flows(lens, planYear, closedOf(planYear))
+      const fActual = flows('prog', refYear, ALL_MONTHS)
+      const mk = (dir) => {
+        const plan = dir === 'in' ? fPlan.inflow : fPlan.outflow
+        return {
+          targetKey: r.targetKey,
+          targetId: r.targetId,
+          dir,
+          label: `${r.label} – ${dir === 'in' ? 'einbezahlt' : 'entnommen'}`,
+          ref: dir === 'in' ? fRef.inflow : fRef.outflow,
+          plan,
+          split: splitYear(plan, regularShare(dir === 'in' ? fActual.inMonths : fActual.outMonths)),
+          // one comment per pot: shown on the first of its two rows only
+          hideComment: dir === 'out',
+        }
+      }
+      const inRow = mk('in')
+      const outRow = mk('out')
+      const both = (fRef.inflow && fRef.outflow) || (fPlan.inflow && fPlan.outflow)
+      // a single row keeps its net figures; its Regulär/Einmal follow the direction its plan figure has
+      const single = { ...r, split: fPlan.outflow ? outRow.split : inRow.split }
+      return { shown: both ? [inRow, outRow] : [single], inRow, outRow }
+    })
+    const ruecklagenShown = directions.flatMap((d) => d.shown)
+    const einbezahltTotal = total('Rücklagen – einbezahlt', directions.map((d) => d.inRow))
+    const entnommenTotal = total('Rücklagen – entnommen', directions.map((d) => d.outRow))
     // The grand total above the per-group breakdown (§3c: "Ausgaben +
     // Rücklagen is the grand total row that sits just above the per-group
     // breakdown").
-    const ausgabenInklTotal = total('Ausgaben inkl. Rücklagen', [...ausgabenGroups.flatMap((g) => g.rows), ...ruecklagen])
+    const ausgabenInklTotal = total('Ausgaben inkl. in Rücklagen einbezahlt', [...ausgabenGroups.flatMap((g) => g.rows), ...directions.map((d) => d.inRow)])
 
     const startCashAccounts = accounts.filter((a) => START_CASH_GROUPS.includes(a.reportingGroup) && !isInvestmentCashAccount(a))
     // Investment Cash at the start of a year (the same figure as the Dashboard's lightest green)
@@ -333,19 +368,9 @@ export default function Planung({ year, active = true, onOpenInVerlauf }) {
     const puffer = (y) => settingsByYear[y]?.minCashBufferCents ?? 0
 
     const icRow = ruecklagen.at(-1)
-    // The Rücklagen rows' money in both directions (lib/budget.js rowFlows): taken out → Budget source,
-    // paid in → spending. The reference year is its Prog; the planning year follows the lens.
-    function flowsOf(y, col) {
-      const which = col === 'ref' ? 'prog' : lens
-      let entnahmen = 0
-      let einbezahlt = 0
-      for (const r of ruecklagen) {
-        const f = rowFlows({ targetKey: r.targetKey, targetId: r.targetId, which, year: y, closedMonths: settingsByYear[y]?.closedMonths ?? [], budgets, transactions, tags: ptags })
-        entnahmen += f.outflow
-        einbezahlt += f.inflow
-      }
-      return { entnahmen, einbezahlt }
-    }
+    // The Rücklagen rows' money in both directions (lib/budget.js rowFlows, split above): taken out →
+    // Budget source, paid in → spending. The reference year is its Prog; the planning year follows the lens.
+    const flowsOf = (y, col) => ({ entnahmen: entnommenTotal[col], einbezahlt: einbezahltTotal[col] })
     function summary(y, col) {
       // Investment Cash over the year: start + what is moved in (the Investment Cash row, − = moved in)
       // − what is invested from it (the Anlage rows, − = invested) = end. A minus at the end means more
@@ -374,7 +399,9 @@ export default function Planung({ year, active = true, onOpenInVerlauf }) {
       einnahmen: einnahmen.filter(visible),
       fixkosten: fixkosten.filter(visible),
       ausgabenGroups: ausgabenGroups.map((g) => ({ ...g, rows: g.rows.filter(visible), total: total(g.name, g.rows) })),
-      ruecklagen: ruecklagen.filter(visible),
+      ruecklagen: ruecklagenShown.filter(visible),
+      einbezahltTotal,
+      entnommenTotal,
       einnahmenTotal,
       fixkostenTotal,
       ausgabenTotal,
@@ -794,7 +821,7 @@ function DataRow({ r, section, c }) {
       </td>
       {showComments && (
         <td className={COMMENT_TD}>
-          <CommentBox y={refYear} target={r} c={c} navCol={0} />
+          {!r.hideComment && <CommentBox y={refYear} target={r} c={c} navCol={0} />}
         </td>
       )}
       <td className={`${TD} ${DIVIDER} ${OPEN_TD}`} onClick={() => c.openInVerlauf(r, 'plan')} title={`In Verlauf öffnen (${c.planLabel})`}>
@@ -802,7 +829,7 @@ function DataRow({ r, section, c }) {
       </td>
       {showComments && (
         <td className={COMMENT_TD}>
-          <CommentBox y={planYear} target={r} c={c} navCol={1} />
+          {!r.hideComment && <CommentBox y={planYear} target={r} c={c} navCol={1} />}
         </td>
       )}
       <td className={TD}>{blankZero(r.split.regularYear)}</td>
@@ -826,7 +853,7 @@ function Group({ t, rows, section, c }) {
     <>
       <GroupHeader t={t} section={section} showComments={c.showComments} />
       {rows.map((r) => (
-        <DataRow key={r.targetId} r={r} section={section} c={c} />
+        <DataRow key={`${r.targetId}:${r.dir ?? ''}`} r={r} section={section} c={c} />
       ))}
     </>
   )
@@ -959,7 +986,9 @@ function ReportTable({ report, savePuffer, ...c }) {
         {report.ausgabenGroups.map((g) => (
           <Group key={g.name} t={g.total} rows={g.rows} section="ausgaben" c={c} />
         ))}
-        <Group t={report.ruecklagenTotal} rows={report.ruecklagen} section="ruecklagen" c={c} />
+        {/* Rücklagen: both directions as their own totals (Nov 2026), then the rows */}
+        <GroupHeader t={report.einbezahltTotal} section="ruecklagen" showComments={showComments} />
+        <Group t={report.entnommenTotal} rows={report.ruecklagen} section="ruecklagen" c={c} />
 
         {/* Below the Budget, outside it (Nov 2026): what is invested from Investment Cash, and how much
             is left there at the end of the year. */}
@@ -999,7 +1028,7 @@ function Card({ r, c }) {
               {euro(v)}
             </button>
           </div>
-          {showComments && (
+          {showComments && !r.hideComment && (
             <div className="mt-0.5">
               <CommentBox y={y} target={r} c={c} cell={false} />
             </div>
@@ -1037,7 +1066,7 @@ function CardSection({ t, section, rows, c }) {
     <section className="flex flex-col gap-2">
       <CardGroupHeader t={t} section={section} />
       {rows.map((r) => (
-        <Card key={r.targetId} r={r} c={c} />
+        <Card key={`${r.targetId}:${r.dir ?? ''}`} r={r} c={c} />
       ))}
     </section>
   )
@@ -1084,7 +1113,8 @@ function ReportCards({ report, savePuffer, ...c }) {
       {report.ausgabenGroups.map((g) => (
         <CardSection key={g.name} t={g.total} section="ausgaben" rows={g.rows} c={c} />
       ))}
-      <CardSection t={report.ruecklagenTotal} section="ruecklagen" rows={report.ruecklagen} c={c} />
+      <CardGroupHeader t={report.einbezahltTotal} section="ruecklagen" />
+      <CardSection t={report.entnommenTotal} section="ruecklagen" rows={report.ruecklagen} c={c} />
       <CardSection t={report.anlageTotal} section="anlage" rows={report.anlage} c={c} />
       <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-sm text-[var(--color-income)]">
         <div className="mb-1 font-semibold">Investment Cash {report.plan.year}</div>
