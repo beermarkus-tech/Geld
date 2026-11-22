@@ -308,6 +308,7 @@ export default function Planung({ year, active = true, onOpenInVerlauf }) {
     const einnahmenTotal = total('Einnahmen', einnahmen)
     const fixkostenTotal = total('Fixkosten', fixkosten)
     const ausgabenTotal = total('Ausgaben gesamt', ausgabenGroups.flatMap((g) => g.rows))
+    const ruecklagenTotal = total('Rücklagen', ruecklagen)
     // Each Rücklagen row split by direction (Nov 2026, Markus; lib/budget.js rowFlows): money paid in
     // and money taken out. A row with both directions in a year column is shown as two rows; the
     // section's header shows both totals, and "Ausgaben inkl. Rücklagen" counts only what is paid in
@@ -329,34 +330,20 @@ export default function Planung({ year, active = true, onOpenInVerlauf }) {
           ref: dir === 'in' ? fRef.inflow : fRef.outflow,
           plan,
           split: splitYear(plan, regularShare(dir === 'in' ? fActual.inMonths : fActual.outMonths)),
+          // one comment per pot: shown on the first of its two rows only
+          hideComment: dir === 'out',
         }
       }
       const inRow = mk('in')
       const outRow = mk('out')
-      return { inRow, outRow }
+      const both = (fRef.inflow && fRef.outflow) || (fPlan.inflow && fPlan.outflow)
+      // a single row keeps its net figures; its Regulär/Einmal follow the direction its plan figure has
+      const single = { ...r, split: fPlan.outflow ? outRow.split : inRow.split }
+      return { shown: both ? [inRow, outRow] : [single], inRow, outRow }
     })
-    // The pots stay one (net) row each (Nov 2026, Markus: "not broken down by tag"); only the section's
-    // header shows Eingang and Ausgang separately – when both occur, otherwise the one total as before.
-    // a pot row's Regulär/Einmal = the sum of its two directions' (so the rows add up to the header,
-    // and e.g. Steuern's monthly deposits count as regular, its big withdrawals as one-off)
-    const ruecklagenShown = ruecklagen.map((r, i) => {
-      const a = directions[i].inRow.split
-      const b = directions[i].outRow.split
-      const regularYear = a.regularYear + b.regularYear
-      return {
-        ...r,
-        split: {
-          regularYear,
-          regularMonth: a.regularMonth + b.regularMonth,
-          lumpYear: a.lumpYear + b.lumpYear,
-          percent: a.regularYear + a.lumpYear !== 0 && b.regularYear + b.lumpYear !== 0 ? null : r.plan ? Math.round((regularYear / r.plan) * 100) || 0 : 0,
-        },
-      }
-    })
-    const ruecklagenTotal = total('Rücklagen', ruecklagenShown)
-    const einbezahltTotal = total('Rücklagen – Eingang (einbezahlt)', directions.map((d) => d.inRow))
-    const entnommenTotal = total('Rücklagen – Ausgang (entnommen)', directions.map((d) => d.outRow))
-    const ruecklagenSplit = ['ref', 'plan'].some((col) => einbezahltTotal[col] !== 0 && entnommenTotal[col] !== 0)
+    const ruecklagenShown = directions.flatMap((d) => d.shown)
+    const einbezahltTotal = total('Rücklagen – einbezahlt', directions.map((d) => d.inRow))
+    const entnommenTotal = total('Rücklagen – entnommen', directions.map((d) => d.outRow))
     // The grand total above the per-group breakdown (§3c: "Ausgaben +
     // Rücklagen is the grand total row that sits just above the per-group
     // breakdown").
@@ -415,7 +402,6 @@ export default function Planung({ year, active = true, onOpenInVerlauf }) {
       ruecklagen: ruecklagenShown.filter(visible),
       einbezahltTotal,
       entnommenTotal,
-      ruecklagenSplit,
       einnahmenTotal,
       fixkostenTotal,
       ausgabenTotal,
@@ -774,8 +760,6 @@ function CommentBox({ y, target, c, cell = true, navCol }) {
 }
 
 function splitPill(split) {
-  // no badge for a pot with money both in and out: a percentage of its net figure means nothing
-  if (split.percent === null) return null
   if (split.regularYear === 0 && split.lumpYear === 0) return null
   return `${split.percent}/${100 - split.percent}`
 }
@@ -837,7 +821,7 @@ function DataRow({ r, section, c }) {
       </td>
       {showComments && (
         <td className={COMMENT_TD}>
-          <CommentBox y={refYear} target={r} c={c} navCol={0} />
+          {!r.hideComment && <CommentBox y={refYear} target={r} c={c} navCol={0} />}
         </td>
       )}
       <td className={`${TD} ${DIVIDER} ${OPEN_TD}`} onClick={() => c.openInVerlauf(r, 'plan')} title={`In Verlauf öffnen (${c.planLabel})`}>
@@ -845,7 +829,7 @@ function DataRow({ r, section, c }) {
       </td>
       {showComments && (
         <td className={COMMENT_TD}>
-          <CommentBox y={planYear} target={r} c={c} navCol={1} />
+          {!r.hideComment && <CommentBox y={planYear} target={r} c={c} navCol={1} />}
         </td>
       )}
       <td className={TD}>{blankZero(r.split.regularYear)}</td>
@@ -1002,9 +986,9 @@ function ReportTable({ report, savePuffer, ...c }) {
         {report.ausgabenGroups.map((g) => (
           <Group key={g.name} t={g.total} rows={g.rows} section="ausgaben" c={c} />
         ))}
-        {/* Rücklagen: Eingang and Ausgang as two totals when both occur (Nov 2026), else the one total */}
-        {report.ruecklagenSplit && <GroupHeader t={report.einbezahltTotal} section="ruecklagen" showComments={showComments} />}
-        <Group t={report.ruecklagenSplit ? report.entnommenTotal : report.ruecklagenTotal} rows={report.ruecklagen} section="ruecklagen" c={c} />
+        {/* Rücklagen: both directions as their own totals (Nov 2026), then the rows */}
+        <GroupHeader t={report.einbezahltTotal} section="ruecklagen" showComments={showComments} />
+        <Group t={report.entnommenTotal} rows={report.ruecklagen} section="ruecklagen" c={c} />
 
         {/* Below the Budget, outside it (Nov 2026): what is invested from Investment Cash, and how much
             is left there at the end of the year. */}
@@ -1044,7 +1028,7 @@ function Card({ r, c }) {
               {euro(v)}
             </button>
           </div>
-          {showComments && (
+          {showComments && !r.hideComment && (
             <div className="mt-0.5">
               <CommentBox y={y} target={r} c={c} cell={false} />
             </div>
@@ -1129,8 +1113,8 @@ function ReportCards({ report, savePuffer, ...c }) {
       {report.ausgabenGroups.map((g) => (
         <CardSection key={g.name} t={g.total} section="ausgaben" rows={g.rows} c={c} />
       ))}
-      {report.ruecklagenSplit && <CardGroupHeader t={report.einbezahltTotal} section="ruecklagen" />}
-      <CardSection t={report.ruecklagenSplit ? report.entnommenTotal : report.ruecklagenTotal} section="ruecklagen" rows={report.ruecklagen} c={c} />
+      <CardGroupHeader t={report.einbezahltTotal} section="ruecklagen" />
+      <CardSection t={report.entnommenTotal} section="ruecklagen" rows={report.ruecklagen} c={c} />
       <CardSection t={report.anlageTotal} section="anlage" rows={report.anlage} c={c} />
       <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-sm text-[var(--color-income)]">
         <div className="mb-1 font-semibold">Investment Cash {report.plan.year}</div>

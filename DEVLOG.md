@@ -2580,3 +2580,7 @@ Markus asked whether Planung's totals add up: checked with a script on the backu
 ## Session 37, continued two-hundred-and-seventh time — 2026-11-22 — Rücklagen: pots stay one row, only the header splits
 
 Markus: Planung need not break the Rücklagen down per pot – Eingang/Ausgang only in the header, and only when both occur. Reverted the per-pot split rows; the section header is "Rücklagen – Eingang (einbezahlt)" + "Rücklagen – Ausgang (entnommen)" when both directions occur in a year column, else the one total. Found while re-checking with the totals script: the header's Regulär/Einmal (per direction) no longer matched the rows' (per net figure) – a pot row's Regulär/Einmal is now the sum of its two directions (also more meaningful: Steuern's monthly deposits regular, its withdrawals one-off); no percentage badge for a pot with both directions. Script re-run: all totals add up (2026/2027 × Plan0/Plan1/Prog). 289 tests, lint, build pass. SPEC §2.8 updated.
+
+## Session 37, continued two-hundred-and-eighth time — 2026-11-22 — Back to the per-pot Eingang/Ausgang rows (Build 326)
+
+Misunderstanding corrected: Markus liked the per-pot split (Build 326) – by "not broken down by tag" he meant not showing Verlauf's breakdown lines in Planung, which had not been planned anyway. `Planung.jsx` and the SPEC §2.8 paragraph restored to Build 326; the previous entry's header-only variant is withdrawn. (Build 326's figures were already checked with the totals script: all add up.)
