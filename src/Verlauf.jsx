@@ -17,6 +17,7 @@ import {
   breakdownGroupAllocationMonthActual,
   budgetBreakdownLineMonths,
   budgetTopLineMonths,
+  allocationMonthTxIds,
   progBaseMonths,
   progMonths as progMonthsFor,
 } from './lib/budget'
@@ -884,6 +885,17 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // What was really booked, per category and month — Plan1's rows carry it as
   // `actuals` (see planVersionRows) for the colours and the top-bar message.
   const actualIndex = useMemo(() => categoryActualIndex(transactions, yearNum), [transactions, yearNum])
+  // A Prog cell of a ticked month opens the bookings behind it in Konten (Nov 2026, Markus); Esc in
+  // Konten comes back here (App's kontenFrom). Categories: the booked lines of that month; pots and the
+  // Investment Cash row: the bookings their actual is made of.
+  function openProgCellInKonten(row, colId) {
+    const m = /^m\d+$/.test(colId ?? '') ? Number(colId.slice(1)) : null
+    if (row?.rowLabel !== 'Prog' || !m || !closedMonths.includes(m)) return false
+    const txIds = row.targetKey === 'categoryId' ? actualIndex.txIds(row.targetId, [m], null) : allocationMonthTxIds(row.targetId, yearNum, m, transactions, ptags)
+    if (txIds.length === 0) return false
+    onOpenInKonten?.({ txIds, year: String(yearNum), from: 'verlauf' })
+    return true
+  }
   // Booked per month under one row: the whole category/allocation tag
   // (`tagIds` null) or only lines carrying one of `tagIds`.
   function monthlyActuals(common, tagIds) {
@@ -1628,6 +1640,8 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         // it applied to Plan0 instead) — a second, independent cue
         // alongside the grey text, not applied to Plan1/Plan0's cells.
         if (p.data.rowLabel === 'Prog' && isClosed) style.backgroundColor = 'var(--color-line-row-tint)'
+        // clickable: opens the month's bookings in Konten (openProgCellInKonten)
+        if (p.data.rowLabel === 'Prog' && isClosed) style.cursor = 'pointer'
         // A breakdown line gets its own yellow-tinted background always,
         // not just on a closed month (spec.md §3b: "visually distinguished
         // by smaller text and a tinted background"), and Plan0's own
@@ -2377,10 +2391,16 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
           // - Ctrl++: opens the "neue Aufschlüsselungszeile" modal for
           //   whichever block the cursor is in (openAddModalFor's own
           //   Prog→Plan1 default applies here too).
+          onCellClicked={(p) => openProgCellInKonten(p.data, p.column?.getColId())}
           onCellKeyDown={(p) => {
             const key = p.event?.key
             const row = p.data
             if (!row) return
+            // Enter on a Prog cell of a ticked month: the same as clicking it (its bookings in Konten)
+            if (key === 'Enter' && openProgCellInKonten(row, p.column?.getColId())) {
+              p.event.preventDefault()
+              return
+            }
             // Ctrl+Delete removes a breakdown line (Oct 2026, Markus — was plain
             // Delete, which now clears the cell's value instead).
             if (key === 'Delete' && (p.event.ctrlKey || p.event.metaKey)) {

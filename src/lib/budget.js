@@ -86,9 +86,11 @@ export function categoryMonthActual(categoryId, year, month, transactions) {
 // @param {Array<{id: string, reconciliationTargetAccountIds?: string[]}>} tags
 /** Each booking's (or line's) contribution to a pot's change in one month – the pieces
  *  allocationMonthActual() adds up (it returns −Σ). Planung splits them by sign (Nov 2026). */
-function allocationContributions(allocationTagId, year, month, transactions, tags) {
+function allocationContributions(allocationTagId, year, month, transactions, tags, withIds = false) {
   const tag = tags.find((t) => t.id === allocationTagId)
   const out = []
+  // each piece as a number, or as { txId, cents } when the booking ids are wanted (Verlauf → Konten)
+  const push = (tx, cents) => out.push(withIds ? { txId: tx.id, cents } : cents)
   // The virtual "Investment Cash" row (lib/investmentCash.js), from the accounts alone – no tags.
   // Counted: money moving between a non-investment account and an investment account (BNP → Smartbroker,
   // BNP → ESOP; a purchase Smartbroker → Aktien stays inside and counts nothing), and the opposite of
@@ -102,10 +104,10 @@ function allocationContributions(allocationTagId, year, month, transactions, tag
       const outOfInvest = invest.has(tx.fromAccountId)
       if (!intoInvest && !outOfInvest) continue
       if (tx.fromAccountId && tx.toAccountId) {
-        if (intoInvest !== outOfInvest) out.push((intoInvest ? 1 : -1) * Math.abs(tx.amountCents ?? 0))
+        if (intoInvest !== outOfInvest) push(tx, (intoInvest ? 1 : -1) * Math.abs(tx.amountCents ?? 0))
         continue
       }
-      for (const line of tx.lines ?? []) if (line.categoryId) out.push(line.amountCents ?? 0)
+      for (const line of tx.lines ?? []) if (line.categoryId) push(tx, line.amountCents ?? 0)
     }
     return out
   }
@@ -120,16 +122,22 @@ function allocationContributions(allocationTagId, year, month, transactions, tag
       // rule below is for transfers only; applying it here flipped an expense paid from the pot
       // (Nov 2026: 2025's "Feelharmonia", −290 € from Livret A Tagesgeld, counted twice in Prog).
       if (!isTransfer) {
-        if (targets.has(tx.fromAccountId) || targets.has(tx.toAccountId)) out.push(line.amountCents)
+        if (targets.has(tx.fromAccountId) || targets.has(tx.toAccountId)) push(tx, line.amountCents)
         continue
       }
       let c = 0
       if (targets.has(tx.fromAccountId)) c -= line.amountCents
       if (targets.has(tx.toAccountId)) c += line.amountCents
-      if (c) out.push(c)
+      if (c) push(tx, c)
     }
   }
   return out
+}
+
+/** The ids of the bookings behind a pot's (or the Investment Cash row's) actual in one month – what
+ *  Verlauf's Prog cell opens in Konten (Nov 2026). */
+export function allocationMonthTxIds(allocationTagId, year, month, transactions, tags) {
+  return [...new Set(allocationContributions(allocationTagId, year, month, transactions, tags, true).map((p) => p.txId))]
 }
 
 export function allocationMonthActual(allocationTagId, year, month, transactions, tags) {
