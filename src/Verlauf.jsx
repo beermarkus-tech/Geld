@@ -900,7 +900,18 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         ? actualIndex.txIds(row.targetId, months, row.checkTagIds ?? null)
         : [...new Set(months.flatMap((m) => allocationMonthTxIds(row.targetId, yearNum, m, transactions, ptags)))]
     if (txIds.length === 0) return false
-    onOpenInKonten?.({ txIds, year: String(yearNum), from: 'verlauf' })
+    // what Verlauf counts as booked for these months (shown in Konten as "Gebucht laut Verlauf")
+    const sumCents = months.reduce(
+      (sum, m) =>
+        sum +
+        (row.targetKey === 'categoryId'
+          ? row.checkTagIds
+            ? actualIndex.sumTags(row.targetId, m, row.checkTagIds)
+            : actualIndex.total(row.targetId, m)
+          : allocationMonthActual(row.targetId, yearNum, m, transactions, ptags)),
+      0,
+    )
+    onOpenInKonten?.({ txIds, year: String(yearNum), from: 'verlauf', sumCents })
     return true
   }
   const cursorRowNow = () => gridApiRef.current?.getRowNode(lastFocusedRowIdRef.current)?.data

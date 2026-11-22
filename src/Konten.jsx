@@ -424,6 +424,8 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // Oct 2026) — a Set of transaction ids; cleared by "Filter zurücksetzen", by
   // picking any other filter, or by the next jump.
   const [idFilter, setIdFilter] = useState(null)
+  // { ids, cents }: the total Verlauf counted for the bookings it handed over (shown while exactly those are shown)
+  const [jumpSum, setJumpSum] = useState(null)
   // Tracks AG Grid's own column filters (Datum/Empfänger/Kategorie/
   // Unterkategorie/Details/Betrag/Tags' header filters) — separate from
   // accountFilter, which is Konten's own account/tag mechanism, not an AG
@@ -486,7 +488,11 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     const api = gridRef.current?.api
     if (!jump || !api || appliedJumpRef.current === jump.id) return
     appliedJumpRef.current = jump.id
-    setIdFilter(jump.txIds ? new Set(jump.txIds) : null)
+    const ids = jump.txIds ? new Set(jump.txIds) : null
+    setIdFilter(ids)
+    // Verlauf's Strg+B hands over its own booked total for these bookings (Nov 2026): the visible rows
+    // cannot know what Verlauf counted (only one line of a split booking, a pot's direction, …).
+    setJumpSum(ids && typeof jump.sumCents === 'number' ? { ids, cents: jump.sumCents } : null)
     if (jump.txIds) {
       api.setFilterModel(null)
       setAccountFilter(null)
@@ -2817,6 +2823,8 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       : null
   // Shown for any column filter or account filter (Markus, Sept 2026) — a
   // tag filter keeps its own tag balance above instead (his call).
+  // While exactly the bookings Verlauf handed over are shown (no other filter), its own booked total.
+  const verlaufSum = jumpSum && idFilter === jumpSum.ids && !anyColumnFilter && !filteredAccountId && tagFilterSum === null ? jumpSum.cents : null
   const showVisibleSum = (anyColumnFilter || !!filteredAccountId) && tagFilterSum === null && visibleSumCents !== null
   // The carried-over balance counts into "Angezeigt" while the whole account
   // is shown (no column filter), so the figure equals the account's balance.
@@ -2929,6 +2937,12 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
               no column filter shows only the sum; a plain column filter
               with no tag shows only the reset button; either way both stay
               pinned to the right edge, next to the (i) icon below). */}
+          {verlaufSum !== null && (
+            <span className="text-sm text-[var(--color-text-muted)]" title="Was Verlauf für diese Zelle gebucht zählt (bei geteilten Buchungen nur die passende Zeile)">
+              Gebucht laut Verlauf:{' '}
+              <span className="tabular-figure font-medium text-[var(--color-computed)]">{centsToEuro(verlaufSum)} €</span>
+            </span>
+          )}
           {showVisibleSum && (
             <span className="text-sm text-[var(--color-text-muted)]">
               Angezeigt:{' '}
