@@ -708,10 +708,14 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
       // of the row the cursor is in — opens Quickview for it. Only while
       // Verlauf is the visible screen (it stays mounted when hidden).
       if (active && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'q') {
-        const row = gridApiRef.current?.getRowNode(lastFocusedRowIdRef.current)?.data
-        if (!row?.targetId || row.targetId === INVESTMENT_CASH_ID) return // no real tag behind it
         e.preventDefault()
-        onOpenQuickview?.({ kind: row.targetKey === 'categoryId' ? 'category' : 'tag', id: row.targetId })
+        jumpRef.current?.quickview()
+        return
+      }
+      // Ctrl+B ("Buchungen", Nov 2026, Markus): the bookings behind the cursor's cell in Konten.
+      if (active && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'b') {
+        e.preventDefault()
+        jumpRef.current?.konten()
       }
     }
     window.addEventListener('keydown', onKeyDown, true)
@@ -885,17 +889,31 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // What was really booked, per category and month — Plan1's rows carry it as
   // `actuals` (see planVersionRows) for the colours and the top-bar message.
   const actualIndex = useMemo(() => categoryActualIndex(transactions, yearNum), [transactions, yearNum])
-  // A Prog cell of a ticked month opens the bookings behind it in Konten (Nov 2026, Markus); Esc in
-  // Konten comes back here (App's kontenFrom). Categories: the booked lines of that month; pots and the
-  // Investment Cash row: the bookings their actual is made of.
-  function openProgCellInKonten(row, colId) {
-    const m = /^m\d+$/.test(colId ?? '') ? Number(colId.slice(1)) : null
-    if (row?.rowLabel !== 'Prog' || !m || !closedMonths.includes(m)) return false
-    const txIds = row.targetKey === 'categoryId' ? actualIndex.txIds(row.targetId, [m], null) : allocationMonthTxIds(row.targetId, yearNum, m, transactions, ptags)
+  // Strg+B / the "In Konten" button (Nov 2026, Markus): the bookings behind the cursor's cell in Konten –
+  // a month cell: that month; the year total: the whole year. Any row of a block (Prog, Plan1, Plan0;
+  // a breakdown line only its own tags). Esc in Konten comes back here (App's kontenFrom).
+  function openRowInKonten(row, colId) {
+    if (!row?.targetId) return false
+    const months = /^m\d+$/.test(colId ?? '') ? [Number(colId.slice(1))] : Array.from({ length: 12 }, (_, i) => i + 1)
+    const txIds =
+      row.targetKey === 'categoryId'
+        ? actualIndex.txIds(row.targetId, months, row.checkTagIds ?? null)
+        : [...new Set(months.flatMap((m) => allocationMonthTxIds(row.targetId, yearNum, m, transactions, ptags)))]
     if (txIds.length === 0) return false
     onOpenInKonten?.({ txIds, year: String(yearNum), from: 'verlauf' })
     return true
   }
+  const cursorRowNow = () => gridApiRef.current?.getRowNode(lastFocusedRowIdRef.current)?.data
+  function openCursorInKonten() {
+    if (!openRowInKonten(cursorRowNow(), focusedColIdRef.current)) window.alert('Für diese Zelle gibt es keine Buchungen.')
+  }
+  function openCursorInQuickview() {
+    const row = cursorRowNow()
+    if (!row?.targetId || row.targetId === INVESTMENT_CASH_ID) return // no real tag behind it
+    onOpenQuickview?.({ kind: row.targetKey === 'categoryId' ? 'category' : 'tag', id: row.targetId })
+  }
+  const jumpRef = useRef(null)
+  jumpRef.current = { konten: openCursorInKonten, quickview: openCursorInQuickview }
   // Booked per month under one row: the whole category/allocation tag
   // (`tagIds` null) or only lines carrying one of `tagIds`.
   function monthlyActuals(common, tagIds) {
@@ -1640,8 +1658,6 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         // it applied to Plan0 instead) — a second, independent cue
         // alongside the grey text, not applied to Plan1/Plan0's cells.
         if (p.data.rowLabel === 'Prog' && isClosed) style.backgroundColor = 'var(--color-line-row-tint)'
-        // clickable: opens the month's bookings in Konten (openProgCellInKonten)
-        if (p.data.rowLabel === 'Prog' && isClosed) style.cursor = 'pointer'
         // A breakdown line gets its own yellow-tinted background always,
         // not just on a closed month (spec.md §3b: "visually distinguished
         // by smaller text and a tinted background"), and Plan0's own
@@ -2155,6 +2171,27 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
           <input type="checkbox" checked={showPlan0} onChange={(e) => setShowPlan0(e.target.checked)} />
           Plan0 anzeigen
         </label>
+        {/* The cursor's row elsewhere (Nov 2026, Markus): its bookings in Konten, or its Quickview. */}
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={openCursorInKonten}
+          disabled={!cursorRowId}
+          title="Die Buchungen der markierten Zelle in Konten zeigen (Monat oder ganzes Jahr) – Esc kommt zurück"
+          className="rounded-md border border-[var(--color-border)] px-3 py-1 text-sm hover:bg-[var(--color-bg)] disabled:opacity-50"
+        >
+          In Konten <span className="text-xs text-[var(--color-text-muted)]">(Strg+B)</span>
+        </button>
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={openCursorInQuickview}
+          disabled={!cursorRowId}
+          title="Quickview für die Unterkategorie der markierten Zeile öffnen"
+          className="rounded-md border border-[var(--color-border)] px-3 py-1 text-sm hover:bg-[var(--color-bg)] disabled:opacity-50"
+        >
+          Quickview <span className="text-xs text-[var(--color-text-muted)]">(Strg+Q)</span>
+        </button>
         {/* Only while the cursor is on a Plan0 row (Nov 2026, Markus). */}
         {cursorPlan0Row && (
           <button
@@ -2281,6 +2318,9 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
                   <b>Strg+Q</b> — Quickview für die Unterkategorie der aktuellen Zeile öffnen
                 </li>
                 <li>
+                  <b>Strg+B</b> — die Buchungen der markierten Zelle in Konten zeigen (Monat oder ganzes Jahr; Esc kommt zurück)
+                </li>
+                <li>
                   <b>Strg+I</b> — diese Übersicht ein-/ausblenden
                 </li>
               </ul>
@@ -2391,16 +2431,10 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
           // - Ctrl++: opens the "neue Aufschlüsselungszeile" modal for
           //   whichever block the cursor is in (openAddModalFor's own
           //   Prog→Plan1 default applies here too).
-          onCellClicked={(p) => openProgCellInKonten(p.data, p.column?.getColId())}
           onCellKeyDown={(p) => {
             const key = p.event?.key
             const row = p.data
             if (!row) return
-            // Enter on a Prog cell of a ticked month: the same as clicking it (its bookings in Konten)
-            if (key === 'Enter' && openProgCellInKonten(row, p.column?.getColId())) {
-              p.event.preventDefault()
-              return
-            }
             // Ctrl+Delete removes a breakdown line (Oct 2026, Markus — was plain
             // Delete, which now clears the cell's value instead).
             if (key === 'Delete' && (p.event.ctrlKey || p.event.metaKey)) {
