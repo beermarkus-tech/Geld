@@ -979,7 +979,7 @@ function ReportTable({ report, savePuffer, ...c }) {
 
         <BlockGap showComments={showComments} />
         {/* Rücklagen rows that give back more than they take this year (Nov 2026): money back into the cash */}
-        <BandRow label="+ aus Rücklagen entnommen (Teil des Budgets)" refValue={ref.entnahmen} planValue={plan.entnahmen} color="var(--color-savings)" tint={BUDGET_BAND_TINT} showComments={showComments} />
+        <BandRow label="+ aus Rücklagen entnommen" refValue={ref.entnahmen} planValue={plan.entnahmen} color="var(--color-savings)" tint={BUDGET_BAND_TINT} showComments={showComments} />
         {/* The yellow band reads as one calculation (Nov 2026, Markus): + aus Rücklagen = Budget,
             − Ausgaben − in Rücklagen = Jahresergebnis (was "Ausgaben vs. Budget"). */}
         <BandRow label="= Budget" refValue={ref.budget} planValue={plan.budget} color="var(--color-computed)" bold tint={BUDGET_BAND_TINT} showComments={showComments} />
@@ -1115,7 +1115,7 @@ function ReportCards({ report, savePuffer, ...c }) {
       <CardSection t={report.fixkostenTotal} section="fixkosten" rows={report.fixkosten} c={c} />
 
       <div className="my-2 flex flex-col gap-0.5 rounded-lg border-2 border-[var(--color-computed)] p-3 text-sm font-semibold" style={{ backgroundColor: BUDGET_BAND_TINT }}>
-        <Line label="+ aus Rücklagen entnommen (Teil des Budgets)" value={euro(plan.entnahmen)} color="var(--color-savings)" />
+        <Line label="+ aus Rücklagen entnommen" value={euro(plan.entnahmen)} color="var(--color-savings)" />
         <Line label={`= Budget ${planYear}`} value={euro(plan.budget)} color="var(--color-computed)" />
         <Line label="− Ausgaben" value={euro(plan.ausgaben)} color="var(--color-expense)" />
         <Line label="− in Rücklagen einbezahlt" value={euro(plan.einbezahlt)} color="var(--color-savings)" />

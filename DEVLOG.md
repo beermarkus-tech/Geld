@@ -2604,3 +2604,7 @@ Markus: the split Rücklagen rows "– entnommen" allowed no comment (it was hid
 ## Session 37, continued two-hundred-and-thirteenth time — 2026-11-22 — Planung comments: no I-beam / caret unless editing
 
 Markus: the text cursor showed on every comment field while scrolling over them, and stayed after Esc. A comment field not being edited now has the normal mouse pointer and an invisible caret (`cursor-default caret-transparent`); while editing: I-beam and visible caret. One click still starts editing with the caret where clicked. Harness-checked (hover: default pointer, transparent caret; click: text pointer, caret at the click; Esc: back to default/transparent, cell still selected). 289 tests, lint, build pass.
+
+## Session 37, continued two-hundred-and-fourteenth time — 2026-11-22 — "(Teil des Budgets)" removed; Regulär/Einmal analysed
+
+Label is now just "+ aus Rücklagen entnommen" (Markus). Markus asked why some rows show 120/−20 in the Regulär/Einmal split. Found on the backup: in the 2027 view the reference year 2026 has only 10 booked months (Nov/Dec counted as 0), so median × 12 exceeds the 10-month total by 12/10 – every steady monthly row (Hauskredit, Telefon, Fernsehen, …) reads 120 %. Rows with refunds bigger than payments (Firmenwagen 2026: 413 %) are a second, rarer case. Proposal to Markus (awaiting answer): use only the reference year's closed months (share = median × n / total of those n months); and clamp the share to 0–100 % (or no badge) for mixed-sign rows.
