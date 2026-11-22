@@ -94,8 +94,14 @@ export default function App() {
   // Verlauf then goes back to Settings (see the Esc handler below).
   const [verlaufJump, setVerlaufJump] = useState(null)
   const [verlaufFrom, setVerlaufFrom] = useState(null)
+  // The year to switch back to on that Esc (Planung, Nov 2026: a figure of last year opens Verlauf on
+  // last year; Esc returns to Planung's year).
+  const [verlaufReturnYear, setVerlaufReturnYear] = useState(null)
+  const returnYearRef = useRef(null)
+  returnYearRef.current = verlaufReturnYear
   const openInVerlauf = (j) => {
     setVerlaufFrom(j.from ?? 'settings')
+    setVerlaufReturnYear(j.returnYear ? String(j.returnYear) : null)
     if (j.year) setYear(String(j.year))
     setVerlaufJump({ ...j, id: Date.now() })
     setView('verlauf')
@@ -164,6 +170,8 @@ export default function App() {
         if (backRef.current) {
           const to = backRef.current
           setVerlaufFrom(null)
+          if (returnYearRef.current) setYear(returnYearRef.current)
+          setVerlaufReturnYear(null)
           setView(to)
           return
         }
@@ -319,7 +327,7 @@ export default function App() {
             every time i switch screens") — it keeps its state, scroll position
             and cursor cell, and never rebuilds its report on a screen switch. */}
         <div className={view === 'planung' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
-          <Planung year={planungYear} active={view === 'planung'} />
+          <Planung year={planungYear} active={view === 'planung'} onOpenInVerlauf={openInVerlauf} />
         </div>
         {/* Quickview mounts once and is only hidden, like the screens above
             (Oct 2026, Markus), so its selection and scroll position stay. */}

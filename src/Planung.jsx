@@ -115,7 +115,7 @@ function deltaColor(cents) {
   return 'var(--color-text)'
 }
 
-export default function Planung({ year, active = true }) {
+export default function Planung({ year, active = true, onOpenInVerlauf }) {
   // Hidden screens keep the newest data aside instead of recomputing on every save elsewhere.
   const syncWhenVisible = useDeferWhileHidden(active)
   const [accounts, setAccounts] = useState([])
@@ -357,7 +357,19 @@ export default function Planung({ year, active = true }) {
   const refLabel = `${refYear} Prog`
   const planLabel = `${planYear} ${LENSES.find((l) => l.id === lens)?.label ?? ''}`
 
-  const commentProps = { commentFor, saveComment, refYear, planYear, showComments, active, refLabel, planLabel }
+  // A click on a row's figure opens it in Verlauf (Nov 2026, Markus): last year's Prog on last year's
+  // Prog row, this year's on the row of the chosen lens – the cursor on its year total, the year switched
+  // as needed; Esc in Verlauf comes back here (and to this year).
+  const openInVerlauf = (r, which) =>
+    onOpenInVerlauf?.({
+      year: String(which === 'ref' ? refYear : planYear),
+      returnYear: String(planYear),
+      targetKey: r.targetKey,
+      targetId: r.targetId,
+      rowLabel: which === 'ref' ? 'Prog' : { plan0: 'Plan0', plan1: 'Plan1', prog: 'Prog' }[lens],
+      from: 'planung',
+    })
+  const commentProps = { commentFor, saveComment, refYear, planYear, showComments, active, refLabel, planLabel, openInVerlauf }
 
   // Tab with nothing focused (lib/screenCursor.js, App.jsx): the remembered
   // cell if it is still there, else the first editable cell that is in view.
@@ -725,6 +737,9 @@ function GroupHeader({ t, section, showComments }) {
   )
 }
 
+// A figure that opens its row in Verlauf on click.
+const OPEN_TD = 'cursor-pointer hover:underline'
+
 function DataRow({ r, section, c }) {
   const { refYear, planYear, showComments } = c
   const pill = splitPill(r.split)
@@ -733,13 +748,17 @@ function DataRow({ r, section, c }) {
       <td className={`${NAME_TD} pl-6`} style={{ backgroundColor: SECTION_TINT[section] }}>
         {r.label}
       </td>
-      <td className={TD}>{blankZero(r.ref)}</td>
+      <td className={`${TD} ${OPEN_TD}`} onClick={() => c.openInVerlauf(r, 'ref')} title={`In Verlauf öffnen (${refYear} Prog)`}>
+        {blankZero(r.ref)}
+      </td>
       {showComments && (
         <td className={COMMENT_TD}>
           <CommentBox y={refYear} target={r} c={c} navCol={0} />
         </td>
       )}
-      <td className={`${TD} ${DIVIDER}`}>{blankZero(r.plan)}</td>
+      <td className={`${TD} ${DIVIDER} ${OPEN_TD}`} onClick={() => c.openInVerlauf(r, 'plan')} title={`In Verlauf öffnen (${c.planLabel})`}>
+        {blankZero(r.plan)}
+      </td>
       {showComments && (
         <td className={COMMENT_TD}>
           <CommentBox y={planYear} target={r} c={c} navCol={1} />
@@ -909,13 +928,15 @@ function Card({ r, c }) {
     <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-sm">
       <div className="mb-1 font-semibold">{r.label}</div>
       {[
-        [refYear, c.refLabel, r.ref],
-        [planYear, c.planLabel, r.plan],
-      ].map(([y, title, v]) => (
+        [refYear, c.refLabel, r.ref, 'ref'],
+        [planYear, c.planLabel, r.plan, 'plan'],
+      ].map(([y, title, v, which]) => (
         <div key={y} className="mb-1">
           <div className="flex justify-between">
             <span className="text-[var(--color-text-muted)]">{title}</span>
-            <span className="tabular-figure">{euro(v)}</span>
+            <button type="button" className={`tabular-figure ${OPEN_TD}`} onClick={() => c.openInVerlauf(r, which)}>
+              {euro(v)}
+            </button>
           </div>
           {showComments && (
             <div className="mt-0.5">

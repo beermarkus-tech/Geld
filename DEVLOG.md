@@ -2542,3 +2542,7 @@ Markus plans 2027 in Plan0 only, so Prog (open months = Plan1) was empty. **Deci
 - Harness-checked on the backup (2026 "Sonstige Einnahmen": Plan1 with 4 breakdown lines and a comment): button only on Plan0 rows; question lists "Summe 56.038 €, 4 Aufschlüsselungszeile(n), 1 Kommentar(e)"; Esc leaves Plan1 unchanged; Enter makes Plan1 = Plan0; no cell left in edit mode. 280 tests, lint, build pass.
 
 **Not browser-checked:** a 2027 Prognose built from Plan0 (the backup has no 2027 plan) – covered by unit tests only.
+
+## Session 37, continued two-hundredth time — 2026-11-22 — Planung figures open their row in Verlauf
+
+Markus: clicking a figure in Planung's "Prog last year" or "Plan this year" column should open it in Verlauf (with the year switch), Esc back (with the year switch back). **Built (SPEC §3c):** Planung's figure cells (and the phone cards' figures) call App's `openInVerlauf` with `rowLabel` (Prog for the reference column; Plan0/Plan1/Prog per lens for the planning column), the target year and `returnYear`; Verlauf's jump handler now also takes a top line (`rowLabel`) and puts the cursor on its year total (`label` column), showing Plan0 if needed; App's Esc-back restores `returnYear`. Harness-checked on the backup: 2025 Prog −15.503 → Verlauf 2025, Prog year total −15.503 → Esc → Planung 2026; 2026 Plan0 −13.200 → Verlauf 2026 Plan0 total → Esc → Planung. 280 tests, lint, build pass.

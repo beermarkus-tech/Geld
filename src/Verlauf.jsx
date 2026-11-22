@@ -1509,19 +1509,26 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   useEffect(() => {
     if (!jump || !active || appliedJumpRef.current === jump.id || String(yearNum) !== String(jump.year)) return
     appliedJumpRef.current = jump.id
-    if (jump.planVersion === 'plan0') setShowPlan0(true)
-    setBlockExpanded(`${jump.targetKey}:${jump.targetId}:${jump.planVersion}`, true)
+    // A top line (`rowLabel` Prog/Plan1/Plan0, from Planung, Nov 2026): cursor on its year total.
+    const topLine = Boolean(jump.rowLabel)
+    if (jump.planVersion === 'plan0' || jump.rowLabel === 'Plan0') setShowPlan0(true)
+    if (!topLine) setBlockExpanded(`${jump.targetKey}:${jump.targetId}:${jump.planVersion}`, true)
     // A line (`tagId`), or a holiday's Übergruppe (`groupId`: its group row, or its
     // own line when it has no children) — the Urlaube screen's "In Verlauf".
     const base = `${jump.targetKey}:${jump.targetId}:${jump.planVersion}`
-    const rowIds = jump.groupId ? [`${base}:rollup:${jump.groupId}`, `${base}:${jump.groupId}`] : [`${base}:${jump.tagId}`]
+    const rowIds = topLine
+      ? [`${jump.targetKey}:${jump.targetId}:${jump.rowLabel}`]
+      : jump.groupId
+        ? [`${base}:rollup:${jump.groupId}`, `${base}:${jump.groupId}`]
+        : [`${base}:${jump.tagId}`]
+    const colId = topLine ? 'label' : 'm1'
     let tries = 0
     const tick = () => {
       const api = gridApiRef.current
       const node = rowIds.map((id) => api?.getRowNode(id)).find(Boolean)
       if (node) {
         api.ensureNodeVisible(node, 'middle')
-        api.setFocusedCell(node.rowIndex, 'm1')
+        api.setFocusedCell(node.rowIndex, colId)
       } else if (tries++ < 30) setTimeout(tick, 100)
     }
     setTimeout(tick, 50)
