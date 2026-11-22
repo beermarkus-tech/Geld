@@ -2596,3 +2596,7 @@ Markus: the cursor could not be moved inside Planung's comment fields. Reproduce
 ## Session 37, continued two-hundred-and-eleventh time — 2026-11-22 — Ausgaben headline red; "sollte nahe Null sein" removed
 
 Markus meant a slightly darker *red* for Planung's "Ausgaben" headline (not blue): now the Ausgaben groups' red tint, a step stronger. "= Jahresergebnis — sollte nahe Null sein" is now just "= Jahresergebnis". Browser-checked. 289 tests, lint, build pass.
+
+## Session 37, continued two-hundred-and-twelfth time — 2026-11-22 — Comments on the "– entnommen" rows
+
+Markus: the split Rücklagen rows "– entnommen" allowed no comment (it was hidden to avoid showing the pot's one comment twice). Now each of the two rows has its own: "– einbezahlt" keeps the pot's `comment`, "– entnommen" uses a new field `commentOut` on the same `categoryYearSettings` document (Planung's `saveComment`/`commentFor`; distinct `data-nav-row` so arrow navigation reaches both). Harness-checked: a comment typed on "Für Steuern – entnommen" is saved on its own (survives a screen switch), "– einbezahlt" keeps "Unsichtbar: +/- 2.000 €", ArrowDown moves from one to the other. 289 tests, lint, build pass.

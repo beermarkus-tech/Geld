@@ -212,7 +212,8 @@ export default function Planung({ year, active = true, onOpenInVerlauf }) {
         year: y,
         categoryId: target.targetKey === 'categoryId' ? target.targetId : null,
         allocationTagId: target.targetKey === 'allocationTagId' ? target.targetId : null,
-        comment: text,
+        // the "– entnommen" row of a split Rücklagen pot has its own comment (Nov 2026)
+        [target.dir === 'out' ? 'commentOut' : 'comment']: text,
       },
       { merge: true },
     )
@@ -223,6 +224,7 @@ export default function Planung({ year, active = true, onOpenInVerlauf }) {
     for (const s of yearSettings) {
       const targetId = s.categoryId ?? s.allocationTagId
       if (targetId && s.comment) map.set(`${s.year}:${targetId}`, s.comment)
+      if (targetId && s.commentOut) map.set(`${s.year}:${targetId}:out`, s.commentOut)
     }
     return map
   }, [yearSettings])
@@ -334,8 +336,6 @@ export default function Planung({ year, active = true, onOpenInVerlauf }) {
           ref: dir === 'in' ? fRef.inflow : fRef.outflow,
           plan,
           split: splitYear(plan, regularShare(dir === 'in' ? fActual.inMonths : fActual.outMonths)),
-          // one comment per pot: shown on the first of its two rows only
-          hideComment: dir === 'out',
         }
       }
       const inRow = mk('in')
@@ -674,7 +674,7 @@ function PufferCell({ cents, onSave, label, navCol }) {
 // Escape saves and leaves the text (Nov 2026, Markus – as in Verlauf); clicking away saves too
 // (and so does the screen going away mid-edit).
 function CommentBox({ y, target, c, cell = true, navCol }) {
-  const saved = c.commentFor.get(`${y}:${target.targetId}`) ?? ''
+  const saved = c.commentFor.get(`${y}:${target.targetId}${target.dir === 'out' ? ':out' : ''}`) ?? ''
   const [draft, setDraft] = useState(saved)
   const [editing, setEditing] = useState(false)
   const ref = useRef(null)
@@ -727,7 +727,7 @@ function CommentBox({ y, target, c, cell = true, navCol }) {
       rows={1}
       value={draft}
       readOnly={!editing}
-      {...(navCol === undefined ? {} : { 'data-nav-row': target.targetId, 'data-nav-col': navCol })}
+      {...(navCol === undefined ? {} : { 'data-nav-row': `${target.targetId}${target.dir === 'out' ? ':out' : ''}`, 'data-nav-col': navCol })}
       aria-label={`Kommentar ${y} ${target.label}`}
       title={editing ? undefined : 'Klicken zum Bearbeiten'}
       onClick={() => {
@@ -834,7 +834,7 @@ function DataRow({ r, section, c }) {
       </td>
       {showComments && (
         <td className={COMMENT_TD}>
-          {!r.hideComment && <CommentBox y={refYear} target={r} c={c} navCol={0} />}
+          <CommentBox y={refYear} target={r} c={c} navCol={0} />
         </td>
       )}
       <td className={`${TD} ${DIVIDER} ${OPEN_TD}`} onClick={() => c.openInVerlauf(r, 'plan')} title={`In Verlauf öffnen (${c.planLabel})`}>
@@ -842,7 +842,7 @@ function DataRow({ r, section, c }) {
       </td>
       {showComments && (
         <td className={COMMENT_TD}>
-          {!r.hideComment && <CommentBox y={planYear} target={r} c={c} navCol={1} />}
+          <CommentBox y={planYear} target={r} c={c} navCol={1} />
         </td>
       )}
       <td className={TD}>{blankZero(r.split.regularYear)}</td>
@@ -1041,7 +1041,7 @@ function Card({ r, c }) {
               {euro(v)}
             </button>
           </div>
-          {showComments && !r.hideComment && (
+          {showComments && (
             <div className="mt-0.5">
               <CommentBox y={y} target={r} c={c} cell={false} />
             </div>
