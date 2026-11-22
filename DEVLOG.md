@@ -2600,3 +2600,7 @@ Markus meant a slightly darker *red* for Planung's "Ausgaben" headline (not blue
 ## Session 37, continued two-hundred-and-twelfth time — 2026-11-22 — Comments on the "– entnommen" rows
 
 Markus: the split Rücklagen rows "– entnommen" allowed no comment (it was hidden to avoid showing the pot's one comment twice). Now each of the two rows has its own: "– einbezahlt" keeps the pot's `comment`, "– entnommen" uses a new field `commentOut` on the same `categoryYearSettings` document (Planung's `saveComment`/`commentFor`; distinct `data-nav-row` so arrow navigation reaches both). Harness-checked: a comment typed on "Für Steuern – entnommen" is saved on its own (survives a screen switch), "– einbezahlt" keeps "Unsichtbar: +/- 2.000 €", ArrowDown moves from one to the other. 289 tests, lint, build pass.
+
+## Session 37, continued two-hundred-and-thirteenth time — 2026-11-22 — Planung comments: no I-beam / caret unless editing
+
+Markus: the text cursor showed on every comment field while scrolling over them, and stayed after Esc. A comment field not being edited now has the normal mouse pointer and an invisible caret (`cursor-default caret-transparent`); while editing: I-beam and visible caret. One click still starts editing with the caret where clicked. Harness-checked (hover: default pointer, transparent caret; click: text pointer, caret at the click; Esc: back to default/transparent, cell still selected). 289 tests, lint, build pass.
