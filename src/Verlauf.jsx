@@ -58,6 +58,27 @@ const MONTH_LABELS = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', '
 // stopPropagation on click: the header cell itself has its own click
 // handling (would otherwise fire for a plain header click too, e.g. any
 // future sort/menu behavior), and the checkbox shouldn't trigger it.
+// A view switch drawn as a toggle button (Nov 2026, Markus): filled while on. Keeps the grid's focus.
+function Toggle({ pressed, onChange, title, children }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      title={title}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() => onChange(!pressed)}
+      className={
+        'border-l px-3 py-1 text-sm first:border-l-0 ' +
+        (pressed
+          ? 'border-white/40 bg-[var(--color-computed)] font-medium text-white'
+          : 'border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]')
+      }
+    >
+      {children}
+    </button>
+  )
+}
+
 function MonthHeader({ displayName, month, getLive }) {
   // The year's closed months and the toggle are read through a getter on Verlauf's `live` ref (the
   // column definitions stay the same across years, and AG Grid copies header params, so a plain ref
@@ -2178,67 +2199,63 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   return (
     <div className="flex h-full flex-col gap-3 px-4 py-3">
       <div className="flex flex-wrap items-center gap-4">
-        <label className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
-          <input type="checkbox" checked={showPlan0} onChange={(e) => setShowPlan0(e.target.checked)} />
-          Plan0 anzeigen
-        </label>
-        {/* The cursor's row elsewhere (Nov 2026, Markus): its bookings in Konten, or its Quickview. */}
-        <button
-          type="button"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={openCursorInKonten}
-          disabled={!cursorRowId}
-          title="Die Buchungen der markierten Zelle in Konten zeigen (Monat oder ganzes Jahr) – Esc kommt zurück"
-          className="rounded-md border border-[var(--color-border)] px-3 py-1 text-sm hover:bg-[var(--color-bg)] disabled:opacity-50"
-        >
-          In Konten <span className="text-xs text-[var(--color-text-muted)]">(Strg+B)</span>
-        </button>
-        <button
-          type="button"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={openCursorInQuickview}
-          disabled={!cursorRowId}
-          title="Quickview für die Unterkategorie der markierten Zeile öffnen"
-          className="rounded-md border border-[var(--color-border)] px-3 py-1 text-sm hover:bg-[var(--color-bg)] disabled:opacity-50"
-        >
-          Quickview <span className="text-xs text-[var(--color-text-muted)]">(Strg+Q)</span>
-        </button>
-        {/* Only while the cursor is on a Plan0 row (Nov 2026, Markus). */}
-        {cursorPlan0Row && (
+        {/* One compact line (Nov 2026, Markus): the three view switches as toggle buttons side by side
+            (filled while on), then the actions for the cursor's row; shortcuts are in the tooltips. */}
+        <div className="flex overflow-hidden rounded-md border border-[var(--color-border)]" role="group" aria-label="Ansicht">
+          <Toggle pressed={showPlan0} onChange={setShowPlan0} title="Plan0-Zeilen zeigen (Strg+P)">
+            Plan0
+          </Toggle>
+          <Toggle
+            pressed={showBreakdowns}
+            onChange={(v) => {
+              setShowBreakdowns(v)
+              // Touching the switch resets every block's own expanded/collapsed override (Markus): a
+              // fresh "set everyone to this", so a manual per-block peek doesn't survive the next toggle.
+              setBlockOverrides(new Map())
+            }}
+            title="Aufschlüsselungszeilen zeigen (Strg+Umschalt+D)"
+          >
+            Aufschlüsselung
+          </Toggle>
+          <Toggle pressed={showPlanung} onChange={setShowPlanung} title="Spalte mit den Jahressummen des letzten Jahres zeigen">
+            letztes Jahr
+          </Toggle>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* The cursor's row elsewhere (Nov 2026, Markus): its bookings in Konten, or its Quickview. */}
           <button
             type="button"
             onMouseDown={(e) => e.preventDefault()}
-            onClick={() => startPlanCopy(cursorPlan0Row)}
-            title="Kopiert Plan0 dieser Zeile (Monate, Aufschlüsselung, Kommentare) auf Plan1 und ersetzt Plan1 (Strg+Umschalt+P)"
-            className="rounded-md border border-[var(--color-border)] px-3 py-1 text-sm hover:bg-[var(--color-bg)]"
+            onClick={openCursorInKonten}
+            disabled={!cursorRowId}
+            title="Die Buchungen der markierten Zelle in Konten zeigen – Monat oder ganzes Jahr (Strg+B); Esc kommt zurück"
+            className="rounded-md border border-[var(--color-border)] px-3 py-1 text-sm hover:bg-[var(--color-bg)] disabled:opacity-50"
           >
-            Plan0 → Plan1: {cursorPlan0Row.subcatName} <span className="text-xs text-[var(--color-text-muted)]">(Strg+Umschalt+P)</span>
+            Konten
           </button>
-        )}
-        <label className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
-          <input
-            type="checkbox"
-            checked={showBreakdowns}
-            onChange={(e) => {
-              setShowBreakdowns(e.target.checked)
-              // Real usage feedback (Markus): a block expanded/collapsed
-              // manually stopped reacting to this checkbox at all
-              // afterward, since its own override always won from then on
-              // (blockOverrides' own comment above). Touching the checkbox
-              // itself now clears every override — it's a fresh "set
-              // everyone to this" action, not just a new default for
-              // whoever hasn't been touched yet — so a manual per-block
-              // peek stays possible, but doesn't survive the *next*
-              // checkbox toggle.
-              setBlockOverrides(new Map())
-            }}
-          />
-          Aufschlüsselung anzeigen
-        </label>
-        <label className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
-          <input type="checkbox" checked={showPlanung} onChange={(e) => setShowPlanung(e.target.checked)} />
-          letztes Jahr
-        </label>
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={openCursorInQuickview}
+            disabled={!cursorRowId}
+            title="Quickview für die Unterkategorie der markierten Zeile öffnen (Strg+Q)"
+            className="rounded-md border border-[var(--color-border)] px-3 py-1 text-sm hover:bg-[var(--color-bg)] disabled:opacity-50"
+          >
+            Quickview
+          </button>
+          {/* Only while the cursor is on a Plan0 row (Nov 2026, Markus). */}
+          {cursorPlan0Row && (
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => startPlanCopy(cursorPlan0Row)}
+              title={`Plan0 von „${cursorPlan0Row.subcatName}“ (Monate, Aufschlüsselung, Kommentare) auf Plan1 kopieren – ersetzt Plan1 (Strg+Umschalt+P)`}
+              className="whitespace-nowrap rounded-md border border-[var(--color-border)] px-3 py-1 text-sm hover:bg-[var(--color-bg)]"
+            >
+              Plan0 → Plan1
+            </button>
+          )}
+        </div>
         {/* Month-close "ok" switches now live in each month's own column
             header (MonthHeader, above) — moved there per Markus's request,
             closer to spec.md §3b's own mockup ("their own header row...
@@ -2250,14 +2267,14 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
             as in konten") — identical structure/classes to Konten's own. */}
         {/* The comment field and the (i) icon share one `ml-auto` wrapper,
             same single-auto-margin rule as Konten's toolbar. */}
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-3">
         {/* The Plan1 check message, left of the notes box. A fixed slot, so the
             toolbar never changes height as the cursor moves; the full text is
             also the tooltip and read out as a status. */}
         <div
           role="status"
           aria-live="polite"
-          className={`flex h-8 w-[34rem] max-w-full items-center text-xs leading-4 ${
+          className={`flex h-8 min-w-[12rem] max-w-[34rem] flex-1 items-center text-xs leading-4 ${
             checkInfo?.tone === 'ok' ? 'text-[var(--color-plan-ok)]' : checkInfo?.tone === 'off' ? 'text-[var(--color-plan-off)]' : 'text-[var(--color-text-muted)]'
           }`}
         >

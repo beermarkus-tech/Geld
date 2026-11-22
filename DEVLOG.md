@@ -2628,3 +2628,7 @@ Markus: no click action on the cells; a shortcut plus two buttons instead. Remov
 ## Session 37, continued two-hundred-and-nineteenth time — 2026-11-22 — "Gebucht laut Verlauf" in Konten after Strg+B
 
 Markus: after Strg+B the "Angezeigt" total was missing in Konten (it only shows with an account/column filter). Simply enabling it for the handed-over bookings gave wrong figures (whole split bookings, transfers signed from the Von account: Investment Cash Juli +1.378 instead of −2.578). Instead Verlauf now hands over its own booked total (`sumCents`: category month totals / tag sums, pot actuals) and Konten shows "Gebucht laut Verlauf: … €" while exactly those bookings are shown (`jumpSum`). Harness-checked on the backup: Lebensmittel Jan–Okt match Verlauf to the cent (incl. June/October with split bookings), Sparen Familie Juli −5.000, Investment Cash Juli −2.578,05, Firmenwagen Feb 266,94; year totals show the booked part only. 294 tests, lint, build pass.
+
+## Session 37, continued two-hundred-and-twentieth time — 2026-11-22 — Verlauf toolbar on one line
+
+Markus: the toolbar had grown to two lines. Now: a toggle-button group Plan0 · Aufschlüsselung · letztes Jahr (`Toggle`, filled while on, keeps the grid's focus), then Konten · Quickview · Plan0 → Plan1 (shortcuts moved into the tooltips), and the check message slot flexes (12–34rem). Harness-checked: 32 px high at 1500 and 1280 px; toggles switch. SPEC §3b. 294 tests, lint, build pass.
