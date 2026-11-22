@@ -2568,3 +2568,7 @@ Markus refined the previous entry's rule (year total per row): show both directi
 ## Session 37, continued two-hundred-and-fourth time — 2026-11-22 — Small Planung label; plain Investment Cash green
 
 Markus: "+ aus Rücklagen entnommen" now reads "+ aus Rücklagen entnommen (Teil des Budgets)" (table and phone card). The Investment Cash segments lost their stripes: a plain lightest green (Dashboard bars and Jahresbilanz). The three bar greens are now tokens in `index.css` (`--chart-anlage/-spar/-ic`, own dark-mode steps), and the Investment Cash segment has a thin green outline – without the stripes it was hard to tell from Sparkonten in dark mode. Browser-checked light and dark. 289 tests, lint, build pass.
+
+## Session 37, continued two-hundred-and-fifth time — 2026-11-22 — Planung's yellow band as one calculation
+
+Markus: the band should read Budget → Jahresergebnis in order. Now: + aus Rücklagen entnommen (Teil des Budgets) · = Budget · − Ausgaben (new line) · − in Rücklagen einbezahlt · = Jahresergebnis (renamed from "Ausgaben vs. Budget"); phone card likewise (SPEC §2.8). Browser-checked: 2026 3.384 + 133.788 − 83.346 + 11.250 = 65.077; 65.077 − 60.843 − 8.900 = −4.667. 289 tests, lint, build pass.

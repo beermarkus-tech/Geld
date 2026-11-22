@@ -95,7 +95,7 @@ const SECTION_TINT = {
   anlage: 'var(--color-anlage-tint)',
 }
 
-// The Budget lines (aus Rücklagen entnommen, Budget, Ausgaben vs. Budget, in Rücklagen einbezahlt)
+// The yellow band (aus Rücklagen entnommen, Budget, Ausgaben, in Rücklagen einbezahlt, Jahresergebnis)
 // are tinted yellow to set them apart from the report around them (Oct 2026,
 // Markus) — the same pale yellow token Verlauf uses for its breakdown rows.
 const BUDGET_BAND_TINT = 'var(--color-breakdown-tint)'
@@ -111,7 +111,7 @@ const SECTION_TINT_STRONG = {
   anlage: 'color-mix(in srgb, var(--color-anlage-tint) 82%, var(--color-income))',
 }
 
-// Ausgaben vs. Budget — "should be near zero"; negative means the plan
+// Jahresergebnis (was "Ausgaben vs. Budget") — "should be near zero"; negative means the plan
 // spends more than the budget allows, which is the one alert-red case
 // here (§1b.4).
 function deltaColor(cents) {
@@ -940,16 +940,19 @@ function ReportTable({ report, savePuffer, ...c }) {
         <BlockGap showComments={showComments} />
         {/* Rücklagen rows that give back more than they take this year (Nov 2026): money back into the cash */}
         <BandRow label="+ aus Rücklagen entnommen (Teil des Budgets)" refValue={ref.entnahmen} planValue={plan.entnahmen} color="var(--color-savings)" tint={BUDGET_BAND_TINT} showComments={showComments} />
-        <BandRow label="Budget" refValue={ref.budget} planValue={plan.budget} color="var(--color-computed)" bold tint={BUDGET_BAND_TINT} showComments={showComments} />
+        {/* The yellow band reads as one calculation (Nov 2026, Markus): + aus Rücklagen = Budget,
+            − Ausgaben − in Rücklagen = Jahresergebnis (was "Ausgaben vs. Budget"). */}
+        <BandRow label="= Budget" refValue={ref.budget} planValue={plan.budget} color="var(--color-computed)" bold tint={BUDGET_BAND_TINT} showComments={showComments} />
+        <BandRow label="− Ausgaben" refValue={ref.ausgaben} planValue={plan.ausgaben} color="var(--color-expense)" tint={BUDGET_BAND_TINT} showComments={showComments} />
+        <BandRow label="− in Rücklagen einbezahlt" refValue={ref.einbezahlt} planValue={plan.einbezahlt} color="var(--color-savings)" tint={BUDGET_BAND_TINT} showComments={showComments} />
         <BandRow
-          label="Ausgaben vs. Budget — sollte nahe Null sein"
+          label="= Jahresergebnis — sollte nahe Null sein"
           refValue={{ node: euro(ref.ausgabenVsBudget), color: deltaColor(ref.ausgabenVsBudget) }}
           planValue={{ node: euro(plan.ausgabenVsBudget), color: deltaColor(plan.ausgabenVsBudget) }}
           bold
           tint={BUDGET_BAND_TINT}
           showComments={showComments}
         />
-        <BandRow label="in Rücklagen einbezahlt (Teil der Ausgaben)" refValue={ref.einbezahlt} planValue={plan.einbezahlt} color="var(--color-savings)" tint={BUDGET_BAND_TINT} showComments={showComments} />
 
         <BlockGap showComments={showComments} />
         <GroupHeader t={report.ausgabenInklTotal} section="ausgaben" showComments={showComments} />
@@ -1071,9 +1074,10 @@ function ReportCards({ report, savePuffer, ...c }) {
 
       <div className="my-2 flex flex-col gap-0.5 rounded-lg border-2 border-[var(--color-computed)] p-3 text-sm font-semibold" style={{ backgroundColor: BUDGET_BAND_TINT }}>
         <Line label="+ aus Rücklagen entnommen (Teil des Budgets)" value={euro(plan.entnahmen)} color="var(--color-savings)" />
-        <Line label={`Budget ${planYear}`} value={euro(plan.budget)} color="var(--color-computed)" />
-        <Line label="Ausgaben vs. Budget" value={euro(plan.ausgabenVsBudget)} color={deltaColor(plan.ausgabenVsBudget)} />
-        <Line label="in Rücklagen einbezahlt" value={euro(plan.einbezahlt)} color="var(--color-savings)" />
+        <Line label={`= Budget ${planYear}`} value={euro(plan.budget)} color="var(--color-computed)" />
+        <Line label="− Ausgaben" value={euro(plan.ausgaben)} color="var(--color-expense)" />
+        <Line label="− in Rücklagen einbezahlt" value={euro(plan.einbezahlt)} color="var(--color-savings)" />
+        <Line label="= Jahresergebnis" value={euro(plan.ausgabenVsBudget)} color={deltaColor(plan.ausgabenVsBudget)} />
       </div>
 
       <CardGroupHeader t={report.ausgabenInklTotal} section="ausgaben" />
