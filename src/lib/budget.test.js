@@ -315,6 +315,16 @@ describe('regularShare() / splitYear()', () => {
 })
 
 describe('planungSummary() — spec.md §3c Budget formula', () => {
+  it('a Rücklage that gives back more than it takes adds to the Budget; Ausgaben vs. Budget is unchanged', () => {
+    // 2026 Plan0 on the backup: Sparen Familie −5.000, Steuern +5.950, Sparen Julia +1.400
+    const r = planungSummary({ einnahmen: 0, fixkosten: 0, jahresanfang: 5262400, puffer: 0, ausgaben: -6084300, ruecklagen: [-500000, 595000, 140000] })
+    expect(r.entnahmen).toBe(735000)
+    expect(r.gebildet).toBe(-500000)
+    expect(r.budget).toBe(5262400 + 735000)
+    // the same as Budget(old) + Ausgaben + the netted Rücklagen
+    expect(r.ausgabenVsBudget).toBe(5262400 - 6084300 + 235000)
+  })
+
   // The aggregate 2025 figures already published in spec.md §3c (whole
   // euros, in cents): Einnahmen 166.373, Fixkosten −67.716, Jahresanfang
   // minus Puffer 5.687 (13.687 − 8.000) → Budget 104.344; Ausgaben +

@@ -345,14 +345,14 @@ export default function Planung({ year, active = true, onOpenInVerlauf }) {
         jahresanfangRaw: startCash(y),
         puffer: puffer(y),
         ausgaben: ausgabenTotal[col],
-        ruecklagen: ruecklagenTotal[col],
         ...planungSummary({
           einnahmen: einnahmenTotal[col],
           fixkosten: fixkostenTotal[col],
           jahresanfang: startCash(y),
           puffer: puffer(y),
           ausgaben: ausgabenTotal[col],
-          ruecklagen: ruecklagenTotal[col],
+          // each Rücklagen row's year total – its sign decides: withdrawal (Budget source) or saving
+          ruecklagen: ruecklagen.map((r) => r[col]),
         }),
       }
     }
@@ -509,7 +509,7 @@ function BudgetChart({ years }) {
     year: y.year,
     budget: Math.max(0, y.budget),
     ausgaben: Math.max(0, -y.ausgaben),
-    ruecklagen: Math.max(0, -y.ruecklagen),
+    ruecklagen: Math.max(0, -y.gebildet),
   }))
   const max = Math.max(1, ...bars.flatMap((b) => [b.budget, b.ausgaben + b.ruecklagen]))
   const pct = (v) => `${(v / max) * 100}%`
@@ -925,6 +925,8 @@ function ReportTable({ report, savePuffer, ...c }) {
         <Group t={report.fixkostenTotal} rows={report.fixkosten} section="fixkosten" c={c} />
 
         <BlockGap showComments={showComments} />
+        {/* Rücklagen rows that give back more than they take this year (Nov 2026): money back into the cash */}
+        <BandRow label="+ aus Rücklagen entnommen" refValue={ref.entnahmen} planValue={plan.entnahmen} color="var(--color-savings)" tint={BUDGET_BAND_TINT} showComments={showComments} />
         <BandRow label="Budget" refValue={ref.budget} planValue={plan.budget} color="var(--color-computed)" bold tint={BUDGET_BAND_TINT} showComments={showComments} />
         <BandRow
           label="Ausgaben vs. Budget — sollte nahe Null sein"
@@ -934,7 +936,7 @@ function ReportTable({ report, savePuffer, ...c }) {
           tint={BUDGET_BAND_TINT}
           showComments={showComments}
         />
-        <BandRow label="… gebildete Rücklagen (Teil der Ausgaben)" refValue={-ref.ruecklagen} planValue={-plan.ruecklagen} color="var(--color-savings)" tint={BUDGET_BAND_TINT} showComments={showComments} />
+        <BandRow label="… gebildete Rücklagen (Teil der Ausgaben)" refValue={-ref.gebildet} planValue={-plan.gebildet} color="var(--color-savings)" tint={BUDGET_BAND_TINT} showComments={showComments} />
 
         <BlockGap showComments={showComments} />
         <GroupHeader t={report.ausgabenInklTotal} section="ausgaben" showComments={showComments} />
@@ -1055,9 +1057,10 @@ function ReportCards({ report, savePuffer, ...c }) {
       <CardSection t={report.fixkostenTotal} section="fixkosten" rows={report.fixkosten} c={c} />
 
       <div className="my-2 flex flex-col gap-0.5 rounded-lg border-2 border-[var(--color-computed)] p-3 text-sm font-semibold" style={{ backgroundColor: BUDGET_BAND_TINT }}>
+        <Line label="+ aus Rücklagen entnommen" value={euro(plan.entnahmen)} color="var(--color-savings)" />
         <Line label={`Budget ${planYear}`} value={euro(plan.budget)} color="var(--color-computed)" />
         <Line label="Ausgaben vs. Budget" value={euro(plan.ausgabenVsBudget)} color={deltaColor(plan.ausgabenVsBudget)} />
-        <Line label="… gebildete Rücklagen" value={euro(-plan.ruecklagen)} color="var(--color-savings)" />
+        <Line label="… gebildete Rücklagen" value={euro(-plan.gebildet)} color="var(--color-savings)" />
       </div>
 
       <CardGroupHeader t={report.ausgabenInklTotal} section="ausgaben" />

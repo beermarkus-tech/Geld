@@ -335,15 +335,25 @@ export function splitYear(yearCents, share) {
 }
 
 // Planung's summary band (spec.md §3c), all signed cents as displayed:
-// Budget = Einnahmen + Fixkosten (negative) + (Jahresanfang − Puffer);
-// Ausgaben vs. Budget = Budget + Ausgaben + Rücklagen (both negative when
+// Budget = Einnahmen + Fixkosten (negative) + (Jahresanfang − Puffer) + Entnahmen aus Rücklagen;
+// Ausgaben vs. Budget = Budget + Ausgaben + gebildete Rücklagen (both negative when
 // money goes out) — "should be near zero".
 //
-// @param {{einnahmen: number, fixkosten: number, jahresanfang: number, puffer: number, ausgaben: number, ruecklagen: number}} p
+// Rücklagen rows are split by the sign of their year total (Nov 2026, Markus): a row that gives back
+// more than it takes over the year (e.g. Steuern paid out of the pot) is money flowing *into* the cash –
+// an extra source for the Budget, "+ aus Rücklagen entnommen"; a negative row is money put aside –
+// "gebildete Rücklagen". Ausgaben vs. Budget is the same either way; before, a net withdrawal made
+// "gebildete Rücklagen" negative and the chart (which cannot draw a negative bar) dropped it.
+//
+// @param {{einnahmen: number, fixkosten: number, jahresanfang: number, puffer: number, ausgaben: number, ruecklagen: number[]|number}} p
 //   `puffer` is the positive minCashBufferCents; `jahresanfang` the raw
-//   starting cash before the buffer is taken off.
+//   starting cash before the buffer is taken off; `ruecklagen` the year totals of the Rücklagen rows
+//   (a single number still works: its sign decides).
 export function planungSummary({ einnahmen, fixkosten, jahresanfang, puffer, ausgaben, ruecklagen }) {
+  const rows = Array.isArray(ruecklagen) ? ruecklagen : [ruecklagen]
+  const entnahmen = rows.filter((v) => v > 0).reduce((a, v) => a + v, 0)
+  const gebildet = rows.filter((v) => v < 0).reduce((a, v) => a + v, 0)
   const startCash = jahresanfang - puffer
-  const budget = einnahmen + fixkosten + startCash
-  return { startCash, budget, ausgabenVsBudget: budget + ausgaben + ruecklagen }
+  const budget = einnahmen + fixkosten + startCash + entnahmen
+  return { startCash, entnahmen, gebildet, budget, ausgabenVsBudget: budget + ausgaben + gebildet }
 }
