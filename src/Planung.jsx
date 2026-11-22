@@ -702,12 +702,15 @@ function CommentBox({ y, target, c, cell = true, navCol }) {
     return () => window.removeEventListener('resize', fit)
   }, [])
 
-  // Entering edit mode puts the caret at the end of the text.
+  // Entering edit mode puts the caret at the end of the text – except after a click, which keeps the
+  // caret where the click put it (Nov 2026, Markus: one click edits, like Verlauf's comment box).
+  const clickStartRef = useRef(false)
   useEffect(() => {
     if (!editing) return
     const el = ref.current
     el.focus()
-    el.setSelectionRange(el.value.length, el.value.length)
+    if (clickStartRef.current) clickStartRef.current = false
+    else el.setSelectionRange(el.value.length, el.value.length)
   }, [editing])
 
   function commit() {
@@ -726,8 +729,12 @@ function CommentBox({ y, target, c, cell = true, navCol }) {
       readOnly={!editing}
       {...(navCol === undefined ? {} : { 'data-nav-row': target.targetId, 'data-nav-col': navCol })}
       aria-label={`Kommentar ${y} ${target.label}`}
-      title={editing ? undefined : 'Doppelklick zum Bearbeiten'}
-      onDoubleClick={() => setEditing(true)}
+      title={editing ? undefined : 'Klicken zum Bearbeiten'}
+      onClick={() => {
+        if (editing) return
+        clickStartRef.current = true
+        setEditing(true)
+      }}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => {
         setEditing(false)
@@ -758,7 +765,7 @@ function CommentBox({ y, target, c, cell = true, navCol }) {
       }}
       className={
         'block w-full scroll-mt-14 resize-none overflow-hidden bg-transparent text-sm leading-5 whitespace-pre-wrap focus:outline-2 focus:-outline-offset-2 focus:outline-[var(--color-computed)] ' +
-        (editing ? 'cursor-text bg-[var(--color-surface)] ' : 'cursor-default select-none hover:bg-[var(--color-line-row-tint)] ') +
+        (editing ? 'cursor-text bg-[var(--color-surface)] ' : 'cursor-text hover:bg-[var(--color-line-row-tint)] ') +
         (cell ? 'px-3 py-1' : 'rounded border border-[var(--color-border)] px-2 py-1')
       }
     />

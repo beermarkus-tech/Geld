@@ -2588,3 +2588,7 @@ Misunderstanding corrected: Markus liked the per-pot split (Build 326) – by "n
 ## Session 37, continued two-hundred-and-ninth time — 2026-11-22 — Planung: "Ausgaben" headline
 
 Markus: keep Ausgaben and Rücklagen separate – the header above the Ausgaben groups is now "Ausgaben" (Ausgaben only, = the band's "− Ausgaben"), in a slightly darker blue (`ausgabenHead` section style; phone card too). Totals script re-run: all add up. 289 tests, lint, build pass.
+
+## Session 37, continued two-hundred-and-tenth time — 2026-11-22 — Planung comments: one click edits
+
+Markus: the cursor could not be moved inside Planung's comment fields. Reproduced: in edit mode the arrows already moved the caret, but a single click only *selected* the cell (editing needed a double click), so the arrows jumped between cells. Now a single click starts editing with the caret where clicked (like Verlauf's comment box); the box no longer blocks text selection while not editing; keyboard cell navigation unchanged; Enter = line break, Esc = save and leave (as before). Harness-checked (incl. with Verlauf/Konten mounted): click lands the caret at the clicked position, arrows/Home/End move it, Esc leaves. SPEC §3c updated. 289 tests, lint, build pass.
