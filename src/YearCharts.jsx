@@ -16,8 +16,8 @@ const PLAN = 'var(--color-text)'
 const INCOME = 'color-mix(in srgb, var(--color-income) 55%, var(--color-surface))'
 const EXPENSE = 'color-mix(in srgb, var(--color-expense) 60%, var(--color-surface))'
 const seriesColor = (i) => `var(--series-${(i % 8) + 1})`
-const IC_SWATCH =
-  'repeating-linear-gradient(45deg, color-mix(in srgb, var(--color-income) 38%, var(--color-surface)) 0 2px, color-mix(in srgb, var(--color-income) 12%, var(--color-surface)) 2px 5px)'
+// the Dashboard bars' Investment Cash green (plain, no stripes)
+const IC_FILL = 'var(--chart-ic)'
 const pct = (part, total) => `${Math.round((100 * part) / total)} %`
 const dateDe = (iso) => iso.split('-').reverse().join('.')
 
@@ -32,11 +32,11 @@ export default function YearCharts({ accounts, categories, tags, budgets, transa
   )
   // one colour per part id (Barkonten first, then the pots), shared by both charts
   // Barkonten = series 1, the pots series 2… in order; Investment Cash is no categorical colour but the
-  // striped lightest green of the Dashboard bars (lib/investmentCash.js), so the 8 slots still suffice.
+  // plain lightest green of the Dashboard bars (lib/investmentCash.js), so the 8 slots still suffice.
   const colorOf = Object.fromEntries(
     yb.startParts.filter((p) => p.id !== INVESTMENT_CASH_ID).map((p, i) => [p.id, seriesColor(i)]),
   )
-  colorOf[INVESTMENT_CASH_ID] = 'url(#yc-ic-stripes)'
+  colorOf[INVESTMENT_CASH_ID] = IC_FILL
   return (
     <div className="grid grid-cols-1 gap-4 px-4 lg:grid-cols-2">
       <Jahresbilanz yb={yb} colorOf={colorOf} yearNum={yearNum} />
@@ -122,18 +122,12 @@ function Jahresbilanz({ yb, colorOf, yearNum }) {
         <Legend><span className="inline-block w-5 border-t-[3px] border-[var(--color-alert)]" /> Prognose</Legend>
         {yb.startParts.map((p) => (
           <Legend key={p.id}>
-            <Swatch color={p.id === INVESTMENT_CASH_ID ? IC_SWATCH : colorOf[p.id]} /> {p.name}
+            <Swatch color={colorOf[p.id]} /> {p.name}
           </Legend>
         ))}
       </div>
       <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
         <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Jahresbilanz">
-          <defs>
-            <pattern id="yc-ic-stripes" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <rect width="8" height="8" fill="color-mix(in srgb, var(--color-income) 12%, var(--color-surface))" />
-              <line x1="0" y1="0" x2="0" y2="8" stroke="color-mix(in srgb, var(--color-income) 38%, var(--color-surface))" strokeWidth="3" />
-            </pattern>
-          </defs>
           {Array.from({ length: n + 1 }, (_, k) => (
             <g key={k}>
               <line x1={LEFT} x2={W - RIGHT} y1={y(k * step)} y2={y(k * step)} stroke="var(--color-border)" />

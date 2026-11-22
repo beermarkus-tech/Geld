@@ -29,6 +29,10 @@
   --color-income-tint: #dcfce7; /* pale green row background — an armed *undelete* (Konten); also Verlauf's Einnahmen section tint */
   --color-savings-tint: #ede9fe; /* pale purple — Verlauf's Rücklagen section tint */
   --color-anlage-tint: #ddf1ef; /* pale green – Verlauf's/Planung's "Aufteilung der Anlage" block (Nov 2026, Investment Cash), set apart from the Einnahmen tint */
+  /* Dashboard bars (Nov 2026): Geldanlage dark, Sparkonten medium, Investment Cash lightest – distinct in both modes */
+  --chart-anlage: color-mix(in srgb, var(--color-income) 62%, var(--color-surface));
+  --chart-spar: color-mix(in srgb, var(--color-income) 32%, var(--color-surface));
+  --chart-ic: color-mix(in srgb, var(--color-income) 14%, var(--color-surface));
   --color-line-row-tint: #eef0f4; /* subtle grey row background — a split transaction's own line rows (Konten), distinguishing them from ordinary transaction rows */
   --color-needs-entry: #facc15; /* bright yellow – a cell that still needs an entry (Konten, lib/needsEntry.js); deliberately stronger than the pale breakdown tint */
   --color-breakdown-tint: #fef9c3; /* pale yellow — Verlauf's breakdown-line rows (Hotels, Fehmarn, ...), always tinted regardless of month open/closed state */
@@ -80,6 +84,9 @@
     --color-income-tint: #1c3324;
     --color-savings-tint: #2e2447;
     --color-anlage-tint: #143432; /* pale green – Verlauf's/Planung's "Aufteilung der Anlage" block (Nov 2026, Investment Cash), set apart from the Einnahmen tint */
+    --chart-anlage: color-mix(in srgb, var(--color-income) 66%, var(--color-surface));
+    --chart-spar: color-mix(in srgb, var(--color-income) 38%, var(--color-surface));
+    --chart-ic: color-mix(in srgb, var(--color-income) 13%, var(--color-surface));
     --color-line-row-tint: #1c2330;
     --color-breakdown-tint: #3a3419;
     --color-breakdown-rollup-tint: #4d431d;
@@ -127,6 +134,9 @@
   --color-income-tint: #1c3324;
   --color-savings-tint: #2e2447;
   --color-anlage-tint: #143432; /* pale green – Verlauf's/Planung's "Aufteilung der Anlage" block (Nov 2026, Investment Cash), set apart from the Einnahmen tint */
+  --chart-anlage: color-mix(in srgb, var(--color-income) 66%, var(--color-surface));
+  --chart-spar: color-mix(in srgb, var(--color-income) 38%, var(--color-surface));
+  --chart-ic: color-mix(in srgb, var(--color-income) 13%, var(--color-surface));
   --color-line-row-tint: #1c2330;
   --color-breakdown-tint: #3a3419;
   --color-breakdown-rollup-tint: #4d431d;

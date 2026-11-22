@@ -17,12 +17,12 @@ const BAR_W = STEP * 0.62
 const PROG = 'var(--color-alert)'
 const PLAN = 'var(--color-text)'
 // Three clearly different greens (Nov 2026): Geldanlage dark, Sparkonten medium, Investment Cash the
-// lightest and striped ("parked, not yet invested", lib/investmentCash.js).
-const ANLAGE = 'color-mix(in srgb, var(--color-income) 62%, var(--color-surface))'
-const SPAR = 'color-mix(in srgb, var(--color-income) 32%, var(--color-surface))'
-const IC = 'url(#ic-stripes)'
-const IC_BASE = 'color-mix(in srgb, var(--color-income) 12%, var(--color-surface))'
-const IC_LINE = 'color-mix(in srgb, var(--color-income) 38%, var(--color-surface))'
+// lightest ("parked, not yet invested", lib/investmentCash.js; plain, no stripes – Markus).
+const ANLAGE = 'var(--chart-anlage)'
+const SPAR = 'var(--chart-spar)'
+const IC = 'var(--chart-ic)'
+// a thin outline keeps the lightest segment apart from Sparkonten (and from the background) without stripes
+const IC_OUTLINE = 'color-mix(in srgb, var(--color-income) 45%, var(--color-surface))'
 
 export default function ForecastChart({ accounts, categories, tags, budgets, transactions, yearNum, closedMonths, closedByYear }) {
   const data = useMemo(
@@ -68,18 +68,12 @@ export default function ForecastChart({ accounts, categories, tags, budgets, tra
         <Legend><span className="inline-block w-6 border-t-[3px] border-[var(--color-text)]" /> Plan1</Legend>
         <Legend><span className="inline-block w-6 border-t-2 border-dashed border-[var(--color-text)]" /> Plan0</Legend>
         <Legend><span className="inline-block w-6 border-t-[3px] border-[var(--color-alert)]" /> Prognose (Barkonten)</Legend>
-        <Legend><Swatch color={IC_BASE} striped /> Investment Cash</Legend>
+        <Legend><Swatch color={IC} /> Investment Cash</Legend>
         <Legend><Swatch color={SPAR} /> Sparkonten</Legend>
         <Legend><Swatch color={ANLAGE} /> Geldanlage</Legend>
       </div>
       <div className="overflow-x-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
         <svg viewBox={`0 0 ${W} ${H}`} style={{ minWidth: 900, width: '100%' }} role="img" aria-label="Prognose">
-          <defs>
-            <pattern id="ic-stripes" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <rect width="8" height="8" fill={IC_BASE} />
-              <line x1="0" y1="0" x2="0" y2="8" stroke={IC_LINE} strokeWidth="3" />
-            </pattern>
-          </defs>
           {Array.from({ length: n + 1 }, (_, k) => {
             const y = TOP + PLOT_H - (k / n) * PLOT_H
             const lv = lo + k * stepL
@@ -103,7 +97,7 @@ export default function ForecastChart({ accounts, categories, tags, budgets, tra
                 <title>{`${LABELS[i]}: Geldanlage ${kEuro(p.geldanlage)}, Sparkonten ${kEuro(p.sparkonten)}, Investment Cash ${kEuro(p.investmentCash)}`}</title>
                 <rect x={x} y={yA} width={BAR_W} height={Math.max(0, yR(0) - yA)} fill={ANLAGE} />
                 <rect x={x} y={yS} width={BAR_W} height={Math.max(0, yA - yS)} fill={SPAR} />
-                <rect x={x} y={yI} width={BAR_W} height={Math.max(0, yS - yI)} fill={IC} />
+                {yS - yI > 0 && <rect x={x + 0.5} y={yI + 0.5} width={BAR_W - 1} height={Math.max(0, yS - yI - 1)} fill={IC} stroke={IC_OUTLINE} strokeWidth="1" />}
                 {/* Investment Cash: its value at the bottom of its segment; a planned minus (more invested
                     than topped up) is shown in red above the bar instead – nothing to draw there. */}
                 {p.investmentCash > 0 && yS - yI >= 14 && (
@@ -139,11 +133,4 @@ export default function ForecastChart({ accounts, categories, tags, budgets, tra
 }
 
 const Legend = ({ children }) => <span className="inline-flex items-center gap-1.5">{children}</span>
-const Swatch = ({ color, striped }) => (
-  <span
-    className="inline-block h-3 w-3 rounded-sm"
-    style={{
-      background: striped ? `repeating-linear-gradient(45deg, ${IC_LINE} 0 2px, ${color} 2px 5px)` : color,
-    }}
-  />
-)
+const Swatch = ({ color }) => <span className="inline-block h-3 w-3 rounded-sm" style={{ background: color }} />
