@@ -83,8 +83,8 @@ const SECTION_COLOR = {
   ausgaben: 'var(--color-expense)',
   ruecklagen: 'var(--color-savings)',
   anlage: 'var(--color-income)',
-  // the Ausgaben block's headline (Nov 2026): a slightly darker blue
-  ausgabenHead: 'var(--color-computed)',
+  // the Ausgaben block's headline (Nov 2026): a slightly darker red than the Ausgaben groups
+  ausgabenHead: 'var(--color-expense)',
 }
 
 // Section background tint — the same tokens Verlauf's category columns use
@@ -95,7 +95,7 @@ const SECTION_TINT = {
   ausgaben: 'var(--color-alert-tint)',
   ruecklagen: 'var(--color-savings-tint)',
   anlage: 'var(--color-anlage-tint)',
-  ausgabenHead: 'color-mix(in srgb, var(--color-computed) 14%, var(--color-surface))',
+  ausgabenHead: 'color-mix(in srgb, var(--color-alert-tint) 72%, var(--color-alert))',
 }
 
 // The yellow band (aus Rücklagen entnommen, Budget, Ausgaben, in Rücklagen einbezahlt, Jahresergebnis)
@@ -112,7 +112,7 @@ const SECTION_TINT_STRONG = {
   ausgaben: 'color-mix(in srgb, var(--color-alert-tint) 86%, var(--color-alert))',
   ruecklagen: 'color-mix(in srgb, var(--color-savings-tint) 86%, var(--color-savings))',
   anlage: 'color-mix(in srgb, var(--color-anlage-tint) 82%, var(--color-income))',
-  ausgabenHead: 'color-mix(in srgb, var(--color-computed) 24%, var(--color-surface))',
+  ausgabenHead: 'color-mix(in srgb, var(--color-alert-tint) 72%, var(--color-alert))',
 }
 
 // Jahresergebnis (was "Ausgaben vs. Budget") — "should be near zero"; negative means the plan
@@ -986,7 +986,7 @@ function ReportTable({ report, savePuffer, ...c }) {
         <BandRow label="− Ausgaben" refValue={ref.ausgaben} planValue={plan.ausgaben} color="var(--color-expense)" tint={BUDGET_BAND_TINT} showComments={showComments} />
         <BandRow label="− in Rücklagen einbezahlt" refValue={ref.einbezahlt} planValue={plan.einbezahlt} color="var(--color-savings)" tint={BUDGET_BAND_TINT} showComments={showComments} />
         <BandRow
-          label="= Jahresergebnis — sollte nahe Null sein"
+          label="= Jahresergebnis"
           refValue={{ node: euro(ref.ausgabenVsBudget), color: deltaColor(ref.ausgabenVsBudget) }}
           planValue={{ node: euro(plan.ausgabenVsBudget), color: deltaColor(plan.ausgabenVsBudget) }}
           bold

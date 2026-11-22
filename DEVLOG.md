@@ -2592,3 +2592,7 @@ Markus: keep Ausgaben and Rücklagen separate – the header above the Ausgaben 
 ## Session 37, continued two-hundred-and-tenth time — 2026-11-22 — Planung comments: one click edits
 
 Markus: the cursor could not be moved inside Planung's comment fields. Reproduced: in edit mode the arrows already moved the caret, but a single click only *selected* the cell (editing needed a double click), so the arrows jumped between cells. Now a single click starts editing with the caret where clicked (like Verlauf's comment box); the box no longer blocks text selection while not editing; keyboard cell navigation unchanged; Enter = line break, Esc = save and leave (as before). Harness-checked (incl. with Verlauf/Konten mounted): click lands the caret at the clicked position, arrows/Home/End move it, Esc leaves. SPEC §3c updated. 289 tests, lint, build pass.
+
+## Session 37, continued two-hundred-and-eleventh time — 2026-11-22 — Ausgaben headline red; "sollte nahe Null sein" removed
+
+Markus meant a slightly darker *red* for Planung's "Ausgaben" headline (not blue): now the Ausgaben groups' red tint, a step stronger. "= Jahresergebnis — sollte nahe Null sein" is now just "= Jahresergebnis". Browser-checked. 289 tests, lint, build pass.
