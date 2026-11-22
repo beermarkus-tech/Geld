@@ -84,10 +84,12 @@ export function categoryMonthActual(categoryId, year, month, transactions) {
 // @param {number} month  1-12
 // @param {Array} transactions
 // @param {Array<{id: string, reconciliationTargetAccountIds?: string[]}>} tags
-export function allocationMonthActual(allocationTagId, year, month, transactions, tags) {
+/** Each booking's (or line's) contribution to a pot's change in one month – the pieces
+ *  allocationMonthActual() adds up (it returns −Σ). Planung splits them by sign (Nov 2026). */
+function allocationContributions(allocationTagId, year, month, transactions, tags) {
   const tag = tags.find((t) => t.id === allocationTagId)
-  // The virtual "Investment Cash" row (lib/investmentCash.js): −(the month's change of all investment
-  // accounts), from the accounts alone – no tags.
+  const out = []
+  // The virtual "Investment Cash" row (lib/investmentCash.js), from the accounts alone – no tags.
   // Counted: money moving between a non-investment account and an investment account (BNP → Smartbroker,
   // BNP → ESOP; a purchase Smartbroker → Aktien stays inside and counts nothing), and the opposite of
   // every categorized line booked straight on an investment account (a dividend or fee: its category
@@ -95,21 +97,19 @@ export function allocationMonthActual(allocationTagId, year, month, transactions
   // touches neither the cash nor any planning row and is left alone.
   if (tag?.investAccountIds) {
     const invest = new Set(tag.investAccountIds)
-    let change = 0
     for (const tx of bookingsInMonth(transactions, year, month)) {
       const intoInvest = invest.has(tx.toAccountId)
       const outOfInvest = invest.has(tx.fromAccountId)
       if (!intoInvest && !outOfInvest) continue
       if (tx.fromAccountId && tx.toAccountId) {
-        if (intoInvest !== outOfInvest) change += (intoInvest ? 1 : -1) * Math.abs(tx.amountCents ?? 0)
+        if (intoInvest !== outOfInvest) out.push((intoInvest ? 1 : -1) * Math.abs(tx.amountCents ?? 0))
         continue
       }
-      for (const line of tx.lines ?? []) if (line.categoryId) change += line.amountCents ?? 0
+      for (const line of tx.lines ?? []) if (line.categoryId) out.push(line.amountCents ?? 0)
     }
-    return change === 0 ? 0 : -change
+    return out
   }
   const targets = new Set(tag?.reconciliationTargetAccountIds ?? [])
-  let delta = 0
   // Opening-balance anchors are balances, not a period's bookings (left out of the month buckets).
   for (const tx of bookingsInMonth(transactions, year, month)) {
     const isTransfer = Boolean(tx.fromAccountId && tx.toAccountId)
@@ -120,14 +120,55 @@ export function allocationMonthActual(allocationTagId, year, month, transactions
       // rule below is for transfers only; applying it here flipped an expense paid from the pot
       // (Nov 2026: 2025's "Feelharmonia", −290 € from Livret A Tagesgeld, counted twice in Prog).
       if (!isTransfer) {
-        if (targets.has(tx.fromAccountId) || targets.has(tx.toAccountId)) delta += line.amountCents
+        if (targets.has(tx.fromAccountId) || targets.has(tx.toAccountId)) out.push(line.amountCents)
         continue
       }
-      if (targets.has(tx.fromAccountId)) delta -= line.amountCents
-      if (targets.has(tx.toAccountId)) delta += line.amountCents
+      let c = 0
+      if (targets.has(tx.fromAccountId)) c -= line.amountCents
+      if (targets.has(tx.toAccountId)) c += line.amountCents
+      if (c) out.push(c)
     }
   }
+  return out
+}
+
+export function allocationMonthActual(allocationTagId, year, month, transactions, tags) {
+  const delta = allocationContributions(allocationTagId, year, month, transactions, tags).reduce((a, c) => a + c, 0)
   return delta === 0 ? 0 : -delta
+}
+
+/**
+ * A Rücklagen row's flows over a year, split by direction (Nov 2026, Markus): `outflow` (≥ 0) = what is
+ * taken out of the pot ("aus Rücklagen entnommen"), `inflow` (≤ 0) = what is paid in ("in Rücklagen
+ * einbezahlt"); outflow + inflow = the row's year total. Split on the finest level there is: in a
+ * booked month (Prog, closed) each booking separately; in a planned month each breakdown line's
+ * figure separately (a row without breakdown lines: the month's figure) – so pure "+" and pure "−"
+ * breakdown lines keep both directions apart even within a month.
+ * @param {'plan0'|'plan1'|'prog'} which
+ */
+export function rowFlows({ targetKey, targetId, which, year, closedMonths = [], budgets, transactions, tags }) {
+  let inflow = 0
+  let outflow = 0
+  const add = (v) => (v > 0 ? (outflow += v) : (inflow += v))
+  const planDocs = (version) => {
+    const rows = budgetRowsFor(budgets, targetKey, targetId, version, year)
+    const lines = rows.filter((b) => b.breakdownTagId != null)
+    return lines.length > 0 ? lines : rows.filter((b) => b.breakdownTagId == null)
+  }
+  if (which !== 'prog') {
+    for (const b of planDocs(which)) add(b.plannedAmountCents ?? 0)
+    return { inflow, outflow }
+  }
+  const docs = planDocs(progPlanVersion(targetKey, targetId, year, budgets))
+  for (let m = 1; m <= 12; m++) {
+    if (closedMonths.includes(m)) {
+      // the actual's sign convention: − = paid in (the pot grew)
+      if (targetKey === 'allocationTagId') for (const c of allocationContributions(targetId, year, m, transactions, tags)) add(-c)
+    } else {
+      for (const b of docs) if (b.month === m) add(b.plannedAmountCents ?? 0)
+    }
+  }
+  return { inflow, outflow }
 }
 
 // A category or allocation tag's top-line Plan0/Plan1 value, per month —
@@ -335,25 +376,19 @@ export function splitYear(yearCents, share) {
 }
 
 // Planung's summary band (spec.md §3c), all signed cents as displayed:
-// Budget = Einnahmen + Fixkosten (negative) + (Jahresanfang − Puffer) + Entnahmen aus Rücklagen;
-// Ausgaben vs. Budget = Budget + Ausgaben + gebildete Rücklagen (both negative when
-// money goes out) — "should be near zero".
+// Budget = Einnahmen + Fixkosten (negative) + (Jahresanfang − Puffer) + aus Rücklagen entnommen;
+// Ausgaben vs. Budget = Budget + Ausgaben + in Rücklagen einbezahlt (both negative when money goes
+// out) — "should be near zero".
 //
-// Rücklagen rows are split by the sign of their year total (Nov 2026, Markus): a row that gives back
-// more than it takes over the year (e.g. Steuern paid out of the pot) is money flowing *into* the cash –
-// an extra source for the Budget, "+ aus Rücklagen entnommen"; a negative row is money put aside –
-// "gebildete Rücklagen". Ausgaben vs. Budget is the same either way; before, a net withdrawal made
-// "gebildete Rücklagen" negative and the chart (which cannot draw a negative bar) dropped it.
+// The Rücklagen are split by direction (Nov 2026, Markus): money taken out of a pot flows into the cash
+// and is an extra source for the Budget ("+ aus Rücklagen entnommen", ≥ 0); money paid in is spending
+// ("in Rücklagen einbezahlt", ≤ 0) – see rowFlows(). Ausgaben vs. Budget equals the old netted figure.
 //
-// @param {{einnahmen: number, fixkosten: number, jahresanfang: number, puffer: number, ausgaben: number, ruecklagen: number[]|number}} p
-//   `puffer` is the positive minCashBufferCents; `jahresanfang` the raw
-//   starting cash before the buffer is taken off; `ruecklagen` the year totals of the Rücklagen rows
-//   (a single number still works: its sign decides).
-export function planungSummary({ einnahmen, fixkosten, jahresanfang, puffer, ausgaben, ruecklagen }) {
-  const rows = Array.isArray(ruecklagen) ? ruecklagen : [ruecklagen]
-  const entnahmen = rows.filter((v) => v > 0).reduce((a, v) => a + v, 0)
-  const gebildet = rows.filter((v) => v < 0).reduce((a, v) => a + v, 0)
+// @param {{einnahmen: number, fixkosten: number, jahresanfang: number, puffer: number, ausgaben: number, entnahmen?: number, einbezahlt?: number}} p
+//   `puffer` is the positive minCashBufferCents; `jahresanfang` the raw starting cash before the
+//   buffer is taken off.
+export function planungSummary({ einnahmen, fixkosten, jahresanfang, puffer, ausgaben, entnahmen = 0, einbezahlt = 0 }) {
   const startCash = jahresanfang - puffer
   const budget = einnahmen + fixkosten + startCash + entnahmen
-  return { startCash, entnahmen, gebildet, budget, ausgabenVsBudget: budget + ausgaben + gebildet }
+  return { startCash, entnahmen, einbezahlt, budget, ausgabenVsBudget: budget + ausgaben + einbezahlt }
 }

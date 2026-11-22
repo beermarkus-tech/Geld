@@ -13,6 +13,7 @@ import {
   categoryMonthActual,
   planungSummary,
   progBaseMonths,
+  rowFlows,
   progMonths,
   regularShare,
   splitYear,
@@ -94,7 +95,7 @@ const SECTION_TINT = {
   anlage: 'var(--color-anlage-tint)',
 }
 
-// The three Budget lines (Budget, Ausgaben vs. Budget, gebildete Rücklagen)
+// The Budget lines (aus Rücklagen entnommen, Budget, Ausgaben vs. Budget, in Rücklagen einbezahlt)
 // are tinted yellow to set them apart from the report around them (Oct 2026,
 // Markus) — the same pale yellow token Verlauf uses for its breakdown rows.
 const BUDGET_BAND_TINT = 'var(--color-breakdown-tint)'
@@ -332,6 +333,19 @@ export default function Planung({ year, active = true, onOpenInVerlauf }) {
     const puffer = (y) => settingsByYear[y]?.minCashBufferCents ?? 0
 
     const icRow = ruecklagen.at(-1)
+    // The Rücklagen rows' money in both directions (lib/budget.js rowFlows): taken out → Budget source,
+    // paid in → spending. The reference year is its Prog; the planning year follows the lens.
+    function flowsOf(y, col) {
+      const which = col === 'ref' ? 'prog' : lens
+      let entnahmen = 0
+      let einbezahlt = 0
+      for (const r of ruecklagen) {
+        const f = rowFlows({ targetKey: r.targetKey, targetId: r.targetId, which, year: y, closedMonths: settingsByYear[y]?.closedMonths ?? [], budgets, transactions, tags: ptags })
+        entnahmen += f.outflow
+        einbezahlt += f.inflow
+      }
+      return { entnahmen, einbezahlt }
+    }
     function summary(y, col) {
       // Investment Cash over the year: start + what is moved in (the Investment Cash row, − = moved in)
       // − what is invested from it (the Anlage rows, − = invested) = end. A minus at the end means more
@@ -351,8 +365,7 @@ export default function Planung({ year, active = true, onOpenInVerlauf }) {
           jahresanfang: startCash(y),
           puffer: puffer(y),
           ausgaben: ausgabenTotal[col],
-          // each Rücklagen row's year total – its sign decides: withdrawal (Budget source) or saving
-          ruecklagen: ruecklagen.map((r) => r[col]),
+          ...flowsOf(y, col),
         }),
       }
     }
@@ -509,7 +522,7 @@ function BudgetChart({ years }) {
     year: y.year,
     budget: Math.max(0, y.budget),
     ausgaben: Math.max(0, -y.ausgaben),
-    ruecklagen: Math.max(0, -y.gebildet),
+    ruecklagen: Math.max(0, -y.einbezahlt),
   }))
   const max = Math.max(1, ...bars.flatMap((b) => [b.budget, b.ausgaben + b.ruecklagen]))
   const pct = (v) => `${(v / max) * 100}%`
@@ -936,7 +949,7 @@ function ReportTable({ report, savePuffer, ...c }) {
           tint={BUDGET_BAND_TINT}
           showComments={showComments}
         />
-        <BandRow label="… gebildete Rücklagen (Teil der Ausgaben)" refValue={-ref.gebildet} planValue={-plan.gebildet} color="var(--color-savings)" tint={BUDGET_BAND_TINT} showComments={showComments} />
+        <BandRow label="in Rücklagen einbezahlt (Teil der Ausgaben)" refValue={ref.einbezahlt} planValue={plan.einbezahlt} color="var(--color-savings)" tint={BUDGET_BAND_TINT} showComments={showComments} />
 
         <BlockGap showComments={showComments} />
         <GroupHeader t={report.ausgabenInklTotal} section="ausgaben" showComments={showComments} />
@@ -1060,7 +1073,7 @@ function ReportCards({ report, savePuffer, ...c }) {
         <Line label="+ aus Rücklagen entnommen" value={euro(plan.entnahmen)} color="var(--color-savings)" />
         <Line label={`Budget ${planYear}`} value={euro(plan.budget)} color="var(--color-computed)" />
         <Line label="Ausgaben vs. Budget" value={euro(plan.ausgabenVsBudget)} color={deltaColor(plan.ausgabenVsBudget)} />
-        <Line label="… gebildete Rücklagen" value={euro(-plan.gebildet)} color="var(--color-savings)" />
+        <Line label="in Rücklagen einbezahlt" value={euro(plan.einbezahlt)} color="var(--color-savings)" />
       </div>
 
       <CardGroupHeader t={report.ausgabenInklTotal} section="ausgaben" />

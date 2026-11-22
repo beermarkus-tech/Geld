@@ -8,6 +8,7 @@ import {
   budgetTopLineMonths,
   categoryMonthActual,
   planungSummary,
+  rowFlows,
   progMonths,
   regularShare,
   splitYear,
@@ -315,14 +316,11 @@ describe('regularShare() / splitYear()', () => {
 })
 
 describe('planungSummary() — spec.md §3c Budget formula', () => {
-  it('a Rücklage that gives back more than it takes adds to the Budget; Ausgaben vs. Budget is unchanged', () => {
-    // 2026 Plan0 on the backup: Sparen Familie −5.000, Steuern +5.950, Sparen Julia +1.400
-    const r = planungSummary({ einnahmen: 0, fixkosten: 0, jahresanfang: 5262400, puffer: 0, ausgaben: -6084300, ruecklagen: [-500000, 595000, 140000] })
-    expect(r.entnahmen).toBe(735000)
-    expect(r.gebildet).toBe(-500000)
-    expect(r.budget).toBe(5262400 + 735000)
-    // the same as Budget(old) + Ausgaben + the netted Rücklagen
-    expect(r.ausgabenVsBudget).toBe(5262400 - 6084300 + 235000)
+  it('money taken out of the Rücklagen adds to the Budget, money paid in counts as spending', () => {
+    const r = planungSummary({ einnahmen: 0, fixkosten: 0, jahresanfang: 5262400, puffer: 0, ausgaben: -6084300, entnahmen: 835000, einbezahlt: -600000 })
+    expect(r.budget).toBe(5262400 + 835000)
+    // the same as the old netted figure: Budget(old) + Ausgaben + (entnommen + einbezahlt)
+    expect(r.ausgabenVsBudget).toBe(5262400 - 6084300 + 835000 - 600000)
   })
 
   // The aggregate 2025 figures already published in spec.md §3c (whole
@@ -336,7 +334,6 @@ describe('planungSummary() — spec.md §3c Budget formula', () => {
       jahresanfang: 1368700,
       puffer: 800000,
       ausgaben: -9700000,
-      ruecklagen: 0,
     })
     expect(startCash).toBe(568700)
     expect(budget).toBe(10434400)
@@ -350,15 +347,14 @@ describe('planungSummary() — spec.md §3c Budget formula', () => {
       jahresanfang: 2224000,
       puffer: 800000,
       ausgaben: 0,
-      ruecklagen: 0,
     })
     expect(budget).toBe(6468200)
   })
 
-  it('Rücklagen count against the budget exactly like Ausgaben', () => {
+  it('money paid into Rücklagen counts against the budget exactly like Ausgaben', () => {
     const base = { einnahmen: 1000000, fixkosten: -200000, jahresanfang: 100000, puffer: 100000 }
-    const a = planungSummary({ ...base, ausgaben: -500000, ruecklagen: -100000 })
-    const b = planungSummary({ ...base, ausgaben: -600000, ruecklagen: 0 })
+    const a = planungSummary({ ...base, ausgaben: -500000, einbezahlt: -100000 })
+    const b = planungSummary({ ...base, ausgaben: -600000 })
     expect(a.ausgabenVsBudget).toBe(b.ausgabenVsBudget)
     expect(a.ausgabenVsBudget).toBe(200000)
   })
@@ -401,5 +397,27 @@ describe('opening-balance anchors are never a period\'s activity (spec.md §2.3)
   it('Prog of a closed January shows the real contribution only, not the opening balance', () => {
     const plan1 = Array(12).fill(-5000)
     expect(progMonths('allocationTagId', 'sparen-familie', plan1, [1], 2025, [anchor, realContribution], [SPAREN])[0]).toBe(-10000)
+  })
+})
+
+describe('rowFlows() — Rücklagen split by direction', () => {
+  const doc = (pv, month, cents, breakdownTagId = null) => ({ year: 2026, month, planVersion: pv, allocationTagId: 'steuern', categoryId: null, breakdownTagId, plannedAmountCents: cents })
+  const tags = [{ id: 'steuern', class: 'allocation', reconciliationTargetAccountIds: ['livret'] }]
+  const base = { targetKey: 'allocationTagId', targetId: 'steuern', year: 2026, tags }
+  it('keeps pure + and pure − breakdown lines apart, even in the same month', () => {
+    const budgets = [doc('plan1', 3, -17000, 'ruecklagen'), doc('plan1', 3, 400000, 'ausgleich'), doc('plan1', 4, -17000, 'ruecklagen')]
+    expect(rowFlows({ ...base, which: 'plan1', budgets, transactions: [] })).toEqual({ inflow: -34000, outflow: 400000 })
+  })
+  it('a row without breakdown lines splits by month', () => {
+    const budgets = [doc('plan0', 1, -17000), doc('plan0', 2, 200000)]
+    expect(rowFlows({ ...base, which: 'plan0', budgets, transactions: [] })).toEqual({ inflow: -17000, outflow: 200000 })
+  })
+  it('Prog: a closed month splits booking by booking, an open month uses the plan', () => {
+    const budgets = [doc('plan1', 2, -17000)]
+    const transactions = [
+      { id: 'a', date: '2026-01-05', fromAccountId: 'bnp', toAccountId: 'livret', amountCents: 17000, lines: [{ amountCents: 17000, tags: ['steuern'] }] },
+      { id: 'b', date: '2026-01-20', fromAccountId: 'livret', toAccountId: 'bnp', amountCents: 300000, lines: [{ amountCents: 300000, tags: ['steuern'] }] },
+    ]
+    expect(rowFlows({ ...base, which: 'prog', closedMonths: [1], budgets, transactions })).toEqual({ inflow: -17000 - 17000, outflow: 300000 })
   })
 })
