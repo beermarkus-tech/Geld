@@ -13,16 +13,22 @@ import { balance, jahresanfang } from './balance'
 import { budgetTopLineMonths, progBaseMonths, progMonths } from './budget'
 import { isBudgetPlannedTag, isKnownSubcat } from './categoryOrder'
 import { claimCategoryIds, claimStart } from './claims'
+import { INVESTMENT_CASH_ID, cashAccountIds, investmentCashAccountIds, isAnlagePot, planningTags } from './investmentCash'
 
 export const CASH_GROUPS = ['Barkonten', 'Bargeld']
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
 const monthEnd = (year, m) => `${year}-${String(m).padStart(2, '0')}-31`
 
-/** The planning rows Verlauf shows: known sub-categories and budget-planned allocation tags. */
-export function planTargets(categories, tags) {
+/** The planning rows that count against the cash (the red line): known sub-categories, the budget-planned
+ *  pots whose money leaves the cash (Livret: Sparen…, Steuern) and – with `accounts` – the virtual
+ *  "Investment Cash" row; the Anlage pots (money in Geldanlage) are the "Aufteilung" and do not count
+ *  (Nov 2026, lib/investmentCash.js). Without `accounts` every budget-planned pot counts (old rule). */
+export function planTargets(categories, tags, accounts = null) {
+  const pots = tags.filter((t) => t.class === 'allocation' && isBudgetPlannedTag(t) && !t.virtual && !(accounts && isAnlagePot(t, accounts)))
   return [
     ...categories.filter((c) => c.parentCategoryId && isKnownSubcat(c.name)).map((c) => ({ key: 'categoryId', id: c.id })),
-    ...tags.filter((t) => t.class === 'allocation' && isBudgetPlannedTag(t)).map((t) => ({ key: 'allocationTagId', id: t.id })),
+    ...pots.map((t) => ({ key: 'allocationTagId', id: t.id })),
+    ...(accounts ? [{ key: 'allocationTagId', id: INVESTMENT_CASH_ID }] : []),
   ]
 }
 
@@ -48,19 +54,22 @@ export function isProvisionalStart(year, closedByYear, budgets) {
 
 /**
  * @param closedByYear  optional { year: closedMonths } – enables the provisional start (above)
- * @returns {{ start: {cash, geldanlage, sparkonten, provisional}, months: Array<{ m, plan0, plan1, prog, geldanlage, sparkonten, closed }> }}
+ * @returns {{ start: {cash, geldanlage, sparkonten, investmentCash, provisional}, months: Array<{ m, plan0, plan1, prog, geldanlage, sparkonten, investmentCash, closed }> }}
  *   every figure in cents; `plan0/plan1/prog` are cash balances at the month's end
  */
 export function forecastSeries({ accounts, categories, tags, budgets, transactions, year, closedMonths = [], closedByYear = null }) {
   const groupOf = Object.fromEntries(accounts.map((a) => [a.id, a.reportingGroup]))
   const idsIn = (groups) => accounts.filter((a) => groups.includes(a.reportingGroup) && a.tracked !== false).map((a) => a.id)
-  const cashIds = idsIn(CASH_GROUPS)
+  // the red line's cash leaves out the Investment Cash accounts (lib/investmentCash.js)
+  const cashIds = cashAccountIds(accounts, CASH_GROUPS)
+  const icIds = investmentCashAccountIds(accounts)
+  const ptags = planningTags(tags, accounts)
   const anlageIds = idsIn(['Geldanlage'])
   const sparIds = idsIn(['Sparkonten'])
   const sumStart = (ids) => ids.reduce((s, id) => s + jahresanfang(id, year, transactions), 0)
   const sumAt = (ids, date) => ids.reduce((s, id) => s + balance(id, date, transactions), 0)
 
-  const targets = planTargets(categories, tags)
+  const targets = planTargets(categories, tags, accounts)
   const months12 = (version) => {
     const out = Array(12).fill(0)
     for (const t of targets) budgetTopLineMonths(t.key, t.id, version, year, budgets).months.forEach((v, i) => (out[i] += v))
@@ -71,7 +80,7 @@ export function forecastSeries({ accounts, categories, tags, budgets, transactio
   const prog = Array(12).fill(0)
   for (const t of targets) {
     // open months: Plan1, or Plan0 for a row without any Plan1 figure yet (progBaseMonths)
-    progMonths(t.key, t.id, progBaseMonths(t.key, t.id, year, budgets), closedMonths, year, transactions, tags).forEach((v, i) => (prog[i] += v))
+    progMonths(t.key, t.id, progBaseMonths(t.key, t.id, year, budgets), closedMonths, year, transactions, ptags).forEach((v, i) => (prog[i] += v))
   }
   // Booked Tagesgeld transfers count in Prog (Nov 2026, Markus, "option A"): Tagesgeld is parked cash,
   // never planned (so not in the Plan lines), but money really moved between Barkonten and Tagesgeld
@@ -81,25 +90,31 @@ export function forecastSeries({ accounts, categories, tags, budgets, transactio
   for (const t of tags.filter((x) => x.class === 'allocation' && !isBudgetPlannedTag(x))) {
     progMonths('allocationTagId', t.id, zeros, closedMonths, year, transactions, tags).forEach((v, i) => (prog[i] += v))
   }
-  // planned Rücklagen transfers (Plan1) per month into each group: a − planned amount is money put aside
-  const plannedInto = { Geldanlage: Array(12).fill(0), Sparkonten: Array(12).fill(0) }
+  // planned Rücklagen transfers per month into each group: a − planned amount is money put aside.
+  // Investment Cash fills with its own row's plan and empties by the Anlage pots' plans (the investing
+  // from it), which fill Geldanlage.
+  const plannedInto = { Geldanlage: Array(12).fill(0), Sparkonten: Array(12).fill(0), InvestmentCash: Array(12).fill(0) }
   for (const t of tags.filter((x) => x.class === 'allocation' && isBudgetPlannedTag(x))) {
     const group = groupOf[(t.reconciliationTargetAccountIds ?? [])[0]]
     if (!plannedInto[group]) continue
     // the same plan the Prog line uses for this pot, so line and bars stay consistent
-    progBaseMonths('allocationTagId', t.id, year, budgets).forEach((v, i) => (plannedInto[group][i] -= v))
+    progBaseMonths('allocationTagId', t.id, year, budgets).forEach((v, i) => {
+      plannedInto[group][i] -= v
+      if (group === 'Geldanlage') plannedInto.InvestmentCash[i] += v
+    })
   }
+  progBaseMonths('allocationTagId', INVESTMENT_CASH_ID, year, budgets).forEach((v, i) => (plannedInto.InvestmentCash[i] -= v))
 
   // The cash start includes what was still owed to us (open Außenstände) on 31 Dec, as in Markus's
   // Sheet: claim bookings are not planning rows, so the Prog line runs "cash + open claims" anyway.
   const openClaims = claimStart(transactions, claimCategoryIds(categories), year)
-  let start = { cash: sumStart(cashIds) + openClaims, geldanlage: sumStart(anlageIds), sparkonten: sumStart(sparIds), openClaims, provisional: false }
+  let start = { cash: sumStart(cashIds) + openClaims, geldanlage: sumStart(anlageIds), sparkonten: sumStart(sparIds), investmentCash: sumStart(icIds), openClaims, provisional: false }
   if (isProvisionalStart(year, closedByYear, budgets)) {
     const prev = forecastSeries({ accounts, categories, tags, budgets, transactions, year: year - 1, closedMonths: closedByYear[year - 1] ?? [], closedByYear })
     const dec = prev.months[11]
-    start = { cash: dec.prog, geldanlage: dec.geldanlage, sparkonten: dec.sparkonten, openClaims, provisional: true }
+    start = { cash: dec.prog, geldanlage: dec.geldanlage, sparkonten: dec.sparkonten, investmentCash: dec.investmentCash, openClaims, provisional: true }
   }
-  const lv = { plan0: start.cash, plan1: start.cash, prog: start.cash, geldanlage: start.geldanlage, sparkonten: start.sparkonten }
+  const lv = { plan0: start.cash, plan1: start.cash, prog: start.cash, geldanlage: start.geldanlage, sparkonten: start.sparkonten, investmentCash: start.investmentCash }
   const months = MONTHS.map((m) => {
     const closed = closedMonths.includes(m)
     lv.plan0 += plan0[m - 1]
@@ -107,7 +122,8 @@ export function forecastSeries({ accounts, categories, tags, budgets, transactio
     lv.prog += prog[m - 1]
     lv.geldanlage = closed ? sumAt(anlageIds, monthEnd(year, m)) : lv.geldanlage + plannedInto.Geldanlage[m - 1]
     lv.sparkonten = closed ? sumAt(sparIds, monthEnd(year, m)) : lv.sparkonten + plannedInto.Sparkonten[m - 1]
-    return { m, closed, plan0: lv.plan0, plan1: lv.plan1, prog: lv.prog, geldanlage: lv.geldanlage, sparkonten: lv.sparkonten }
+    lv.investmentCash = closed ? sumAt(icIds, monthEnd(year, m)) : lv.investmentCash + plannedInto.InvestmentCash[m - 1]
+    return { m, closed, plan0: lv.plan0, plan1: lv.plan1, prog: lv.prog, geldanlage: lv.geldanlage, sparkonten: lv.sparkonten, investmentCash: lv.investmentCash }
   })
   return { start, months }
 }

@@ -6,6 +6,7 @@ import { db } from './firebase'
 import { jahresanfang } from './lib/balance'
 import { claimCategoryIds, claimStart } from './lib/claims'
 import { closedByYearOf, forecastSeries, isProvisionalStart } from './lib/forecast'
+import { INVESTMENT_CASH_ID, INVESTMENT_CASH_NAME, investmentCashAccountIds, isAnlagePot, isInvestmentCashAccount, planningTags } from './lib/investmentCash'
 import {
   allocationMonthActual,
   budgetTopLineMonths,
@@ -80,6 +81,7 @@ const SECTION_COLOR = {
   fixkosten: 'var(--color-expense)',
   ausgaben: 'var(--color-expense)',
   ruecklagen: 'var(--color-savings)',
+  anlage: 'var(--color-income)',
 }
 
 // Section background tint — the same tokens Verlauf's category columns use
@@ -89,6 +91,7 @@ const SECTION_TINT = {
   fixkosten: 'var(--color-alert-tint)',
   ausgaben: 'var(--color-alert-tint)',
   ruecklagen: 'var(--color-savings-tint)',
+  anlage: 'var(--color-anlage-tint)',
 }
 
 // The three Budget lines (Budget, Ausgaben vs. Budget, gebildete Rücklagen)
@@ -104,6 +107,7 @@ const SECTION_TINT_STRONG = {
   fixkosten: 'color-mix(in srgb, var(--color-alert-tint) 86%, var(--color-alert))',
   ausgaben: 'color-mix(in srgb, var(--color-alert-tint) 86%, var(--color-alert))',
   ruecklagen: 'color-mix(in srgb, var(--color-savings-tint) 86%, var(--color-savings))',
+  anlage: 'color-mix(in srgb, var(--color-anlage-tint) 82%, var(--color-income))',
 }
 
 // Ausgaben vs. Budget — "should be near zero"; negative means the plan
@@ -223,17 +227,19 @@ export default function Planung({ year, active = true, onOpenInVerlauf }) {
     // Prog of year `y` uses that year's own month-close switches (Verlauf's
     // checkboxes) — a closed month is the real actual, an open one mirrors
     // Plan1, exactly as Verlauf shows that year.
+    // the tags plus the virtual "Investment Cash" row (lib/investmentCash.js)
+    const ptags = planningTags(tags, accounts)
     function yearValue(targetKey, targetId, y, which) {
       if (which !== 'prog') return budgetTopLineMonths(targetKey, targetId, which, y, budgets).yearTotal
       const closedMonths = settingsByYear[y]?.closedMonths ?? []
       // open months: Plan1, or Plan0 for a row without any Plan1 figure yet (lib/budget.js progBaseMonths)
-      return progMonths(targetKey, targetId, progBaseMonths(targetKey, targetId, y, budgets), closedMonths, y, transactions, tags).reduce((a, b) => a + b, 0)
+      return progMonths(targetKey, targetId, progBaseMonths(targetKey, targetId, y, budgets), closedMonths, y, transactions, ptags).reduce((a, b) => a + b, 0)
     }
 
     function refActualMonths(targetKey, targetId) {
       return Array.from({ length: 12 }, (_, i) =>
         targetKey === 'allocationTagId'
-          ? allocationMonthActual(targetId, refYear, i + 1, transactions, tags)
+          ? allocationMonthActual(targetId, refYear, i + 1, transactions, ptags)
           : categoryMonthActual(targetId, refYear, i + 1, transactions),
       )
     }
@@ -285,10 +291,18 @@ export default function Planung({ year, active = true, onOpenInVerlauf }) {
       .map((g) => ({ name: g.name, rows: subcatsOf(g).filter((c) => !c.isFixkosten).map((c) => row('categoryId', c.id, c.name)) }))
       .filter((g) => g.rows.some(visible))
 
-    const ruecklagen = tags
+    // Rücklagen (against the Budget): the Livret pots plus "Investment Cash" – the money moved from the
+    // cash towards investing. The Anlage pots are the "Aufteilung" of it and get their own block below,
+    // outside the Budget (Nov 2026, lib/investmentCash.js).
+    const plannedPots = tags
       .filter((t) => t.class === 'allocation' && isBudgetPlannedTag(t))
       .sort((a, b) => ALLOCATION_TAG_ORDER.indexOf(a.id) - ALLOCATION_TAG_ORDER.indexOf(b.id))
-      .map((t) => row('allocationTagId', t.id, `Für ${t.name}`))
+    const ruecklagen = [
+      ...plannedPots.filter((t) => !isAnlagePot(t, accounts)).map((t) => row('allocationTagId', t.id, `Für ${t.name}`)),
+      row('allocationTagId', INVESTMENT_CASH_ID, INVESTMENT_CASH_NAME),
+    ]
+    const anlage = plannedPots.filter((t) => isAnlagePot(t, accounts)).map((t) => row('allocationTagId', t.id, t.name))
+    const anlageTotal = total('Investiert aus Investment Cash (zählt nicht gegen das Budget)', anlage)
 
     const einnahmenTotal = total('Einnahmen', einnahmen)
     const fixkostenTotal = total('Fixkosten', fixkosten)
@@ -299,7 +313,12 @@ export default function Planung({ year, active = true, onOpenInVerlauf }) {
     // breakdown").
     const ausgabenInklTotal = total('Ausgaben inkl. Rücklagen', [...ausgabenGroups.flatMap((g) => g.rows), ...ruecklagen])
 
-    const startCashAccounts = accounts.filter((a) => START_CASH_GROUPS.includes(a.reportingGroup))
+    const startCashAccounts = accounts.filter((a) => START_CASH_GROUPS.includes(a.reportingGroup) && !isInvestmentCashAccount(a))
+    // Investment Cash at the start of a year (the same figure as the Dashboard's lightest green)
+    const icStart = (y) =>
+      provisional(y)
+        ? forecastSeries({ accounts, categories, tags, budgets, transactions, year: y, closedMonths: closedByYear[y] ?? [], closedByYear }).start.investmentCash
+        : investmentCashAccountIds(accounts).reduce((a, id) => a + jahresanfang(id, y, transactions), 0)
     const claimCats = claimCategoryIds(categories)
     // While the year before still has open months, a year starts from the year before's Prognose year
     // end (Nov 2026, Markus: "for planning 2027 take the prognosed year-end result of the ongoing year,
@@ -312,10 +331,17 @@ export default function Planung({ year, active = true, onOpenInVerlauf }) {
         : startCashAccounts.reduce((a, acc) => a + jahresanfang(acc.id, y, transactions), 0) + claimStart(transactions, claimCats, y)
     const puffer = (y) => settingsByYear[y]?.minCashBufferCents ?? 0
 
+    const icRow = ruecklagen.at(-1)
     function summary(y, col) {
+      // Investment Cash over the year: start + what is moved in (the Investment Cash row, − = moved in)
+      // − what is invested from it (the Anlage rows, − = invested) = end. A minus at the end means more
+      // investing planned than topping up.
+      const icIn = -icRow[col]
+      const icInvested = -anlageTotal[col]
       return {
         year: y,
         provisional: provisional(y),
+        ic: { start: icStart(y), in: icIn, invested: icInvested, end: icStart(y) + icIn - icInvested },
         jahresanfangRaw: startCash(y),
         puffer: puffer(y),
         ausgaben: ausgabenTotal[col],
@@ -341,6 +367,8 @@ export default function Planung({ year, active = true, onOpenInVerlauf }) {
       ausgabenTotal,
       ruecklagenTotal,
       ausgabenInklTotal,
+      anlage: anlage.filter(visible),
+      anlageTotal,
       ref: summary(refYear, 'ref'),
       plan: summary(planYear, 'plan'),
     }
@@ -880,7 +908,7 @@ function ReportTable({ report, savePuffer, ...c }) {
       <tbody>
         {/* "vorl." = the year before still has open months: its Prognose year end, not a real balance (Nov 2026) */}
         <BandRow
-          label="Alle Barkonten"
+          label="Alle Barkonten (ohne Investment Cash)"
           refValue={ref.provisional ? { node: <span title={`Prognose-Jahresende ${ref.year - 1} (noch offene Monate)`}>{euro(ref.jahresanfangRaw)} (vorl.)</span> } : ref.jahresanfangRaw}
           planValue={plan.provisional ? { node: <span title={`Prognose-Jahresende ${plan.year - 1} (noch offene Monate)`}>{euro(plan.jahresanfangRaw)} (vorl.)</span> } : plan.jahresanfangRaw}
           color="var(--color-computed)"
@@ -914,6 +942,21 @@ function ReportTable({ report, savePuffer, ...c }) {
           <Group key={g.name} t={g.total} rows={g.rows} section="ausgaben" c={c} />
         ))}
         <Group t={report.ruecklagenTotal} rows={report.ruecklagen} section="ruecklagen" c={c} />
+
+        {/* Below the Budget, outside it (Nov 2026): what is invested from Investment Cash, and how much
+            is left there at the end of the year. */}
+        <BlockGap showComments={showComments} />
+        <Group t={report.anlageTotal} rows={report.anlage} section="anlage" c={c} />
+        <BandRow label="Investment Cash am Jahresanfang" refValue={ref.ic.start} planValue={plan.ic.start} color="var(--color-income)" showComments={showComments} />
+        <BandRow label="+ aufgefüllt (Zeile Investment Cash)" refValue={ref.ic.in} planValue={plan.ic.in} color="var(--color-income)" showComments={showComments} />
+        <BandRow label="− investiert (Anlage-Zeilen)" refValue={-ref.ic.invested} planValue={-plan.ic.invested} color="var(--color-income)" showComments={showComments} />
+        <BandRow
+          label="= Investment Cash am Jahresende"
+          refValue={{ node: euro(ref.ic.end), color: ref.ic.end < 0 ? 'var(--color-alert)' : 'var(--color-income)' }}
+          planValue={{ node: euro(plan.ic.end), color: plan.ic.end < 0 ? 'var(--color-alert)' : 'var(--color-income)' }}
+          bold
+          showComments={showComments}
+        />
       </tbody>
     </table>
   )
@@ -1002,7 +1045,7 @@ function ReportCards({ report, savePuffer, ...c }) {
         <div className="mb-1 font-semibold">Jahresanfang</div>
         {[ref, plan].map((s) => (
           <div key={s.year} className="flex flex-col gap-0.5 border-t border-[var(--color-border)] py-1 first-of-type:border-t-0">
-            <Line label={`Alle Barkonten ${s.year}${s.provisional ? ' (vorläufig)' : ''}`} value={euro(s.jahresanfangRaw)} color="var(--color-computed)" />
+            <Line label={`Alle Barkonten ohne Investment Cash ${s.year}${s.provisional ? ' (vorläufig)' : ''}`} value={euro(s.jahresanfangRaw)} color="var(--color-computed)" />
             <Line label="Puffer" value={<PufferCell cents={s.puffer} onSave={(v) => savePuffer(s.year, v)} label={`Puffer ${s.year}`} />} />
             <Line label="Jahresanfang" value={euro(s.startCash)} color="var(--color-computed)" />
           </div>
@@ -1022,6 +1065,14 @@ function ReportCards({ report, savePuffer, ...c }) {
         <CardSection key={g.name} t={g.total} section="ausgaben" rows={g.rows} c={c} />
       ))}
       <CardSection t={report.ruecklagenTotal} section="ruecklagen" rows={report.ruecklagen} c={c} />
+      <CardSection t={report.anlageTotal} section="anlage" rows={report.anlage} c={c} />
+      <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-sm text-[var(--color-income)]">
+        <div className="mb-1 font-semibold">Investment Cash {report.plan.year}</div>
+        <Line label="Jahresanfang" value={euro(report.plan.ic.start)} color="var(--color-income)" />
+        <Line label="+ aufgefüllt" value={euro(report.plan.ic.in)} color="var(--color-income)" />
+        <Line label="− investiert" value={euro(-report.plan.ic.invested)} color="var(--color-income)" />
+        <Line label="= Jahresende" value={euro(report.plan.ic.end)} color={report.plan.ic.end < 0 ? 'var(--color-alert)' : 'var(--color-income)'} />
+      </div>
     </div>
   )
 }

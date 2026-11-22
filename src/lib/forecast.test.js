@@ -36,7 +36,7 @@ const transactions = [
 describe('forecastSeries', () => {
   const r = forecastSeries({ accounts, categories, tags, budgets, transactions, year: 2026, closedMonths: [1] })
   it('starts from the real balances at the end of the year before', () => {
-    expect(r.start).toEqual({ cash: 1000000, geldanlage: 3000000, sparkonten: 2000000, openClaims: 0, provisional: false })
+    expect(r.start).toEqual({ cash: 1000000, geldanlage: 3000000, sparkonten: 2000000, investmentCash: 0, openClaims: 0, provisional: false })
   })
   it('Plan lines add each month’s planned result (incl. Rücklagen transfers) to the start', () => {
     expect(r.months.slice(0, 3).map((x) => x.plan1)).toEqual([1300000, 1550000, 1800000])

@@ -16,15 +16,23 @@ const STEP = (W - LEFT - RIGHT) / LABELS.length
 const BAR_W = STEP * 0.62
 const PROG = 'var(--color-alert)'
 const PLAN = 'var(--color-text)'
-const ANLAGE = 'color-mix(in srgb, var(--color-income) 42%, var(--color-surface))'
-const SPAR = 'color-mix(in srgb, var(--color-income) 18%, var(--color-surface))'
+// Three clearly different greens (Nov 2026): Geldanlage dark, Sparkonten medium, Investment Cash the
+// lightest and striped ("parked, not yet invested", lib/investmentCash.js).
+const ANLAGE = 'color-mix(in srgb, var(--color-income) 62%, var(--color-surface))'
+const SPAR = 'color-mix(in srgb, var(--color-income) 32%, var(--color-surface))'
+const IC = 'url(#ic-stripes)'
+const IC_BASE = 'color-mix(in srgb, var(--color-income) 12%, var(--color-surface))'
+const IC_LINE = 'color-mix(in srgb, var(--color-income) 38%, var(--color-surface))'
 
 export default function ForecastChart({ accounts, categories, tags, budgets, transactions, yearNum, closedMonths, closedByYear }) {
   const data = useMemo(
     () => forecastSeries({ accounts, categories, tags, budgets, transactions, year: yearNum, closedMonths, closedByYear }),
     [accounts, categories, tags, budgets, transactions, yearNum, closedMonths, closedByYear],
   )
-  const pts = [{ m: 0, plan0: data.start.cash, plan1: data.start.cash, prog: data.start.cash, geldanlage: data.start.geldanlage, sparkonten: data.start.sparkonten }, ...data.months]
+  const pts = [
+    { m: 0, plan0: data.start.cash, plan1: data.start.cash, prog: data.start.cash, geldanlage: data.start.geldanlage, sparkonten: data.start.sparkonten, investmentCash: data.start.investmentCash },
+    ...data.months,
+  ]
 
   // left axis (lines) and right axis (bars) share the same number of grid lines
   const lineVals = pts.flatMap((p) => [p.plan0, p.plan1, p.prog])
@@ -34,7 +42,7 @@ export default function ForecastChart({ accounts, categories, tags, budgets, tra
   const lo = Math.floor(lMinRaw / stepL) * stepL
   const n = Math.max(1, Math.ceil((lMaxRaw - lo) / stepL))
   const hi = lo + n * stepL
-  const barMax = Math.max(1, ...pts.map((p) => Math.max(0, p.geldanlage) + Math.max(0, p.sparkonten)))
+  const barMax = Math.max(1, ...pts.map((p) => Math.max(0, p.geldanlage) + Math.max(0, p.sparkonten) + Math.max(0, p.investmentCash)))
   const stepR = niceStep(barMax, n)
   const hiR = stepR * n
   const yL = (v) => TOP + PLOT_H - ((v - lo) / (hi - lo)) * PLOT_H
@@ -48,7 +56,7 @@ export default function ForecastChart({ accounts, categories, tags, budgets, tra
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
         <h2 className="text-lg font-semibold">Prognose {yearNum}</h2>
         <span className="text-sm text-[var(--color-text-muted)]">
-          Linien: Barkonten + Bargeld + offene Außenstände am Jahresanfang (linke Achse) · Balken: Geldanlage + Sparkonten (rechte Achse) · abgeschlossene Monate gebucht, offene aus der Planung
+          Linien: Barkonten (ohne Investment Cash) + Bargeld + offene Außenstände am Jahresanfang (linke Achse) · Balken: Geldanlage + Sparkonten + Investment Cash (rechte Achse) · abgeschlossene Monate gebucht, offene aus der Planung
         </span>
         {data.start.provisional && (
           <span className="rounded px-2 py-0.5 text-xs font-medium" style={{ background: 'var(--color-needs-entry)', color: '#1f1a00' }}>
@@ -60,11 +68,18 @@ export default function ForecastChart({ accounts, categories, tags, budgets, tra
         <Legend><span className="inline-block w-6 border-t-[3px] border-[var(--color-text)]" /> Plan1</Legend>
         <Legend><span className="inline-block w-6 border-t-2 border-dashed border-[var(--color-text)]" /> Plan0</Legend>
         <Legend><span className="inline-block w-6 border-t-[3px] border-[var(--color-alert)]" /> Prognose (Barkonten)</Legend>
+        <Legend><Swatch color={IC_BASE} striped /> Investment Cash</Legend>
         <Legend><Swatch color={SPAR} /> Sparkonten</Legend>
         <Legend><Swatch color={ANLAGE} /> Geldanlage</Legend>
       </div>
       <div className="overflow-x-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
         <svg viewBox={`0 0 ${W} ${H}`} style={{ minWidth: 900, width: '100%' }} role="img" aria-label="Prognose">
+          <defs>
+            <pattern id="ic-stripes" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <rect width="8" height="8" fill={IC_BASE} />
+              <line x1="0" y1="0" x2="0" y2="8" stroke={IC_LINE} strokeWidth="3" />
+            </pattern>
+          </defs>
           {Array.from({ length: n + 1 }, (_, k) => {
             const y = TOP + PLOT_H - (k / n) * PLOT_H
             const lv = lo + k * stepL
@@ -82,11 +97,24 @@ export default function ForecastChart({ accounts, categories, tags, budgets, tra
             const x = cx(i) - BAR_W / 2
             const yA = yR(p.geldanlage)
             const yS = yR(Math.max(0, p.geldanlage) + Math.max(0, p.sparkonten))
+            const yI = yR(Math.max(0, p.geldanlage) + Math.max(0, p.sparkonten) + Math.max(0, p.investmentCash))
             return (
               <g key={`bar${i}`}>
-                <title>{`${LABELS[i]}: Geldanlage ${kEuro(p.geldanlage)}, Sparkonten ${kEuro(p.sparkonten)}`}</title>
+                <title>{`${LABELS[i]}: Geldanlage ${kEuro(p.geldanlage)}, Sparkonten ${kEuro(p.sparkonten)}, Investment Cash ${kEuro(p.investmentCash)}`}</title>
                 <rect x={x} y={yA} width={BAR_W} height={Math.max(0, yR(0) - yA)} fill={ANLAGE} />
                 <rect x={x} y={yS} width={BAR_W} height={Math.max(0, yA - yS)} fill={SPAR} />
+                <rect x={x} y={yI} width={BAR_W} height={Math.max(0, yS - yI)} fill={IC} />
+                {/* Investment Cash: its value at the bottom of its segment; a planned minus (more invested
+                    than topped up) is shown in red above the bar instead – nothing to draw there. */}
+                {p.investmentCash > 0 && yS - yI >= 14 && (
+                  <text x={cx(i)} y={yS - 4} textAnchor="middle" fontSize="11" fill="var(--color-income)">{kEuro(p.investmentCash)}</text>
+                )}
+                {p.investmentCash < 0 && (
+                  <text x={cx(i)} y={yS - 6} textAnchor="middle" fontSize="11" fontWeight="600" fill="var(--color-alert)">
+                    <title>Investment Cash im Minus: mehr Anlage geplant als aufgefüllt</title>
+                    {kEuro(p.investmentCash)}
+                  </text>
+                )}
                 <text x={cx(i)} y={yR(0) - 6} textAnchor="middle" fontSize="11" fill="var(--color-income)">{kEuro(p.geldanlage)}</text>
                 {/* at the bottom of the light segment, as in Markus's Sheet – less in the way of the lines */}
                 <text x={cx(i)} y={yA - 6} textAnchor="middle" fontSize="11" fill="var(--color-income)">{kEuro(p.sparkonten)}</text>
@@ -111,4 +139,11 @@ export default function ForecastChart({ accounts, categories, tags, budgets, tra
 }
 
 const Legend = ({ children }) => <span className="inline-flex items-center gap-1.5">{children}</span>
-const Swatch = ({ color }) => <span className="inline-block h-3 w-3 rounded-sm" style={{ background: color }} />
+const Swatch = ({ color, striped }) => (
+  <span
+    className="inline-block h-3 w-3 rounded-sm"
+    style={{
+      background: striped ? `repeating-linear-gradient(45deg, ${IC_LINE} 0 2px, ${color} 2px 5px)` : color,
+    }}
+  />
+)

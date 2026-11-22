@@ -13,6 +13,7 @@ import { newRowPrefill } from './lib/newRowPrefill'
 import { createStickyOrder, makeStickyPostSort } from './lib/stickyOrder'
 import { linesOf, missingColumns, needsEntryChips } from './lib/needsEntry'
 import { fixSign, signMismatch, signedForSides } from './lib/sign'
+import { isInvestmentCashAccount } from './lib/investmentCash'
 import { syncAgGridColorScheme } from './lib/gridColorScheme'
 import { withRemainder } from './lib/split'
 import { registerScreenCursor } from './lib/screenCursor'
@@ -2651,8 +2652,13 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         name: a.name,
         cents: jahresende(a.id, Number(year), activeTransactions),
       }))
-      const total = items.reduce((sum, i) => sum + i.cents, 0)
-      const shownItems = items
+      // Investment Cash (Nov 2026, lib/investmentCash.js): the broker cash accounts stay in Barkonten but
+      // as a green group at the bottom with its own subtotal; the box's total leaves them out (it is the
+      // cash the red Prognose line counts).
+      const icOf = (i) => isInvestmentCashAccount(accountById[i.id])
+      const shownItems = [...items.filter((i) => !icOf(i)), ...items.filter(icOf).map((i) => ({ ...i, ic: true }))]
+      const total = shownItems.filter((i) => !i.ic).reduce((sum, i) => sum + i.cents, 0)
+      const icTotal = shownItems.filter((i) => i.ic).reduce((sum, i) => sum + i.cents, 0)
       // Allocation-tag reconciliation, surfaced here per spec.md §3a's own
       // "Live consistency checks" note ("should surface here, since
       // Konten's pinned header is one of the natural places for always-on
@@ -2690,9 +2696,9 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           .filter((i) => i.cents !== 0)
         return { group, items: catItems, total: catItems.reduce((sum, i) => sum + i.cents, 0), tagItems: claimItems }
       }
-      return { group, items: shownItems, total, tagItems }
+      return { group, items: shownItems, total, icTotal, tagItems }
     })
-  }, [accounts, activeTransactions, tags, tagById, year, categories, claimCats])
+  }, [accounts, accountById, activeTransactions, tags, tagById, year, categories, claimCats])
 
   // (Unused tags are removed by TagCleanup.jsx, app-wide.)
   // Completely empty bookings left behind (Oct 2026: Ctrl++ / Tab in other
@@ -3087,7 +3093,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           balance for that account/year. Each account is also a shortcut
           into the account filter above. */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        {panel.map(({ group, items, total, tagItems }) => (
+        {panel.map(({ group, items, total, icTotal, tagItems }) => (
           <div key={group} data-group={group} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
             <div className="mb-1 flex items-baseline justify-between">
               {/* The group heading itself is a shortcut back to "Alle
@@ -3114,8 +3120,16 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
                   holds either an account id or a tag id — every consumer
                   below (`rows`, Ctrl+K's active-button lookup) already
                   branches on which kind it actually got. */}
-              {[...items.map((i) => ({ ...i, kind: 'account' })), ...tagItems.map((i) => ({ ...i, kind: 'tag' }))].map((i) => (
+              {[...items.map((i) => ({ ...i, kind: 'account' })), ...tagItems.map((i) => ({ ...i, kind: 'tag' }))].map((i, idx, all) => (
                 <li key={i.id}>
+                  {/* The Investment Cash group's heading with its subtotal, above its first account (not a
+                      button, so the arrow keys pass over it). */}
+                  {i.ic && !all[idx - 1]?.ic && (
+                    <div className="mt-1 flex justify-between gap-2 border-t border-[var(--color-border)] px-1 pt-1 font-medium text-[var(--color-income)]" title="Gehört zu Barkonten, zählt aber nicht zur Prognose-Linie (Geld für die Anlage)">
+                      <span>Investment Cash</span>
+                      <span className="tabular-figure">{centsToEuro(icTotal ?? 0)} €</span>
+                    </div>
+                  )}
                   <button
                     type="button"
                     data-filter-id={i.id}
@@ -3170,7 +3184,9 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
                           : ''
                         : i.id === accountFilter
                           ? 'text-[var(--color-computed)]'
-                          : 'text-[var(--color-text-muted)]')
+                          : i.ic
+                            ? 'text-[var(--color-income)]'
+                            : 'text-[var(--color-text-muted)]')
                     }
                     style={i.kind === 'tag' && tagColorVar(i.tag) ? { color: `var(${tagColorVar(i.tag)})` } : undefined}
                   >

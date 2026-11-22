@@ -86,6 +86,28 @@ export function categoryMonthActual(categoryId, year, month, transactions) {
 // @param {Array<{id: string, reconciliationTargetAccountIds?: string[]}>} tags
 export function allocationMonthActual(allocationTagId, year, month, transactions, tags) {
   const tag = tags.find((t) => t.id === allocationTagId)
+  // The virtual "Investment Cash" row (lib/investmentCash.js): −(the month's change of all investment
+  // accounts), from the accounts alone – no tags.
+  // Counted: money moving between a non-investment account and an investment account (BNP → Smartbroker,
+  // BNP → ESOP; a purchase Smartbroker → Aktien stays inside and counts nothing), and the opposite of
+  // every categorized line booked straight on an investment account (a dividend or fee: its category
+  // already counts, the cash did not move). An uncategorized one-sided booking there (a revaluation)
+  // touches neither the cash nor any planning row and is left alone.
+  if (tag?.investAccountIds) {
+    const invest = new Set(tag.investAccountIds)
+    let change = 0
+    for (const tx of bookingsInMonth(transactions, year, month)) {
+      const intoInvest = invest.has(tx.toAccountId)
+      const outOfInvest = invest.has(tx.fromAccountId)
+      if (!intoInvest && !outOfInvest) continue
+      if (tx.fromAccountId && tx.toAccountId) {
+        if (intoInvest !== outOfInvest) change += (intoInvest ? 1 : -1) * Math.abs(tx.amountCents ?? 0)
+        continue
+      }
+      for (const line of tx.lines ?? []) if (line.categoryId) change += line.amountCents ?? 0
+    }
+    return change === 0 ? 0 : -change
+  }
   const targets = new Set(tag?.reconciliationTargetAccountIds ?? [])
   let delta = 0
   // Opening-balance anchors are balances, not a period's bookings (left out of the month buckets).

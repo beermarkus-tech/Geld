@@ -13,6 +13,7 @@ import { ALLOCATION_TAG_ORDER, isBudgetPlannedTag } from './categoryOrder'
 import { forecastSeries, planTargets } from './forecast'
 import { tagBalance, tagBalanceByAccount } from './tagBalance'
 import { incomeCategoryIds } from './urlaube'
+import { INVESTMENT_CASH_ID, INVESTMENT_CASH_NAME } from './investmentCash'
 
 const sum = (xs) => xs.reduce((s, x) => s + x, 0)
 const lastDay = (year, m) => `${year}-${String(m).padStart(2, '0')}-${String(new Date(year, m, 0).getDate()).padStart(2, '0')}`
@@ -37,7 +38,7 @@ export function asOfDate(year, closedMonths = []) {
  */
 export function yearBalance({ accounts, categories, tags, budgets, transactions, year, closedMonths = [], closedByYear = null }) {
   const series = forecastSeries({ accounts, categories, tags, budgets, transactions, year, closedMonths, closedByYear })
-  const start = series.start.cash + series.start.geldanlage + series.start.sparkonten
+  const start = series.start.cash + series.start.geldanlage + series.start.sparkonten + series.start.investmentCash
   const income = incomeCategoryIds(categories)
   const cats = planTargets(categories, tags).filter((t) => t.key === 'categoryId')
   const yearOf = (version, id) => {
@@ -62,7 +63,11 @@ export function yearBalance({ accounts, categories, tags, budgets, transactions,
   // A provisional start (the year before still has open months) is the year before's Prognose end.
   const startParts = series.start.provisional
     ? yearBalance({ accounts, categories, tags, budgets, transactions, year: year - 1, closedMonths: closedByYear[year - 1] ?? [], closedByYear }).endParts
-    : [{ id: 'cash', name: 'Barkonten', cents: series.start.cash }, ...pots.map((t) => ({ id: t.id, name: t.name, cents: tagBalance(t.id, '9999-12-31', startTx, tags) }))]
+    : [
+        { id: 'cash', name: 'Barkonten', cents: series.start.cash },
+        { id: INVESTMENT_CASH_ID, name: INVESTMENT_CASH_NAME, cents: series.start.investmentCash },
+        ...pots.map((t) => ({ id: t.id, name: t.name, cents: tagBalance(t.id, '9999-12-31', startTx, tags) })),
+      ]
   // A provisional year with nothing closed yet builds on its (provisional) start, not on today's balances.
   const potBase = (t) =>
     series.start.provisional && lastClosed === 0 ? (startParts.find((p) => p.id === t.id)?.cents ?? 0) : tagBalance(t.id, realDate, transactions, tags)
@@ -74,7 +79,13 @@ export function yearBalance({ accounts, categories, tags, budgets, transactions,
     }
     return cents
   }
-  const endParts = [{ id: 'cash', name: 'Barkonten', cents: series.months[11].prog }, ...pots.map((t) => ({ id: t.id, name: t.name, cents: potEnd(t) }))]
+  // Investment Cash (lib/investmentCash.js): its own piece, right after Barkonten – the same figure as
+  // the Dashboard bars' lightest green in December.
+  const endParts = [
+    { id: 'cash', name: 'Barkonten', cents: series.months[11].prog },
+    { id: INVESTMENT_CASH_ID, name: INVESTMENT_CASH_NAME, cents: series.months[11].investmentCash },
+    ...pots.map((t) => ({ id: t.id, name: t.name, cents: potEnd(t) })),
+  ]
   return { versions, startParts, endParts, provisional: series.start.provisional }
 }
 

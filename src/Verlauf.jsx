@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, u
 import { collection, deleteDoc, doc, onSnapshot, setDoc, writeBatch } from 'firebase/firestore'
 import { closedByYearOf } from './lib/forecast'
 import { plan1Contents, planCopyOps } from './lib/planCopy'
+import { INVESTMENT_CASH_ID, INVESTMENT_CASH_NAME, isAnlagePot, planningTags } from './lib/investmentCash'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { TAG_RENAME_MESSAGES } from './lib/tagRename'
 import { qualifiedTagName } from './lib/tagStyle'
@@ -90,6 +91,7 @@ const SECTION_TINT_VAR = {
   einnahmen: '--color-income-tint',
   ausgaben: '--color-alert-tint',
   ruecklagen: '--color-savings-tint',
+  anlage: '--color-anlage-tint',
 }
 
 // Font color by row and by that month's own open/closed state (spec.md
@@ -461,6 +463,8 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   const tagActions = useTagActions()
   const [transactions, setTransactions] = useState([])
   const [budgets, setBudgets] = useState([])
+  // Accounts: which pots are the "Aufteilung der Anlage" and what the Investment Cash row counts (lib/investmentCash.js).
+  const [accounts, setAccounts] = useState([])
   // closedMonths per year (settings/{year}); this year's and last year's are read from it below
   const [closedByYear, setClosedByYear] = useState({})
   // Plan1's colour tolerance in percent (Settings › Verlauf, lib/usePlanTolerance.js).
@@ -704,7 +708,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
       // Verlauf is the visible screen (it stays mounted when hidden).
       if (active && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'q') {
         const row = gridApiRef.current?.getRowNode(lastFocusedRowIdRef.current)?.data
-        if (!row?.targetId) return
+        if (!row?.targetId || row.targetId === INVESTMENT_CASH_ID) return // no real tag behind it
         e.preventDefault()
         onOpenQuickview?.({ kind: row.targetKey === 'categoryId' ? 'category' : 'tag', id: row.targetId })
       }
@@ -822,6 +826,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
         syncWhenVisible(() => setTransactions(next))
       }),
       onSnapshot(collection(db, 'budgets'), (snap) => setBudgets(snap.docs.map((d) => d.data()))),
+      onSnapshot(collection(db, 'accounts'), (snap) => setAccounts(snap.docs.map((d) => d.data()))),
       onSnapshot(collection(db, 'cellComments'), (snap) => setCellComments(snap.docs.map((d) => d.data()))),
     ]
     return () => unsubs.forEach((u) => u())
@@ -870,8 +875,10 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
 
   // Prog (spec.md §3b) — shared with Planung via budget.js's own
   // progMonths(), so both screens compute it identically.
+  // the tags plus the virtual "Investment Cash" row (lib/investmentCash.js)
+  const ptags = useMemo(() => planningTags(tags, accounts), [tags, accounts])
   function progMonths(targetId, plan1Months, isAllocation) {
-    return progMonthsFor(isAllocation ? 'allocationTagId' : 'categoryId', targetId, plan1Months, closedMonths, yearNum, transactions, tags)
+    return progMonthsFor(isAllocation ? 'allocationTagId' : 'categoryId', targetId, plan1Months, closedMonths, yearNum, transactions, ptags)
   }
 
   // What was really booked, per category and month — Plan1's rows carry it as
@@ -886,7 +893,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
       if (cat) return tagIds ? actualIndex.sumTags(common.targetId, m, tagIds) : actualIndex.total(common.targetId, m)
       return tagIds
         ? breakdownGroupAllocationMonthActual(common.targetId, tagIds, yearNum, m, transactions, tags)
-        : allocationMonthActual(common.targetId, yearNum, m, transactions, tags)
+        : allocationMonthActual(common.targetId, yearNum, m, transactions, ptags)
     })
   }
   // What a Plan1 line or Übergruppe row carries for the colours and the message:
@@ -1088,7 +1095,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     if (showPlanung) {
       const lastYear = yearNum - 1
       const lastPlan1 = budgetTopLineMonths(targetKey, targetId, 'plan1', lastYear, budgets)
-      const lastProg = progMonthsFor(targetKey, targetId, progBaseMonths(targetKey, targetId, lastYear, budgets), lastYearClosedMonths, lastYear, transactions, tags)
+      const lastProg = progMonthsFor(targetKey, targetId, progBaseMonths(targetKey, targetId, lastYear, budgets), lastYearClosedMonths, lastYear, transactions, ptags)
       for (const r of rows) {
         if (r.rowLabel === 'Prog') r.lastYearTotal = lastProg.reduce((a, b) => a + b, 0)
         else if (r.rowLabel === 'Plan1') r.lastYearTotal = lastPlan1.yearTotal
@@ -1417,8 +1424,15 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     const sortedAllocationTags = [...allocationTags].sort(
       (a, b) => ALLOCATION_TAG_ORDER.indexOf(a.id) - ALLOCATION_TAG_ORDER.indexOf(b.id),
     )
-    for (const tag of sortedAllocationTags) {
+    // Rücklagen: the Livret pots, then "Investment Cash" (money moved from the cash towards investing);
+    // below, its own block, the Anlage pots – the "Aufteilung der Anlage", which does not count against
+    // the cash (Nov 2026, lib/investmentCash.js).
+    for (const tag of sortedAllocationTags.filter((t) => !isAnlagePot(t, accounts))) {
       out.push(...planLineRows('Rücklagen', 'ruecklagen', tag.name, 'allocationTagId', tag.id, true))
+    }
+    out.push(...planLineRows('Rücklagen', 'ruecklagen', INVESTMENT_CASH_NAME, 'allocationTagId', INVESTMENT_CASH_ID, true))
+    for (const tag of sortedAllocationTags.filter((t) => isAnlagePot(t, accounts))) {
+      out.push(...planLineRows('Aufteilung', 'anlage', tag.name, 'allocationTagId', tag.id, true))
     }
     // The very last row of the whole grid — the one exception that still
     // draws its own bottom edge (blockBorderStyle()'s own comment above)
@@ -1426,7 +1440,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
     if (out.length > 0) out.at(-1).isVeryLastRow = true
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps -- planLineRows and everything it calls close over categories/tags/transactions/budgets/closedMonths/showPlan0/showBreakdowns/blockOverrides/showPlanung/lastYearClosedMonths/yearNum, all already current each render
-  }, [categories, tags, transactions, budgets, closedMonths, showPlan0, showBreakdowns, blockOverrides, showPlanung, lastYearClosedMonths, yearNum])
+  }, [categories, tags, transactions, budgets, closedMonths, showPlan0, showBreakdowns, blockOverrides, showPlanung, lastYearClosedMonths, yearNum, accounts])
 
   // The settle half of pendingFocusRef (see its own comment above) — fires
   // on every rowData change, no-ops instantly unless a focus claim is
@@ -1759,7 +1773,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
             className="flex h-full w-full cursor-pointer items-center hover:underline"
             style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}
             title="In Quickview öffnen"
-            onClick={() => onOpenQuickview?.({ kind: p.data.targetKey === 'categoryId' ? 'category' : 'tag', id: p.data.targetId })}
+            onClick={() => p.data.targetId !== INVESTMENT_CASH_ID && onOpenQuickview?.({ kind: p.data.targetKey === 'categoryId' ? 'category' : 'tag', id: p.data.targetId })}
           >
             {p.value}
           </div>

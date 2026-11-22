@@ -9,6 +9,7 @@ import { balance } from './balance'
 import { claimCategoryIds, claimTotal } from './claims'
 import { CASH_GROUPS, forecastSeries } from './forecast'
 import { tagBalance } from './tagBalance'
+import { cashAccountIds } from './investmentCash'
 
 export const RESERVE_GROUPS = ['Geldanlage', 'Sparkonten']
 const monthEnd = (year, m) => `${year}-${String(m).padStart(2, '0')}-31`
@@ -23,7 +24,8 @@ export function monthChecks({ accounts, categories, tags, budgets, transactions,
   const tracked = accounts.filter((a) => a.tracked !== false)
   const idsIn = (groups) => tracked.filter((a) => groups.includes(a.reportingGroup)).map((a) => a.id)
   const groupOf = Object.fromEntries(accounts.map((a) => [a.id, a.reportingGroup]))
-  const cashIds = idsIn(CASH_GROUPS)
+  // the red line's cash: without the Investment Cash accounts (lib/investmentCash.js)
+  const cashIds = cashAccountIds(accounts, CASH_GROUPS)
   const claimCats = claimCategoryIds(categories)
   const allocation = tags.filter((t) => t.class === 'allocation' && (t.reconciliationTargetAccountIds ?? []).length)
 

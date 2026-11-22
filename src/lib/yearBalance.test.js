@@ -56,7 +56,7 @@ describe('yearBalance', () => {
     expect(r.versions.prog).toMatchObject({ einnahmen: 1200000, ausgaben: 320000, ende: 2380000 })
   })
   it('a transfer into a pot is no Ausgabe: the end segments add up to the Prognose end', () => {
-    expect(r.startParts.map((p) => p.cents)).toEqual([1000000, 200000, 300000, 0])
+    expect(r.startParts.map((p) => p.cents)).toEqual([1000000, 0, 200000, 300000, 0])
     expect(r.endParts.find((p) => p.id === 'sparen-familie').cents).toBe(250000)
     expect(r.endParts.reduce((s, p) => s + p.cents, 0)).toBe(r.versions.prog.ende)
   })

@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 
 import { kEuro, niceStep } from './lib/forecast'
 import { potLocations, yearBalance } from './lib/yearBalance'
+import { INVESTMENT_CASH_ID } from './lib/investmentCash'
 
 // The two charts under the Prognose chart (spec.md §3d, Nov 2026, from Markus's Sheet), side by side
 // (stacked on a narrow screen):
@@ -15,6 +16,8 @@ const PLAN = 'var(--color-text)'
 const INCOME = 'color-mix(in srgb, var(--color-income) 55%, var(--color-surface))'
 const EXPENSE = 'color-mix(in srgb, var(--color-expense) 60%, var(--color-surface))'
 const seriesColor = (i) => `var(--series-${(i % 8) + 1})`
+const IC_SWATCH =
+  'repeating-linear-gradient(45deg, color-mix(in srgb, var(--color-income) 38%, var(--color-surface)) 0 2px, color-mix(in srgb, var(--color-income) 12%, var(--color-surface)) 2px 5px)'
 const pct = (part, total) => `${Math.round((100 * part) / total)} %`
 const dateDe = (iso) => iso.split('-').reverse().join('.')
 
@@ -28,7 +31,12 @@ export default function YearCharts({ accounts, categories, tags, budgets, transa
     [accounts, tags, transactions, yearNum, closedMonths, closedByYear],
   )
   // one colour per part id (Barkonten first, then the pots), shared by both charts
-  const colorOf = Object.fromEntries(yb.startParts.map((p, i) => [p.id, seriesColor(i)]))
+  // Barkonten = series 1, the pots series 2… in order; Investment Cash is no categorical colour but the
+  // striped lightest green of the Dashboard bars (lib/investmentCash.js), so the 8 slots still suffice.
+  const colorOf = Object.fromEntries(
+    yb.startParts.filter((p) => p.id !== INVESTMENT_CASH_ID).map((p, i) => [p.id, seriesColor(i)]),
+  )
+  colorOf[INVESTMENT_CASH_ID] = 'url(#yc-ic-stripes)'
   return (
     <div className="grid grid-cols-1 gap-4 px-4 lg:grid-cols-2">
       <Jahresbilanz yb={yb} colorOf={colorOf} yearNum={yearNum} />
@@ -42,7 +50,7 @@ const LEFT = 64
 const RIGHT = 16
 const TOP = 24
 const PLOT_H = 300
-const H = TOP + PLOT_H + 32
+const H = TOP + PLOT_H + 50 // room under the axis labels for a negative piece (Investment Cash in the minus)
 const COLS = ['Jahresanfang', 'Einnahmen', 'Ausgaben', 'Jahresende']
 
 function Jahresbilanz({ yb, colorOf, yearNum }) {
@@ -71,7 +79,16 @@ function Jahresbilanz({ yb, colorOf, yearNum }) {
           <title>{`${p.name}: ${kEuro(p.cents)}`}</title>
           <rect x={cx(i) - barW / 2} y={y1 + 1} width={barW} height={Math.max(0, h - 2)} rx="2" fill={colorOf[p.id]} />
           {h >= 13 && (
-            <text x={cx(i)} y={y1 + h / 2 + 3.5} textAnchor="middle" fontSize="10" fill="#fff" fontWeight="600" style={{ paintOrder: 'stroke' }} stroke="rgba(0,0,0,0.35)" strokeWidth="2">
+            <text
+              x={cx(i)}
+              y={y1 + h / 2 + 3.5}
+              textAnchor="middle"
+              fontSize="10"
+              fontWeight="600"
+              {...(p.id === INVESTMENT_CASH_ID
+                ? { fill: 'var(--color-text)' }
+                : { fill: '#fff', style: { paintOrder: 'stroke' }, stroke: 'rgba(0,0,0,0.35)', strokeWidth: 2 })}
+            >
               {kEuro(p.cents)}
             </text>
           )}
@@ -85,7 +102,11 @@ function Jahresbilanz({ yb, colorOf, yearNum }) {
       <rect x={cx(i) - barW / 2} y={y(cents)} width={barW} height={Math.max(0, y(0) - y(cents))} rx="3" fill={fill} />
     </g>
   )
-  const totals = [sumParts(yb.startParts), v.prog.einnahmen, v.prog.ausgaben, sumParts(yb.endParts)]
+  // The labels give the true totals; a negative piece (Investment Cash planned into the minus) cannot be
+  // stacked, so the bar is drawn without it and the piece is named in red under the bar.
+  const totals = [v.prog.start, v.prog.einnahmen, v.prog.ausgaben, v.prog.ende]
+  const barTops = [sumParts(yb.startParts), v.prog.einnahmen, v.prog.ausgaben, sumParts(yb.endParts)]
+  const negatives = [yb.startParts.filter((p) => p.cents < 0), [], [], yb.endParts.filter((p) => p.cents < 0)]
 
   return (
     <section className="flex flex-col gap-2">
@@ -100,11 +121,19 @@ function Jahresbilanz({ yb, colorOf, yearNum }) {
         <Legend><span className="inline-block w-5 border-t-[3px] border-[var(--color-text)]" /> Plan1</Legend>
         <Legend><span className="inline-block w-5 border-t-[3px] border-[var(--color-alert)]" /> Prognose</Legend>
         {yb.startParts.map((p) => (
-          <Legend key={p.id}><Swatch color={colorOf[p.id]} /> {p.name}</Legend>
+          <Legend key={p.id}>
+            <Swatch color={p.id === INVESTMENT_CASH_ID ? IC_SWATCH : colorOf[p.id]} /> {p.name}
+          </Legend>
         ))}
       </div>
       <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
         <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Jahresbilanz">
+          <defs>
+            <pattern id="yc-ic-stripes" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <rect width="8" height="8" fill="color-mix(in srgb, var(--color-income) 12%, var(--color-surface))" />
+              <line x1="0" y1="0" x2="0" y2="8" stroke="color-mix(in srgb, var(--color-income) 38%, var(--color-surface))" strokeWidth="3" />
+            </pattern>
+          </defs>
           {Array.from({ length: n + 1 }, (_, k) => (
             <g key={k}>
               <line x1={LEFT} x2={W - RIGHT} y1={y(k * step)} y2={y(k * step)} stroke="var(--color-border)" />
@@ -118,6 +147,11 @@ function Jahresbilanz({ yb, colorOf, yearNum }) {
           {totals.map((c, i) => (
             <g key={COLS[i]}>
               <text x={cx(i)} y={TOP + PLOT_H + 22} textAnchor="middle" fontSize="12.5" fill="var(--color-text)">{i === 0 && yb.provisional ? 'Jahresanfang (vorl.)' : COLS[i]}</text>
+              {negatives[i].map((p, k) => (
+                <text key={p.id} x={cx(i)} y={TOP + PLOT_H + 38 + k * 14} textAnchor="middle" fontSize="10.5" fontWeight="600" fill="var(--color-alert)">
+                  {p.name} {kEuro(p.cents)}
+                </text>
+              ))}
             </g>
           ))}
           <path d={path(v.plan0)} fill="none" stroke={PLAN} strokeWidth="2" strokeDasharray="8 5" />
@@ -134,7 +168,7 @@ function Jahresbilanz({ yb, colorOf, yearNum }) {
           {totals.map((c, i) => (
             <g key={`total${i}`} pointerEvents="none">
               {/* the bar's total, centred on top of it (Markus, Nov 2026); a surface halo keeps it readable where a line crosses */}
-              <text x={cx(i)} y={y(c) - 7} textAnchor="middle" fontSize="12" fontWeight="600" fill="var(--color-text)" stroke="var(--color-surface)" strokeWidth="3" style={{ paintOrder: 'stroke' }}>
+              <text x={cx(i)} y={y(barTops[i]) - 7} textAnchor="middle" fontSize="12" fontWeight="600" fill="var(--color-text)" stroke="var(--color-surface)" strokeWidth="3" style={{ paintOrder: 'stroke' }}>
                 {kEuro(c)}
               </text>
             </g>
