@@ -396,6 +396,31 @@ export default function Planung({ year, active = true, onOpenInVerlauf }) {
       }
     }
 
+    // Regulär/Einmal of the yellow lines, for the planning column (Nov 2026, Markus: how much of the year
+    // is out of step with the monthly rhythm, e.g. a bonus). Each is the sum of its parts' splits; the
+    // Budget's starting cash (Jahresanfang − Puffer) is there at once, so it counts as Einmal.
+    const addSplits = (...xs) => {
+      const regularYear = xs.reduce((a, x) => a + x.regularYear, 0)
+      const lumpYear = xs.reduce((a, x) => a + x.lumpYear, 0)
+      const total = regularYear + lumpYear
+      return {
+        regularYear,
+        regularMonth: xs.reduce((a, x) => a + x.regularMonth, 0),
+        lumpYear,
+        // a badge only when regular and one-off point the same way (else a percentage means nothing)
+        percent: total === 0 || regularYear * total < 0 || lumpYear * total < 0 ? null : Math.round((regularYear / total) * 100) || 0,
+      }
+    }
+    const planStart = { regularYear: 0, regularMonth: 0, lumpYear: startCash(planYear) - puffer(planYear) }
+    const bandBudget = addSplits(einnahmenTotal.split, fixkostenTotal.split, entnommenTotal.split, planStart)
+    const bandSplits = {
+      entnommen: addSplits(entnommenTotal.split),
+      budget: bandBudget,
+      ausgaben: addSplits(ausgabenTotal.split),
+      einbezahlt: addSplits(einbezahltTotal.split),
+      ergebnis: addSplits(bandBudget, ausgabenTotal.split, einbezahltTotal.split),
+    }
+
     return {
       einnahmen: einnahmen.filter(visible),
       fixkosten: fixkosten.filter(visible),
@@ -410,6 +435,7 @@ export default function Planung({ year, active = true, onOpenInVerlauf }) {
       ausgabenInklTotal,
       anlage: anlage.filter(visible),
       anlageTotal,
+      bandSplits,
       ref: summary(refYear, 'ref'),
       plan: summary(planYear, 'plan'),
     }
@@ -871,7 +897,7 @@ function Group({ t, rows, section, c }) {
 
 // A summary row (Jahresanfang, Budget band): only the two year columns
 // carry a value. Each value is either plain cents or `{ node, color }`.
-function BandRow({ label, refValue, planValue, color, bold = false, tint, showComments }) {
+function BandRow({ label, refValue, planValue, color, bold = false, tint, showComments, split = null }) {
   const cell = (v) => (typeof v === 'number' ? { node: euro(v), color } : { node: v.node, color: color ?? v.color })
   const r = cell(refValue)
   const p = cell(planValue)
@@ -888,7 +914,21 @@ function BandRow({ label, refValue, planValue, color, bold = false, tint, showCo
         {p.node}
       </td>
       {showComments && <td className="border-b border-[var(--color-border)]" />}
-      <td colSpan={4} className="border-b border-[var(--color-border)]" />
+      {split ? (
+        // Regulär/Einmal of the planning column (Nov 2026, Markus: the yellow lines too)
+        <>
+          <td className={TD}>{blankZero(split.regularYear)}</td>
+          <td className={TD}>{blankZero(split.regularMonth)}</td>
+          <td className={TD}>{blankZero(split.lumpYear)}</td>
+          <td className="whitespace-nowrap border-b border-[var(--color-border)] px-3 py-1 text-center align-top">
+            {splitPill(split) && (
+              <span className="inline-block rounded-full bg-[var(--color-savings-tint)] px-1.5 py-px text-xs font-medium text-[var(--color-savings)]">{splitPill(split)}</span>
+            )}
+          </td>
+        </>
+      ) : (
+        <td colSpan={4} className="border-b border-[var(--color-border)]" />
+      )}
     </tr>
   )
 }
@@ -976,12 +1016,12 @@ function ReportTable({ report, savePuffer, ...c }) {
 
         <BlockGap showComments={showComments} />
         {/* Rücklagen rows that give back more than they take this year (Nov 2026): money back into the cash */}
-        <BandRow label="+ aus Rücklagen entnommen" refValue={ref.entnahmen} planValue={plan.entnahmen} color="var(--color-savings)" tint={BUDGET_BAND_TINT} showComments={showComments} />
+        <BandRow label="+ aus Rücklagen entnommen" refValue={ref.entnahmen} planValue={plan.entnahmen} color="var(--color-savings)" tint={BUDGET_BAND_TINT} showComments={showComments} split={report.bandSplits.entnommen} />
         {/* The yellow band reads as one calculation (Nov 2026, Markus): + aus Rücklagen = Budget,
             − Ausgaben − in Rücklagen = Jahresergebnis (was "Ausgaben vs. Budget"). */}
-        <BandRow label="= Budget" refValue={ref.budget} planValue={plan.budget} color="var(--color-computed)" bold tint={BUDGET_BAND_TINT} showComments={showComments} />
-        <BandRow label="− Ausgaben" refValue={ref.ausgaben} planValue={plan.ausgaben} color="var(--color-expense)" tint={BUDGET_BAND_TINT} showComments={showComments} />
-        <BandRow label="− in Rücklagen einbezahlt" refValue={ref.einbezahlt} planValue={plan.einbezahlt} color="var(--color-savings)" tint={BUDGET_BAND_TINT} showComments={showComments} />
+        <BandRow label="= Budget" refValue={ref.budget} planValue={plan.budget} color="var(--color-computed)" bold tint={BUDGET_BAND_TINT} showComments={showComments} split={report.bandSplits.budget} />
+        <BandRow label="− Ausgaben" refValue={ref.ausgaben} planValue={plan.ausgaben} color="var(--color-expense)" tint={BUDGET_BAND_TINT} showComments={showComments} split={report.bandSplits.ausgaben} />
+        <BandRow label="− in Rücklagen einbezahlt" refValue={ref.einbezahlt} planValue={plan.einbezahlt} color="var(--color-savings)" tint={BUDGET_BAND_TINT} showComments={showComments} split={report.bandSplits.einbezahlt} />
         <BandRow
           label="= Jahresergebnis"
           refValue={{ node: euro(ref.ausgabenVsBudget), color: deltaColor(ref.ausgabenVsBudget) }}
@@ -989,6 +1029,7 @@ function ReportTable({ report, savePuffer, ...c }) {
           bold
           tint={BUDGET_BAND_TINT}
           showComments={showComments}
+          split={report.bandSplits.ergebnis}
         />
 
         <BlockGap showComments={showComments} />
