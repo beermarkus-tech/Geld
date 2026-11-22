@@ -7,6 +7,7 @@ import {
   budgetBreakdownLineMonths,
   budgetTopLineMonths,
   categoryMonthActual,
+  planSplit,
   planungSummary,
   rowFlows,
   progMonths,
@@ -422,5 +423,30 @@ describe('rowFlows() — Rücklagen split by direction', () => {
     expect(f).toMatchObject({ inflow: -17000 - 17000, outflow: 300000 })
     expect(f.inMonths.slice(0, 2)).toEqual([-17000, -17000])
     expect(f.outMonths[0]).toBe(300000)
+  })
+})
+
+describe('planSplit() — Regulär/Einmal from the planned months', () => {
+  it('a steady monthly row is all regular', () => {
+    expect(planSplit(Array(12).fill(-2200))).toMatchObject({ regularYear: -26400, regularMonth: -2200, lumpYear: 0, percent: 100 })
+  })
+  it('monthly costs plus one big month: the big part is Einmal', () => {
+    const m = Array(12).fill(-10000)
+    m[7] = -490000
+    expect(planSplit(m)).toMatchObject({ regularYear: -120000, regularMonth: -10000, lumpYear: -480000, percent: 20 })
+  })
+  it('planned in only some months: capped at the year total (all regular, never 120 %)', () => {
+    const m = [...Array(10).fill(-10000), 0, 0]
+    expect(planSplit(m)).toMatchObject({ regularYear: -100000, lumpYear: 0, percent: 100 })
+  })
+  it('one lump: all Einmal', () => {
+    const m = Array(12).fill(0)
+    m[2] = -180000
+    expect(planSplit(m)).toMatchObject({ regularYear: 0, lumpYear: -180000, percent: 0 })
+  })
+  it('plus and minus months: no regular share, no badge', () => {
+    const m = Array(12).fill(3900)
+    m[0] = -12800
+    expect(planSplit(m)).toMatchObject({ regularYear: 0, percent: null })
   })
 })

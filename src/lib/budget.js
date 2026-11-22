@@ -386,6 +386,30 @@ export function splitYear(yearCents, share) {
   }
 }
 
+/**
+ * Planung's Regulär/Einmal split from the planned year's own 12 monthly figures (Nov 2026, Markus –
+ * replaces the split from last year's bookings, which read 120 % for steady rows while the reference
+ * year was still open): Regulär Monat = the typical planned month (median), Regulär Jahr = it × 12 but
+ * never more than the year total, Einmal = the rest. A row mixing plus and minus months has no meaningful
+ * regular share: all of it counts as Einmal and `percent` is null (no badge).
+ * @param {number[]} months  the 12 monthly figures (cents)
+ * @param {number} [total]   the year total (defaults to Σ months; may include a figure without month)
+ */
+export function planSplit(months, total = months.reduce((a, b) => a + b, 0)) {
+  if (total === 0) return { regularYear: 0, regularMonth: 0, lumpYear: 0, percent: 0 }
+  if (months.some((v) => v > 0) && months.some((v) => v < 0)) return { regularYear: 0, regularMonth: 0, lumpYear: total, percent: null }
+  const sorted = [...months].sort((a, b) => a - b)
+  const median = (sorted[5] + sorted[6]) / 2
+  let regularYear = Math.round(median * 12) || 0
+  if (Math.abs(regularYear) > Math.abs(total)) regularYear = total
+  return {
+    regularYear,
+    regularMonth: Math.round(regularYear / 12) || 0,
+    lumpYear: total - regularYear,
+    percent: Math.round((regularYear / total) * 100) || 0,
+  }
+}
+
 // Planung's summary band (spec.md §3c), all signed cents as displayed:
 // Budget = Einnahmen + Fixkosten (negative) + (Jahresanfang − Puffer) + aus Rücklagen entnommen;
 // Ausgaben vs. Budget = Budget + Ausgaben + in Rücklagen einbezahlt (both negative when money goes

@@ -8,15 +8,12 @@ import { claimCategoryIds, claimStart } from './lib/claims'
 import { closedByYearOf, forecastSeries, isProvisionalStart } from './lib/forecast'
 import { INVESTMENT_CASH_ID, INVESTMENT_CASH_NAME, investmentCashAccountIds, isAnlagePot, isInvestmentCashAccount, planningTags } from './lib/investmentCash'
 import {
-  allocationMonthActual,
   budgetTopLineMonths,
-  categoryMonthActual,
+  planSplit,
   planungSummary,
   progBaseMonths,
   rowFlows,
   progMonths,
-  regularShare,
-  splitYear,
 } from './lib/budget'
 import { ALLOCATION_TAG_ORDER, GROUP_ORDER, SUBCAT_ORDER, isBudgetPlannedTag, isKnownSubcat } from './lib/categoryOrder'
 import { centsToWholeEuro, parseWholeEuroInput } from './lib/format'
@@ -236,28 +233,28 @@ export default function Planung({ year, active = true, onOpenInVerlauf }) {
     // Plan1, exactly as Verlauf shows that year.
     // the tags plus the virtual "Investment Cash" row (lib/investmentCash.js)
     const ptags = planningTags(tags, accounts)
-    function yearValue(targetKey, targetId, y, which) {
-      if (which !== 'prog') return budgetTopLineMonths(targetKey, targetId, which, y, budgets).yearTotal
+    // A row's year in the chosen view: its 12 monthly figures and its total.
+    function yearFigures(targetKey, targetId, y, which) {
+      if (which !== 'prog') {
+        const top = budgetTopLineMonths(targetKey, targetId, which, y, budgets)
+        return { months: top.months, total: top.yearTotal }
+      }
       const closedMonths = settingsByYear[y]?.closedMonths ?? []
       // open months: Plan1, or Plan0 for a row without any Plan1 figure yet (lib/budget.js progBaseMonths)
-      return progMonths(targetKey, targetId, progBaseMonths(targetKey, targetId, y, budgets), closedMonths, y, transactions, ptags).reduce((a, b) => a + b, 0)
+      const months = progMonths(targetKey, targetId, progBaseMonths(targetKey, targetId, y, budgets), closedMonths, y, transactions, ptags)
+      return { months, total: months.reduce((a, b) => a + b, 0) }
     }
-
-    function refActualMonths(targetKey, targetId) {
-      return Array.from({ length: 12 }, (_, i) =>
-        targetKey === 'allocationTagId'
-          ? allocationMonthActual(targetId, refYear, i + 1, transactions, ptags)
-          : categoryMonthActual(targetId, refYear, i + 1, transactions),
-      )
-    }
+    const yearValue = (targetKey, targetId, y, which) => yearFigures(targetKey, targetId, y, which).total
 
     function row(targetKey, targetId, label) {
       // The reference year is shown as its Prog — what actually happened
       // (Oct 2026, Markus: actuals are the better base for Plan0 of the
       // planning year than last year's Plan0).
       const ref = yearValue(targetKey, targetId, refYear, 'prog')
-      const plan = yearValue(targetKey, targetId, planYear, lens)
-      const split = splitYear(plan, regularShare(refActualMonths(targetKey, targetId)))
+      const planned = yearFigures(targetKey, targetId, planYear, lens)
+      const plan = planned.total
+      // Regulär/Einmal from the planned year's own months (Nov 2026, Markus; lib/budget.js planSplit)
+      const split = planSplit(planned.months, plan)
       return { targetKey, targetId, label, ref, plan, split }
     }
 
@@ -318,14 +315,12 @@ export default function Planung({ year, active = true, onOpenInVerlauf }) {
     // Each Rücklagen row split by direction (Nov 2026, Markus; lib/budget.js rowFlows): money paid in
     // and money taken out. A row with both directions in a year column is shown as two rows; the
     // section's header shows both totals, and "Ausgaben inkl. Rücklagen" counts only what is paid in
-    // (what is taken out is a Budget source). Regulär/Einmal per direction, from last year's actual months.
+    // (what is taken out is a Budget source). Regulär/Einmal per direction, from the planned year's months of that direction.
     const closedOf = (y) => settingsByYear[y]?.closedMonths ?? []
-    const ALL_MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
     const directions = ruecklagen.map((r) => {
       const flows = (which, year, closedMonths) => rowFlows({ targetKey: r.targetKey, targetId: r.targetId, which, year, closedMonths, budgets, transactions, tags: ptags })
       const fRef = flows('prog', refYear, closedOf(refYear))
       const fPlan = flows(lens, planYear, closedOf(planYear))
-      const fActual = flows('prog', refYear, ALL_MONTHS)
       const mk = (dir) => {
         const plan = dir === 'in' ? fPlan.inflow : fPlan.outflow
         return {
@@ -335,7 +330,7 @@ export default function Planung({ year, active = true, onOpenInVerlauf }) {
           label: `${r.label} – ${dir === 'in' ? 'einbezahlt' : 'entnommen'}`,
           ref: dir === 'in' ? fRef.inflow : fRef.outflow,
           plan,
-          split: splitYear(plan, regularShare(dir === 'in' ? fActual.inMonths : fActual.outMonths)),
+          split: planSplit(dir === 'in' ? fPlan.inMonths : fPlan.outMonths, plan),
         }
       }
       const inRow = mk('in')
@@ -773,6 +768,8 @@ function CommentBox({ y, target, c, cell = true, navCol }) {
 }
 
 function splitPill(split) {
+  // no badge where plus and minus months mix: a regular share means nothing there (planSplit)
+  if (split.percent === null) return null
   if (split.regularYear === 0 && split.lumpYear === 0) return null
   return `${split.percent}/${100 - split.percent}`
 }
