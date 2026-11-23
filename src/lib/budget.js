@@ -134,6 +134,34 @@ function allocationContributions(allocationTagId, year, month, transactions, tag
   return out
 }
 
+/** Per booking, what Verlauf counts for a category in these months (only the lines in that category,
+ *  optionally only those carrying one of `tagIds`) – Konten shows these amounts after Strg+B (Nov 2026).
+ *  @returns {Map<string, number>} txId → cents */
+export function categoryTxAmounts(categoryId, year, months, transactions, tagIds = null) {
+  const out = new Map()
+  for (const m of months) {
+    for (const tx of bookingsInMonth(transactions, year, m)) {
+      for (const line of tx.lines ?? []) {
+        if (line.categoryId !== categoryId) continue
+        if (tagIds && !(line.tags ?? []).some((t) => tagIds.has(t))) continue
+        out.set(tx.id, (out.get(tx.id) ?? 0) + (line.amountCents ?? 0))
+      }
+    }
+  }
+  return out
+}
+
+/** Per booking, what Verlauf counts for a pot (or the Investment Cash row) in these months, in Verlauf's
+ *  sign: money into the pot −, money out + – i.e. seen from the bank side (Nov 2026).
+ *  @returns {Map<string, number>} txId → cents */
+export function allocationTxAmounts(allocationTagId, year, months, transactions, tags) {
+  const out = new Map()
+  for (const m of months) {
+    for (const { txId, cents } of allocationContributions(allocationTagId, year, m, transactions, tags, true)) out.set(txId, (out.get(txId) ?? 0) - cents)
+  }
+  return out
+}
+
 /** The ids of the bookings behind a pot's (or the Investment Cash row's) actual in one month – what
  *  Verlauf's Prog cell opens in Konten (Nov 2026). */
 export function allocationMonthTxIds(allocationTagId, year, month, transactions, tags) {

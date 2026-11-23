@@ -17,7 +17,8 @@ import {
   breakdownGroupAllocationMonthActual,
   budgetBreakdownLineMonths,
   budgetTopLineMonths,
-  allocationMonthTxIds,
+  allocationTxAmounts,
+  categoryTxAmounts,
   progBaseMonths,
   progMonths as progMonthsFor,
 } from './lib/budget'
@@ -916,23 +917,15 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   function openRowInKonten(row, colId) {
     if (!row?.targetId) return false
     const months = /^m\d+$/.test(colId ?? '') ? [Number(colId.slice(1))] : Array.from({ length: 12 }, (_, i) => i + 1)
-    const txIds =
+    // per booking, the amount as Verlauf counts it (a split booking only its matching line; a pot or the
+    // Investment Cash row seen from the bank side) – Konten shows these, so its "Angezeigt" adds up
+    const amounts =
       row.targetKey === 'categoryId'
-        ? actualIndex.txIds(row.targetId, months, row.checkTagIds ?? null)
-        : [...new Set(months.flatMap((m) => allocationMonthTxIds(row.targetId, yearNum, m, transactions, ptags)))]
+        ? categoryTxAmounts(row.targetId, yearNum, months, transactions, row.checkTagIds ?? null)
+        : allocationTxAmounts(row.targetId, yearNum, months, transactions, ptags)
+    const txIds = [...amounts.keys()]
     if (txIds.length === 0) return false
-    // what Verlauf counts as booked for these months (shown in Konten as "Gebucht laut Verlauf")
-    const sumCents = months.reduce(
-      (sum, m) =>
-        sum +
-        (row.targetKey === 'categoryId'
-          ? row.checkTagIds
-            ? actualIndex.sumTags(row.targetId, m, row.checkTagIds)
-            : actualIndex.total(row.targetId, m)
-          : allocationMonthActual(row.targetId, yearNum, m, transactions, ptags)),
-      0,
-    )
-    onOpenInKonten?.({ txIds, year: String(yearNum), from: 'verlauf', sumCents })
+    onOpenInKonten?.({ txIds, year: String(yearNum), from: 'verlauf', amounts: Object.fromEntries(amounts) })
     return true
   }
   const cursorRowNow = () => gridApiRef.current?.getRowNode(lastFocusedRowIdRef.current)?.data

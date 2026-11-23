@@ -2632,3 +2632,7 @@ Markus: after Strg+B the "Angezeigt" total was missing in Konten (it only shows 
 ## Session 37, continued two-hundred-and-twentieth time — 2026-11-22 — Verlauf toolbar on one line
 
 Markus: the toolbar had grown to two lines. Now: a toggle-button group Plan0 · Aufschlüsselung · letztes Jahr (`Toggle`, filled while on, keeps the grid's focus), then Konten · Quickview · Plan0 → Plan1 (shortcuts moved into the tooltips), and the check message slot flexes (12–34rem). Harness-checked: 32 px high at 1500 and 1280 px; toggles switch. SPEC §3b. 294 tests, lint, build pass.
+
+## Session 37, continued two-hundred-and-twenty-first time — 2026-11-23 — Konten shows Verlauf's amounts after Strg+B
+
+Markus: no separate "Gebucht laut Verlauf" total – just "Angezeigt", and the direction of pot bookings should come out right (Sparen Sophia showed −400/−600 for in/out). **Built (SPEC §3b):** `categoryTxAmounts()`/`allocationTxAmounts()` in `lib/budget.js` (+ tests) give, per booking, the amount Verlauf counts (split booking: matching line only; pot/Investment Cash: into the pot −, out +). Verlauf's Strg+B hands this map over; Konten shows these amounts in Betrag while exactly those bookings are filtered (no account picked), so the normal "Angezeigt" equals the Verlauf cell. The "Gebucht laut Verlauf" display is gone. Harness-checked on the backup: Lebensmittel Jan–Okt, Sparen Sophia Juli +500, Sparen Familie Juli −5.000, Investment Cash Juli −2.578,05, Firmenwagen Feb 266,94 all match; year totals show the booked part only. 296 tests, lint, build pass.

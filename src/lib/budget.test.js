@@ -7,6 +7,8 @@ import {
   budgetBreakdownLineMonths,
   budgetTopLineMonths,
   categoryMonthActual,
+  allocationTxAmounts,
+  categoryTxAmounts,
   planSplit,
   planungSummary,
   rowFlows,
@@ -448,5 +450,22 @@ describe('planSplit() — Regulär/Einmal from the planned months', () => {
     const m = Array(12).fill(3900)
     m[0] = -12800
     expect(planSplit(m)).toMatchObject({ regularYear: 0, percent: null })
+  })
+})
+
+describe('per-booking amounts for Konten (Verlauf → Strg+B)', () => {
+  const tags = [{ id: 'sophia', class: 'allocation', reconciliationTargetAccountIds: ['livret'] }]
+  const tx = (id, date, from, to, cents, lines) => ({ id, date, fromAccountId: from, toAccountId: to, amountCents: cents, lines })
+  it('a pot from the bank side: in −, out +, adding up to Verlauf’s figure', () => {
+    const txs = [
+      tx('a', '2026-01-05', 'bnp', 'livret', 10000, [{ amountCents: 10000, tags: ['sophia'] }]),
+      tx('b', '2026-07-05', 'livret', 'bnp', 60000, [{ amountCents: 60000, tags: ['sophia'] }]),
+    ]
+    const m = allocationTxAmounts('sophia', 2026, [1, 7], txs, tags)
+    expect([...m.entries()]).toEqual([['a', -10000], ['b', 60000]])
+  })
+  it('a category counts only its own lines of a split booking', () => {
+    const txs = [tx('s', '2026-06-03', 'bnp', null, -15000, [{ amountCents: -10000, categoryId: 'food', tags: [] }, { amountCents: -5000, categoryId: 'home', tags: [] }])]
+    expect(categoryTxAmounts('food', 2026, [6], txs).get('s')).toBe(-10000)
   })
 })

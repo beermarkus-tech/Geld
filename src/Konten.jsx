@@ -424,8 +424,10 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // Oct 2026) — a Set of transaction ids; cleared by "Filter zurücksetzen", by
   // picking any other filter, or by the next jump.
   const [idFilter, setIdFilter] = useState(null)
-  // { ids, cents }: the total Verlauf counted for the bookings it handed over (shown while exactly those are shown)
-  const [jumpSum, setJumpSum] = useState(null)
+  // { ids, amounts }: the bookings Verlauf handed over (Strg+B) with each one's amount as Verlauf counts it
+  // – a split booking only its matching line, a pot from the bank side (Nov 2026). While exactly those are
+  // shown (no account filter), the Betrag column shows these amounts, so "Angezeigt" adds up to Verlauf.
+  const [jumpView, setJumpView] = useState(null)
   // Tracks AG Grid's own column filters (Datum/Empfänger/Kategorie/
   // Unterkategorie/Details/Betrag/Tags' header filters) — separate from
   // accountFilter, which is Konten's own account/tag mechanism, not an AG
@@ -490,9 +492,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     appliedJumpRef.current = jump.id
     const ids = jump.txIds ? new Set(jump.txIds) : null
     setIdFilter(ids)
-    // Verlauf's Strg+B hands over its own booked total for these bookings (Nov 2026): the visible rows
-    // cannot know what Verlauf counted (only one line of a split booking, a pot's direction, …).
-    setJumpSum(ids && typeof jump.sumCents === 'number' ? { ids, cents: jump.sumCents } : null)
+    setJumpView(ids && jump.amounts ? { ids, amounts: new Map(Object.entries(jump.amounts)) } : null)
     if (jump.txIds) {
       api.setFilterModel(null)
       setAccountFilter(null)
@@ -884,7 +884,17 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
   // each other once allocation-tag filtering started reordering Konto
   // without Betrag following). Falls through the exact same three cases
   // kontoValue does, in the same order, for the same reason.
+  const jumpViewActive = Boolean(jumpView && idFilter === jumpView.ids && !filteredAccountId)
+  // the grid keeps drawn values when only the column callbacks change – redraw the amounts
+  useEffect(() => {
+    const api = gridRef.current?.api
+    if (!api) return
+    api.refreshCells({ columns: ['betrag'], force: true })
+    recomputeVisibleSum(api)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per switch of the Verlauf view
+  }, [jumpViewActive, jumpView])
   const betragValue = (t) => {
+    if (jumpViewActive && jumpView.amounts.has(t.id)) return jumpView.amounts.get(t.id)
     if (filteredAccountId) return signedFor(t, filteredAccountId)
     const allocationOrder = allocationSideOrder(t, filteredAllocationTargets)
     if (allocationOrder) return signedFor(t, allocationOrder.left)
@@ -2645,7 +2655,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps -- accountName/categoryName/groupName/ensureLine/handleDeleteClick/toggleExpanded/createTag close over these
-    [accountById, categoryById, tagById, recentTagValues, accountFilter, accounts, categories, tags, confirmDeleteId, expandedIds, needsCtx],
+    [accountById, categoryById, tagById, recentTagValues, accountFilter, accounts, categories, tags, confirmDeleteId, expandedIds, needsCtx, jumpViewActive, jumpView],
   )
 
   const panel = useMemo(() => {
@@ -2811,7 +2821,8 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
         deleted: Boolean(tx.deletedAt),
       })
     })
-    setVisibleSumCents(visibleSum(visible, Boolean(filteredAccountId)))
+    // the amounts from Verlauf are already all seen from one side (the bank's) – adding them is meaningful
+    setVisibleSumCents(visibleSum(visible, Boolean(filteredAccountId) || jumpViewActive))
   }
 
   const tagFilterSum = receivableView
@@ -2823,9 +2834,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
       : null
   // Shown for any column filter or account filter (Markus, Sept 2026) — a
   // tag filter keeps its own tag balance above instead (his call).
-  // While exactly the bookings Verlauf handed over are shown (no other filter), its own booked total.
-  const verlaufSum = jumpSum && idFilter === jumpSum.ids && !anyColumnFilter && !filteredAccountId && tagFilterSum === null ? jumpSum.cents : null
-  const showVisibleSum = (anyColumnFilter || !!filteredAccountId) && tagFilterSum === null && visibleSumCents !== null
+  const showVisibleSum = (anyColumnFilter || !!filteredAccountId || jumpViewActive) && tagFilterSum === null && visibleSumCents !== null
   // The carried-over balance counts into "Angezeigt" while the whole account
   // is shown (no column filter), so the figure equals the account's balance.
   const shownSumCents = visibleSumCents + (openingRow && !anyColumnFilter ? openingRow.cents : 0)
@@ -2937,12 +2946,6 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
               no column filter shows only the sum; a plain column filter
               with no tag shows only the reset button; either way both stay
               pinned to the right edge, next to the (i) icon below). */}
-          {verlaufSum !== null && (
-            <span className="text-sm text-[var(--color-text-muted)]" title="Was Verlauf für diese Zelle gebucht zählt (bei geteilten Buchungen nur die passende Zeile)">
-              Gebucht laut Verlauf:{' '}
-              <span className="tabular-figure font-medium text-[var(--color-computed)]">{centsToEuro(verlaufSum)} €</span>
-            </span>
-          )}
           {showVisibleSum && (
             <span className="text-sm text-[var(--color-text-muted)]">
               Angezeigt:{' '}
