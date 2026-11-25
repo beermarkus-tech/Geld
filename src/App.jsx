@@ -19,6 +19,12 @@ import Settings from './Settings'
 import TagsProvider from './TagsProvider'
 import Verlauf from './Verlauf'
 
+// The visible screen's wrapper. Phone (Nov 2026, Markus: "content at the bottom is hidden by the
+// bottom bar"): it grows with its content instead of being held to the screen height, so the one
+// scroll container (NavShell's <main>, padded for the bottom bar) really ends below the last row —
+// content overflowing a height-capped wrapper scrolled past that padding and under the bar.
+const SCREEN_WRAPPER = 'flex flex-1 flex-col min-h-0 max-md:flex-none max-md:min-h-full'
+
 export default function App() {
   const [user, setUser] = useState(null)
   const [checkingAuth, setCheckingAuth] = useState(true)
@@ -321,7 +327,7 @@ export default function App() {
             ← Zurück zu {ALL_ITEMS.find((i) => i.id === kontenFrom)?.label ?? 'vorher'}
           </button>
         )}
-        <div className={view === 'konten' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
+        <div className={view === 'konten' ? SCREEN_WRAPPER : 'hidden'}>
           <Konten
             year={year}
             onYearChange={setYear}
@@ -332,40 +338,40 @@ export default function App() {
             jump={kontenJump}
           />
         </div>
-        <div className={view === 'verlauf' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
+        <div className={view === 'verlauf' ? SCREEN_WRAPPER : 'hidden'}>
           <Verlauf year={verlaufYear} initialFocus={verlaufFocus} onFocusChange={setVerlaufFocus} active={view === 'verlauf'} onOpenQuickview={openQuickview} jump={verlaufJump} onOpenInKonten={openInKonten} />
         </div>
         {/* Planung (spec.md §3c) mounts once and is only hidden, like Konten and
             Verlauf above (Oct 2026, Markus: "planung is being recalculated
             every time i switch screens") — it keeps its state, scroll position
             and cursor cell, and never rebuilds its report on a screen switch. */}
-        <div className={view === 'planung' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
+        <div className={view === 'planung' ? SCREEN_WRAPPER : 'hidden'}>
           <Planung year={planungYear} active={view === 'planung'} onOpenInVerlauf={openInVerlauf} />
         </div>
         {/* Quickview mounts once and is only hidden, like the screens above
             (Oct 2026, Markus), so its selection and scroll position stay. */}
-        <div className={view === 'quickview' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
+        <div className={view === 'quickview' ? SCREEN_WRAPPER : 'hidden'}>
           <Quickview year={quickviewYear} onOpenInKonten={openInKonten} active={view === 'quickview'} preset={quickviewPreset}
             onBack={quickviewFrom === 'verlauf' ? goBackToVerlauf : null}
           />
         </div>
         {/* Mounted once, only hidden — like the other data screens (Nov 2026). */}
-        <div className={view === 'dashboard' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
+        <div className={view === 'dashboard' ? SCREEN_WRAPPER : 'hidden'}>
           <Dashboard year={dashboardYear} active={view === 'dashboard'} onOpenInKonten={openInKonten} />
         </div>
         {/* Mounted once, only hidden — like the other data screens (Oct 2026). */}
-        <div className={view === 'aussenstaende' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
+        <div className={view === 'aussenstaende' ? SCREEN_WRAPPER : 'hidden'}>
           <Aussenstaende onOpenInKonten={openInKonten} active={view === 'aussenstaende'} />
         </div>
         {/* Mounted once, only hidden — like Quickview (Oct 2026). */}
-        <div className={view === 'urlaube' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
+        <div className={view === 'urlaube' ? SCREEN_WRAPPER : 'hidden'}>
           <Urlaube onOpenInKonten={openInKonten} onOpenInVerlauf={openInVerlauf} active={view === 'urlaube'} />
         </div>
         {view === 'settings' && <Settings year={year} onOpenInKonten={openInKonten} onOpenInVerlauf={openInVerlauf} />}
         {/* Mounted on first visit, then only hidden – Bank-Import and Regeln keep their cursor, scroll
             position and unsaved state when you come back (Nov 2026, Markus). */}
         {importExportSeen && (
-          <div className={view === 'importexport' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
+          <div className={view === 'importexport' ? SCREEN_WRAPPER : 'hidden'}>
             <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} active={view === 'importexport'} onOpenInKonten={openInKonten} />
           </div>
         )}

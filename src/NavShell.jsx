@@ -443,7 +443,7 @@ export default function NavShell({
             evaluated against the nearest scrolling ancestor under the
             touch point, not necessarily the document itself, so this
             needs the same fix directly, not just inherited from body. */}
-        <main className="flex flex-1 flex-col overflow-y-auto overscroll-none pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:pb-0">{children}</main>
+        <main className="flex flex-1 flex-col overflow-y-auto overscroll-none pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))] md:pb-0">{children}</main>
       </div>
 
       {/* Phone bottom nav — hidden at md and above, where the sidebar takes

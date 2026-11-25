@@ -163,6 +163,9 @@ html,
 body,
 #root {
   height: 100%;
+  /* The visible height on phones (Nov 2026): in a browser tab 100% is the height *without* the
+     address bar, so the bottom of the app (and the bottom bar's padding) sat below the screen. */
+  height: 100dvh;
 }
 
 body {
