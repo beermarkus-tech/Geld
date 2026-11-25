@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { collection, deleteDoc, doc, onSnapshot, setDoc, writeBatch } from 'firebase/firestore'
 import { AgGridReact } from 'ag-grid-react'
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community'
@@ -25,6 +25,7 @@ import { tagBalance, tagFilterMatchIds, tagFilterTotal, tagJahresende } from './
 import { qualifiedTagName, tagColorVar, tagParent } from './lib/tagStyle'
 import { useTagActions, useTags } from './TagsProvider'
 import TagEditor from './TagEditor'
+import { useNarrow } from './lib/useNarrow'
 import { pillLook } from './TagPill'
 
 // Ctrl/Cmd+Delete deletes a row (Oct 2026, Markus); the grid's own "Delete clears
@@ -2658,6 +2659,32 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     [accountById, categoryById, tagById, recentTagValues, accountFilter, accounts, categories, tags, confirmDeleteId, expandedIds, needsCtx, jumpViewActive, jumpView],
   )
 
+  // Phone (Nov 2026, Markus — Pixel 7, also for entering bookings): the same columns and
+  // editors, but Datum · Empfänger · Betrag first and narrow, the rest reachable by swiping
+  // sideways; the date shows as "12.10." (editing still takes any date).
+  const narrow = useNarrow()
+  const shownColumnDefs = useMemo(() => {
+    if (!narrow) return columnDefs
+    const PHONE = {
+      split: { width: 44 },
+      date: { width: 94, valueFormatter: (p) => (p.value ? `${p.value.slice(8, 10)}.${p.value.slice(5, 7)}.` : '') },
+      empfaenger: { width: 150, minWidth: 120 },
+      betrag: { width: 100 },
+      kategorie: { width: 130 },
+      unterkategorie: { width: 150 },
+      konto: { width: 170 },
+      details: { width: 160 },
+      tags: { width: 170 },
+      delete: { pinned: null },
+    }
+    const ORDER = ['split', 'date', 'empfaenger', 'betrag', 'kategorie', 'unterkategorie', 'konto', 'details', 'tags', 'delete']
+    const id = (c) => c.colId ?? 'konto'
+    return columnDefs
+      .map((c) => (PHONE[id(c)] ? { ...c, ...(id(c) === 'delete' ? {} : { flex: undefined, minWidth: undefined }), ...PHONE[id(c)] } : c))
+      .sort((a, b) => ORDER.indexOf(id(a)) - ORDER.indexOf(id(b)))
+  }, [narrow, columnDefs])
+  const [panelOpen, setPanelOpen] = useState(false)
+
   const panel = useMemo(() => {
     if (!year) return []
     return REPORTING_GROUPS.map((group) => {
@@ -2937,7 +2964,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
             when the Summe/Filter-zurücksetzen content isn't), with its own
             internal `gap-3` handling the spacing between whichever of its
             children are actually present. */}
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-3 max-md:ml-0 max-md:flex-wrap">
           {/* Markus: the tag-filter total ("thought through together before
               coding" — right where you're already looking once you've
               filtered, not a new panel section, which only makes sense for
@@ -3109,7 +3136,24 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           Phase 1a: every figure here should match the real Gsheet closing
           balance for that account/year. Each account is also a shortcut
           into the account filter above. */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      {/* Phone: one compact summary box; tap to open the full account panel. */}
+      {narrow && (
+        <button
+          type="button"
+          onClick={() => setPanelOpen((v) => !v)}
+          aria-expanded={panelOpen}
+          className="grid grid-cols-[1fr_auto] gap-x-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-left text-sm"
+        >
+          {panel.map(({ group, total }) => (
+            <Fragment key={group}>
+              <span className="text-[var(--color-text-muted)]">{group}</span>
+              <span className="tabular-figure text-right text-[var(--color-computed)]">{centsToEuro(total)} €</span>
+            </Fragment>
+          ))}
+          <span className="col-span-2 pt-1 text-center text-xs text-[var(--color-text-muted)]">{panelOpen ? 'Konten zuklappen ▴' : 'Alle Konten zeigen ▾'}</span>
+        </button>
+      )}
+      <div className={`grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5 ${narrow && !panelOpen ? 'hidden' : ''}`}>
         {panel.map(({ group, items, total, icTotal, tagItems }) => (
           <div key={group} data-group={group} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
             <div className="mb-1 flex items-baseline justify-between">
@@ -3229,7 +3273,7 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
           onGridReady={() => setGridReadyTick((t) => t + 1)}
           theme={themeQuartz}
           rowData={displayRows}
-          columnDefs={columnDefs}
+          columnDefs={shownColumnDefs}
           pinnedTopRowData={openingRow ? [openingRow] : undefined}
           isFullWidthRow={isOpeningRow}
           fullWidthCellRenderer={OpeningRow}

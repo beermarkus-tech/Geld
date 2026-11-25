@@ -500,6 +500,8 @@ Open question raised by Markus: the totality of existing budgeting apps tested s
 
 ## 3a. Konten (main ledger) — detailed spec
 
+**Phone layout (Nov 2026, Markus — Pixel 7; he also enters bookings there, though less often):** the account panel shrinks to one compact box (each reporting group with its total; tap → the full panel). The grid keeps every column and editor (double-tap edits, as double-click on the tablet), but Datum · Empfänger · Betrag come first and narrow (date shown as "12.10."), Kategorie, Unterkategorie, Konto, Details, Tags and the trashcan follow by swiping sideways (the trashcan is not pinned on the phone). The toolbar wraps. A dedicated phone entry form was considered and not built for now: the grid's popup editors already work on touch.
+
 **Ground truth principle:** Konten reflects 100% what has actually happened on real bank statements, plus corrective/internal transactions that never appear on a statement (e.g. Sparen Julia → Sparen Sophia). Future/planned bookings are never entered here — that belongs entirely to Verlauf/Planung.
 
 **Device-dependent entry mode:**
