@@ -1125,9 +1125,9 @@ function CardSection({ t, section, rows, c }) {
 
 function Line({ label, value, color }) {
   return (
-    <div className="flex justify-between">
-      <span>{label}</span>
-      <span className="tabular-figure" style={color ? { color } : undefined}>
+    <div className="flex justify-between gap-3">
+      <span className="min-w-0">{label}</span>
+      <span className="tabular-figure shrink-0 whitespace-nowrap" style={color ? { color } : undefined}>
         {value}
       </span>
     </div>

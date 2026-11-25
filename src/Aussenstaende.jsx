@@ -78,7 +78,7 @@ export default function Aussenstaende({ onOpenInKonten, active = true }) {
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
       <div className="flex items-baseline justify-between gap-3 border-b border-[var(--color-border)] pb-2">
         <span className="text-sm text-[var(--color-text-muted)]">Außenstände gesamt (alle offenen Forderungen)</span>
-        <span className="text-lg font-semibold tabular-nums">{centsToEuro(receivableTotal)} €</span>
+        <span className="shrink-0 whitespace-nowrap text-lg font-semibold tabular-nums">{centsToEuro(receivableTotal)} €</span>
       </div>
       <div className="flex gap-2">
         {[

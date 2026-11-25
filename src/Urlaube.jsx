@@ -17,7 +17,8 @@ import { useTags } from './TagsProvider'
 // numbers. lib/urlaube.js has the rules. Nothing is stored here but the search
 // text and the archive switch.
 const euro = (cents) => `${centsToWholeEuro(cents)} €`
-const GRID = 'grid grid-cols-[minmax(7rem,12rem)_minmax(0,1fr)_7rem_8.5rem] items-baseline gap-x-4'
+// Phone: Tag · Gebucht · Noch zu buchen; the details go on a second line.
+const GRID = 'grid grid-cols-[minmax(7rem,12rem)_minmax(0,1fr)_7rem_8.5rem] max-md:grid-cols-[minmax(0,1fr)_5.5rem_5.5rem] items-baseline gap-x-4 max-md:gap-x-2'
 const HEAD = 'text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]'
 
 function Amount({ cents }) {
@@ -116,10 +117,10 @@ function Card({ card, flash, collapsed, onToggle, onOpenRow, onOpenTag, onOpenVe
       </div>
 
       <div className="overflow-x-auto">
-        <div className="min-w-[34rem]">
+        <div className="min-w-[34rem] max-md:min-w-0">
           <div className={`${GRID} border-b border-[var(--color-border)] px-1 pb-1 ${HEAD}`}>
             <span>Tag</span>
-            <span>Details / Kommentar</span>
+            <span className="max-md:hidden">Details / Kommentar</span>
             <span className="text-right">Gebucht</span>
             <span className="text-right">Noch zu buchen</span>
           </div>
@@ -140,7 +141,7 @@ function Card({ card, flash, collapsed, onToggle, onOpenRow, onOpenTag, onOpenVe
                 }`}
               >
                 <span className="min-w-0 truncate">{r.label ?? card.tag.name}</span>
-                <span className={`min-w-0 text-xs leading-4 ${reduction ? '' : 'text-[var(--color-text-muted)]'}`}>
+                <span className={`min-w-0 text-xs leading-4 max-md:order-last max-md:col-span-3 ${reduction ? '' : 'text-[var(--color-text-muted)]'}`}>
                   {r.details.length > 0 && <span className={reduction ? '' : 'text-[var(--color-text)]'}>{r.details.join(' · ').replace(' · …', ' …')}</span>}
                   {r.comments.length > 0 && (
                     <span className="italic">
@@ -148,7 +149,7 @@ function Card({ card, flash, collapsed, onToggle, onOpenRow, onOpenTag, onOpenVe
                       {r.comments.join(' · ').replace(' · …', ' …')}
                     </span>
                   )}
-                  {r.details.length === 0 && r.comments.length === 0 && '—'}
+                  {r.details.length === 0 && r.comments.length === 0 && <span className="max-md:hidden">—</span>}
                 </span>
                 <span className="text-right"><Amount cents={r.booked} /></span>
                 <span className="text-right">
@@ -166,8 +167,9 @@ function Card({ card, flash, collapsed, onToggle, onOpenRow, onOpenTag, onOpenVe
   )
 }
 
-const HOL = 'grid grid-cols-[minmax(0,1fr)_4.75rem_4.75rem_4.75rem_5.25rem] items-baseline gap-x-2'
-const Money = ({ cents }) => <span className={`text-right tabular-nums ${cents === 0 ? 'text-[var(--color-text-muted)]' : ''}`}>{cents === 0 ? '–' : euro(cents)}</span>
+// Phone (Nov 2026): only Urlaub · Gesamt · Reduktion — Kosten and Zuschüsse would leave no room for the name.
+const HOL = 'grid grid-cols-[minmax(0,1fr)_4.75rem_4.75rem_4.75rem_5.25rem] max-md:grid-cols-[minmax(0,1fr)_5.5rem_4.5rem] items-baseline gap-x-2'
+const Money = ({ cents, className = '' }) => <span className={`text-right tabular-nums ${className} ${cents === 0 ? 'text-[var(--color-text-muted)]' : ''}`}>{cents === 0 ? '–' : euro(cents)}</span>
 // −20 % = the subventions took a fifth off the cost; "–" without any.
 function Reduction({ cost, subvention }) {
   const pct = subvention === 0 ? null : reductionPercent(cost, subvention)
@@ -227,8 +229,8 @@ function Overview({ years, holidays, untagged, outside, untaggedTxs, outsideTxs,
         <div className={`${HOL} border-b border-[var(--color-border)] pb-1 ${HEAD} normal-case`}>
           <span>Urlaub</span>
           <span className="text-right" title="Gesamtkosten = Kosten minus Zuschüsse und Geschenke (gebucht + noch geplant)">Gesamt</span>
-          <span className="text-right" title="Nur Kosten: alle Ausgaben (negative Buchungen) plus noch Geplantes">Kosten</span>
-          <span className="text-right" title="Zuschüsse und Geschenke: alle positiven Buchungen">Zuschüsse</span>
+          <span className="text-right max-md:hidden" title="Nur Kosten: alle Ausgaben (negative Buchungen) plus noch Geplantes">Kosten</span>
+          <span className="text-right max-md:hidden" title="Zuschüsse und Geschenke: alle positiven Buchungen">Zuschüsse</span>
           <span className="text-right" title="Gesamtkosten ÷ Kosten − 1, auf ganze Prozent gerundet">Reduktion</span>
         </div>
         {years
@@ -242,8 +244,8 @@ function Overview({ years, holidays, untagged, outside, untaggedTxs, outsideTxs,
                 <div className={`${HOL} border-b border-[var(--color-border)] px-1 pb-0.5 text-sm font-medium`}>
                   <span>{y.year}</span>
                   <Money cents={cost - subvention} />
-                  <Money cents={cost} />
-                  <Money cents={subvention} />
+                  <Money cents={cost} className="max-md:hidden" />
+                  <Money cents={subvention} className="max-md:hidden" />
                   <Reduction cost={cost} subvention={subvention} />
                 </div>
                 {list.map((h) => (
@@ -261,8 +263,8 @@ function Overview({ years, holidays, untagged, outside, untaggedTxs, outsideTxs,
                       </span>
                     </span>
                     <Money cents={h.total} />
-                    <Money cents={h.cost} />
-                    <Money cents={h.subvention} />
+                    <Money cents={h.cost} className="max-md:hidden" />
+                    <Money cents={h.subvention} className="max-md:hidden" />
                     <Reduction cost={h.cost} subvention={h.subvention} />
                   </button>
                 ))}
@@ -396,7 +398,7 @@ export default function Urlaube({ onOpenInKonten, onOpenInVerlauf, active = true
   }
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col gap-3 px-4 py-4">
+    <div className="flex min-h-0 w-full flex-1 flex-col gap-3 px-4 py-4 max-md:min-h-fit">
       <div className="mx-auto flex w-full max-w-[1800px] flex-wrap items-center gap-3">
         <input
           ref={searchRef}
@@ -460,8 +462,9 @@ export default function Urlaube({ onOpenInKonten, onOpenInVerlauf, active = true
 
       {categories.length > 0 && !categoryId && <p className="text-sm text-[var(--color-text-muted)]">Die Kategorie Sonstiges › Urlaube gibt es nicht.</p>}
 
-      <div className="mx-auto grid min-h-0 w-full max-w-[1800px] flex-1 grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-6">
-        <div className="flex min-h-0 flex-col gap-4 overflow-y-auto p-1">
+      {/* Phone (Nov 2026): cards first, the overview below them, one page scroll. */}
+      <div className="mx-auto grid min-h-0 w-full max-w-[1800px] flex-1 grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-6 max-md:grid-cols-[minmax(0,1fr)] max-md:flex-none">
+        <div className="flex min-h-0 flex-col gap-4 overflow-y-auto p-1 max-md:overflow-visible">
           {shown.length === 0 && (
             <p className="text-sm text-[var(--color-text-muted)]">{overview.holidays.length === 0 ? 'Noch keine Urlaube mit Buchungen oder Plan.' : 'Nichts gefunden.'}</p>
           )}
@@ -469,7 +472,7 @@ export default function Urlaube({ onOpenInKonten, onOpenInVerlauf, active = true
             <Card key={h.key} card={h} flash={flash === h.key} collapsed={collapsed.has(h.key)} onToggle={() => toggleCard(h.key)} onOpenRow={openRow} onOpenTag={openTag} onOpenVerlauf={openVerlauf} innerRef={(el) => (el ? cardRefs.current.set(h.key, el) : cardRefs.current.delete(h.key))} />
           ))}
         </div>
-        <div className="min-h-0 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+        <div className="min-h-0 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4 max-md:overflow-visible">
           <Overview
             years={overview.years}
             holidays={overview.holidays}

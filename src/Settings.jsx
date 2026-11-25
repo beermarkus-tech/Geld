@@ -7,6 +7,7 @@ import { MOVE_MESSAGES, twinIds } from './lib/tagActions'
 import { TAG_RENAME_MESSAGES } from './lib/tagRename'
 import { qualifiedName } from './lib/tags'
 import { CREATE_TYPES } from './lib/tagTypes'
+import { useNarrow } from './lib/useNarrow'
 import TagPill, { typeLook } from './TagPill'
 import TagBox from './TagBox'
 import { usageOf, useTagActions, useTagUsage, useTags } from './TagsProvider'
@@ -95,6 +96,7 @@ function PlainTagRow({ id, usage, targetNames, open, onToggle, onOpenBooking }) 
 
 function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, hasChildren, open, onToggle, onRename, onSetType, onMove, onMerge, onOpenPlan, onOpenBooking, kids = [], expanded = false, onToggleFamily, onArchive, archivedView = false }) {
   const [editing, setEditing] = useState(false)
+  const narrow = useNarrow()
   const [draft, setDraft] = useState(tag.name)
   const [error, setError] = useState('')
   const inputRef = useRef(null)
@@ -116,7 +118,8 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
 
   return (
     <div className="flex flex-col border-b border-[var(--color-border)] last:border-b-0">
-      <div className={`flex items-center gap-3 px-3 py-1.5 text-sm ${dim || archivedView ? 'opacity-50' : ''}`} style={{ paddingLeft: 12 + depth * 44 }}>
+      {/* Phone: name on the first line, the controls wrap below (Nov 2026). */}
+      <div className={`flex items-center gap-3 px-3 py-1.5 text-sm max-md:flex-wrap max-md:gap-y-1.5 ${dim || archivedView ? 'opacity-50' : ''}`} style={{ paddingLeft: 12 + depth * (narrow ? 20 : 44) }}>
         {/* A family is one line, its children small behind the parent; ▸
             opens it (children as their own lines, as before) (Oct 2026). */}
         {depth === 0 && !locked &&
@@ -133,7 +136,7 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
           ) : (
             <span className="-mr-1 w-7 shrink-0" />
           ))}
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden whitespace-nowrap">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden whitespace-nowrap max-md:basis-[calc(100%-3rem)]">
         {editing ? (
           <input
             ref={inputRef}
@@ -205,7 +208,7 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
             }}
             aria-label="Übergruppe"
             title={hasChildren ? 'Hat selbst Untertags — bleibt oben' : 'Übergruppe'}
-            className="w-48 shrink-0 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-1 py-0.5 text-sm text-[var(--color-text)] disabled:opacity-50"
+            className="w-48 shrink-0 rounded border max-md:w-36 border-[var(--color-border)] bg-[var(--color-surface)] px-1 py-0.5 text-sm text-[var(--color-text)] disabled:opacity-50"
           >
             <option value="">— keine Übergruppe —</option>
             {parents
@@ -218,7 +221,7 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
           </select>
         )}
         {locked ? (
-          <span className="w-40 shrink-0 text-sm text-[var(--color-text-muted)]">Rücklage</span>
+          <span className="w-40 shrink-0 text-sm text-[var(--color-text-muted)] max-md:w-auto">Rücklage</span>
         ) : (
           // The type can be changed here (Oct 2026, Markus). It decides where the
           // tag shows up: Anspruch → Außenstände, Reise/Projekt → Quickview rows.
@@ -226,7 +229,7 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
             value={tag.groupingType ?? ''}
             onChange={(e) => onSetType(tag.id, e.target.value || null)}
             aria-label="Typ"
-            className="w-40 shrink-0 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-1 py-0.5 text-sm text-[var(--color-text)]"
+            className="w-40 shrink-0 rounded border max-md:w-32 border-[var(--color-border)] bg-[var(--color-surface)] px-1 py-0.5 text-sm text-[var(--color-text)]"
           >
             {CREATE_TYPES.map((o) => (
               <option key={o.groupingType ?? 'none'} value={o.groupingType ?? ''}>
@@ -266,7 +269,7 @@ function TagRow({ tag, depth, label, dim, usage, targetNames, twin, parents, has
           type="button"
           onClick={onToggle}
           title="Zeigen, wo dieser Tag verwendet wird"
-          className={`flex w-72 shrink-0 items-center justify-end gap-1.5 whitespace-nowrap rounded-md px-2 py-0.5 text-sm tabular-nums hover:bg-[var(--color-bg)] hover:text-[var(--color-text)] ${open ? 'text-[var(--color-text)]' : 'text-[var(--color-text-muted)]'}`}
+          className={`flex w-72 shrink-0 items-center justify-end max-md:ml-auto max-md:w-auto gap-1.5 whitespace-nowrap rounded-md px-2 py-0.5 text-sm tabular-nums hover:bg-[var(--color-bg)] hover:text-[var(--color-text)] ${open ? 'text-[var(--color-text)]' : 'text-[var(--color-text-muted)]'}`}
         >
           <span>
             {usage.lines} {usage.lines === 1 ? 'Buchungszeile' : 'Buchungszeilen'}

@@ -43,7 +43,7 @@ function Waterfall({ data }) {
     )
   }
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ minWidth: W, width: '100%', maxWidth: Math.max(W, 900) }} role="img" aria-label="Von Plan zu Ist">
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ minWidth: W, width: '100%', maxWidth: Math.max(W, 900) }} className="max-md:!min-w-0" role="img" aria-label="Von Plan zu Ist">
       <line x1="60" x2={W - 6} y1={y(0)} y2={y(0)} stroke="var(--color-border)" />
       {bar(0, 0, start, NEUTRAL, 'Plan', shortAmount(start))}
       {steps.map((s, i) => bar(i + 1, s.from, s.to, s.delta < 0 ? BAD : GOOD, s.label, (s.delta > 0 ? '+' : '') + shortAmount(s.delta)))}
@@ -119,7 +119,7 @@ export default function MonthView({ categories, budgets, transactions, yearNum, 
       </div>
 
       {data.rows.length > 0 && (
-        <div className="overflow-x-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
+        <div className="shrink-0 overflow-x-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
           <div className="px-1 pb-1 text-xs text-[var(--color-text-muted)]">Von Plan zu Ist – nur Abweichungen ab {Math.round(SIGNIFICANT_SHARE * 100)} % der Summe aller Abweichungen (mindestens drei), der Rest unter „Übrige“</div>
           <Waterfall data={wf} />
         </div>
@@ -129,12 +129,13 @@ export default function MonthView({ categories, budgets, transactions, yearNum, 
         {shown.length === 0 && <p className="text-sm text-[var(--color-text-muted)]">Keine Abweichungen in diesem Zeitraum.</p>}
         {shown.map((r) => (
           <div key={r.id} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2">
-            <button type="button" onClick={() => open(r.txIds)} className="flex w-full items-center gap-3 text-left" title="Buchungen in Konten zeigen">
-              <span className="w-44 shrink-0 truncate font-medium">{r.name}</span>
-              <span className="tabular-figure w-28 shrink-0 text-right text-sm text-[var(--color-text-muted)]">Plan {shortAmount(r.planned)}</span>
-              <span className="tabular-figure w-28 shrink-0 text-right text-sm">Ist {shortAmount(r.actual)}</span>
+            <button type="button" onClick={() => open(r.txIds)} className="flex w-full items-center gap-3 text-left max-md:flex-wrap max-md:gap-y-1" title="Buchungen in Konten zeigen">
+              {/* Phone (Nov 2026): name + Abweichung on top, Plan · Ist · bar below. */}
+              <span className="w-44 shrink-0 truncate font-medium max-md:w-auto max-md:min-w-[55%] max-md:flex-1">{r.name}</span>
+              <span className="tabular-figure w-28 shrink-0 text-right text-sm text-[var(--color-text-muted)] max-md:order-2 max-md:w-auto max-md:text-left">Plan {shortAmount(r.planned)}</span>
+              <span className="tabular-figure w-28 shrink-0 text-right text-sm max-md:order-2 max-md:w-auto max-md:text-left">Ist {shortAmount(r.actual)}</span>
               {/* diverging bar: left = worse, right = better, zero line in the middle */}
-              <span className="relative h-4 min-w-24 flex-1">
+              <span className="relative h-4 min-w-24 flex-1 max-md:order-2">
                 <span className="absolute inset-y-0 left-1/2 w-px bg-[var(--color-border)]" />
                 <span
                   className="absolute inset-y-0.5 rounded-sm"
@@ -145,9 +146,10 @@ export default function MonthView({ categories, budgets, transactions, yearNum, 
                   }}
                 />
               </span>
-              <span className="tabular-figure w-28 shrink-0 text-right font-semibold" style={{ color: r.delta < 0 ? BAD : GOOD }}>
+              <span className="tabular-figure w-28 shrink-0 text-right font-semibold max-md:order-1 max-md:w-auto" style={{ color: r.delta < 0 ? BAD : GOOD }}>
                 {signed(r.delta)}
               </span>
+              <span className="hidden basis-full max-md:order-1 max-md:block" aria-hidden="true" />
             </button>
             {r.drivers.length > 0 && (
               <ul className="mt-1 flex flex-col gap-0.5 border-t border-[var(--color-border)] pt-1 text-sm">

@@ -80,7 +80,7 @@ export default function StatusChart({ categories, budgets, yearSettings, transac
       {bars.length === 0 ? (
         <p className="text-sm text-[var(--color-text-muted)]">Keine Kategorien mit Plan1-Werten für {yearNum}.</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
+        <div className="shrink-0 overflow-x-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
           <svg viewBox={`0 0 ${W} ${H}`} style={{ minWidth: W, width: '100%', maxHeight: 640 }} role="img" aria-label="Status je Kategorie">
             {Array.from({ length: yMax + 1 }, (_, m) => (
               <g key={m}>
