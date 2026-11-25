@@ -2636,3 +2636,20 @@ Markus: the toolbar had grown to two lines. Now: a toggle-button group Plan0 · 
 ## Session 37, continued two-hundred-and-twenty-first time — 2026-11-23 — Konten shows Verlauf's amounts after Strg+B
 
 Markus: no separate "Gebucht laut Verlauf" total – just "Angezeigt", and the direction of pot bookings should come out right (Sparen Sophia showed −400/−600 for in/out). **Built (SPEC §3b):** `categoryTxAmounts()`/`allocationTxAmounts()` in `lib/budget.js` (+ tests) give, per booking, the amount Verlauf counts (split booking: matching line only; pot/Investment Cash: into the pot −, out +). Verlauf's Strg+B hands this map over; Konten shows these amounts in Betrag while exactly those bookings are filtered (no account picked), so the normal "Angezeigt" equals the Verlauf cell. The "Gebucht laut Verlauf" display is gone. Harness-checked on the backup: Lebensmittel Jan–Okt, Sparen Sophia Juli +500, Sparen Familie Juli −5.000, Investment Cash Juli −2.578,05, Firmenwagen Feb 266,94 all match; year totals show the booked part only. 296 tests, lint, build pass.
+
+## Session 37, handover — 2026-11-25 — state for a fresh chat
+
+Markus asked whether the project can be handed to a new Claude chat. No app change this time; removed two stray test screenshots (`dl1.png`, `ex1.png`, mock data only) from the repo root.
+
+**Declined proposals (don't re-propose without a reason):** splitting the Dashboard red line into Barkonten (red) + Barkonten incl. Bargeld/Gutscheine (dashed), and leaving Bargeld out of Planung's start – Markus: too complicated for too little gain. Red line and Planung keep counting Barkonten + Bargeld (+ open claims) together; on the backup Planung's "Alle Barkonten" and the chart's "Start" agree to the cent (2025 9.823,31; 2026 10.181,87).
+
+**State:** Build 341 on `main`; branch `claude/organize-mockups-review-docs-7c98nq` equals `main`. 296 tests, lint, build pass. PLAN.md's phases are not ticked off one by one – this DEVLOG is the record of what exists; CODEMAP.md says where it lives.
+
+**Still open (awaiting Markus):**
+- Giro Sophia (Barkonten, `tracked: false`, 0 € today): Planung's start counts untracked Barkonten, `forecastSeries()` does not. Only matters once it holds money – then decide one rule for both.
+- Receivable cards: why only Außenstände showed up in Außenstände (entry ~line 2348) – awaiting an example.
+- The Phase 1b design question (a split line routing to its own account, e.g. salary part into ESOP) – check with Markus whether it is still wanted.
+
+**Working notes for the next session:** the repo is public – Markus's backup JSON (uploaded per session) must never be committed; use it only in the sandbox. Browser checks were done with a throw-away harness (mock Firestore fed from the backup, Playwright) that is deleted before each commit – rebuild it when needed. After every push to `main`, tell Markus the build number (`git rev-list --count origin/main`).
+
+**Next:** nothing pending – wait for Markus's next request.
