@@ -2667,8 +2667,8 @@ export default function Konten({ year, onYearChange, onYearsChange, initialFocus
     if (!narrow) return columnDefs
     const PHONE = {
       split: { width: 44 },
-      date: { width: 94, valueFormatter: (p) => (p.value ? `${p.value.slice(8, 10)}.${p.value.slice(5, 7)}.` : '') },
-      empfaenger: { width: 150, minWidth: 120 },
+      date: { width: 100, valueFormatter: (p) => (p.value ? `${p.value.slice(8, 10)}.${p.value.slice(5, 7)}.` : '') },
+      empfaenger: { width: 130 },
       betrag: { width: 100 },
       kategorie: { width: 130 },
       unterkategorie: { width: 150 },

@@ -35,6 +35,8 @@ import { CREATE_TYPES } from './lib/tagTypes'
 import { categoryActualIndex, checkMessage, planStatus } from './lib/planCheck'
 import { usePlanTolerance } from './lib/usePlanTolerance'
 import { isLabelId, labelIdFor, labelNames } from './lib/labels'
+import { useNarrow } from './lib/useNarrow'
+import VerlaufMonth from './VerlaufMonth'
 
 // Ctrl/Cmd+Delete deletes a row (Oct 2026, Markus); the grid's own "Delete clears
 // the cell" must not run on it too — onCellKeyDown still sees the key.
@@ -477,6 +479,7 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // work then (Oct 2026: Konten's Ctrl++ / Tab fired from other screens and
   // created empty bookings).
   const activeRef = useRef(active)
+  const narrow = useNarrow()
   activeRef.current = active
   // Hidden screens keep the newest data aside instead of recomputing on every save elsewhere.
   const syncWhenVisible = useDeferWhileHidden(active)
@@ -2188,6 +2191,29 @@ export default function Verlauf({ year, initialFocus, onFocusChange, active = tr
   // The Details of the bookings behind a row's "Gebucht" (categories only).
   const detailsOf = (row, months) => (row.targetKey === 'categoryId' ? actualIndex.details(row.targetId, months, row.checkTagIds) : [])
   const checkInfo = commentRow?.actuals ? buildCheck(commentRow, commentCell.colId) : null
+
+  // Phone (Nov 2026, Markus): one month at a time — VerlaufMonth.jsx, on the same rows.
+  if (narrow) {
+    const today = new Date()
+    const startMonth = yearNum === today.getFullYear() ? today.getMonth() + 1 : 1
+    return (
+      <VerlaufMonth
+        key={yearNum}
+        rows={rowData}
+        year={yearNum}
+        initialMonth={startMonth}
+        closedMonths={closedMonths}
+        onToggleClosed={toggleMonthClosed}
+        checkOf={(row, i) => monthCheck(row, i, closedMonths, tolerancePercent)}
+        onSave={persistBudgetMonth}
+        onOpenBookings={(row, m) => {
+          if (!openRowInKonten(row, `m${m}`)) window.alert('Für diesen Monat gibt es keine Buchungen.')
+        }}
+        onToggleBlock={setBlockExpanded}
+        nameOf={(row) => row.breakdownLabel ?? tagName(row.renameTagId)}
+      />
+    )
+  }
 
   return (
     <div className="flex h-full flex-col gap-3 px-4 py-3">

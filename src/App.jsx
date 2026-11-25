@@ -308,6 +308,19 @@ export default function App() {
             keeps mirroring state that no longer needs mirroring for this
             purpose) rather than worth the risk of also ripping out this
             round. */}
+        {/* Phone: no Esc key — a button back to the screen that opened Konten (Nov 2026). */}
+        {view === 'konten' && kontenFrom && (
+          <button
+            type="button"
+            onClick={() => {
+              setKontenFrom(null)
+              setView(kontenFrom)
+            }}
+            className="mx-4 mt-2 self-start rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm text-[var(--color-computed)] md:hidden"
+          >
+            ← Zurück zu {ALL_ITEMS.find((i) => i.id === kontenFrom)?.label ?? 'vorher'}
+          </button>
+        )}
         <div className={view === 'konten' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
           <Konten
             year={year}

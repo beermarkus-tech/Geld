@@ -606,6 +606,10 @@ Applying a saved filter fully replaces the grid's current filter state (quick-fi
 
 ## 3b. Verlauf (planning + actuals follow-up) — detailed spec
 
+**Phone: one month at a time (Nov 2026, Markus — Pixel 7):** below tablet width Verlauf shows a month view instead of the 12-month grid: ‹ Monat › at the top (starts on the current month in the current year, else January) with the "abgehakt" checkbox (same as the grid header), then per group a card with one line per category/pot: **Plan1** (an input where the grid lets you edit; a sum where split lines exist), **Gebucht** (what was really booked, coloured green/orange/tinted like the grid's Plan1 check; tap → those bookings in Konten) and **Prog**. Categories with split lines get ▸/▾ to show them (editable, Übergruppe rows as sums). Not on the phone: Plan0, "letztes Jahr", cell comments, the add/rename/remove line actions, Plan0 → Plan1 copy — those stay on the tablet. Same rows and figures as the grid (`VerlaufMonth.jsx` renders Verlauf's own `rowData`).
+
+**Back from Konten on the phone (Nov 2026):** wherever Konten was opened from another screen (Verlauf, Quickview, Urlaube, Dashboard, Außenstände), a "← Zurück zu …" button above the toolbar does what Esc does on the tablet.
+
 **Role:** while Konten is the single source of truth for what actually happened, Verlauf is the single source of truth for planning and monthly follow-up — how the user controls and steers spending toward a year-end outcome.
 
 **Structure:** category/subcategory rows × month columns, grouped into four visual sections carried over from the Gsheet: account totals (computed), income, expenses, and savings/investment transfers (see §2.7 on why transfers are planned alongside expenses).
