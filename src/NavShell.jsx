@@ -12,14 +12,16 @@ import { zoomLooksOff } from './lib/zoomGuard'
 // MORE_ITEMS are reached via phone's "More" sheet, but sit inline in the
 // tablet sidebar alongside PRIMARY_ITEMS — same destinations either way,
 // just a layout difference (§1b.2's own wording).
+// Nov 2026 (Markus, Pixel 7): Quickview takes Planung's bottom-bar place —
+// it reads better on a phone; Planung moves into the "Mehr" sheet.
 export const PRIMARY_ITEMS = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'konten', label: 'Konten' },
   { id: 'verlauf', label: 'Verlauf' },
-  { id: 'planung', label: 'Planung' },
+  { id: 'quickview', label: 'Quickview' },
 ]
 export const MORE_ITEMS = [
-  { id: 'quickview', label: 'Quickview' },
+  { id: 'planung', label: 'Planung' },
   { id: 'urlaube', label: 'Urlaube' },
   { id: 'monatsabschluss', label: 'Monatsabschluss' },
   { id: 'aussenstaende', label: 'Außenstände' },
@@ -47,7 +49,32 @@ function readSidebarCollapsed() {
   }
 }
 
-function NavButton({ item, active, onClick, className = '' }) {
+// Phone icons (Nov 2026, Markus: "the button bar needs icons") — plain
+// stroked 24px outlines, inline so there's no icon library to load.
+const ICON_PATHS = {
+  dashboard: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
+  konten: 'M3 6h18v12H3zM3 10h18M7 15h4',
+  verlauf: 'M3 4h18v16H3zM3 9h18M8 4v16',
+  quickview: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM16 16l5 5',
+  planung: 'M4 5h16v15H4zM4 10h16M8 3v4M16 3v4',
+  urlaube: 'M3 20h18M12 4c-4 0-7 3-7 6h14c0-3-3-6-7-6zM12 10v10',
+  monatsabschluss: 'M4 12l5 5L20 6',
+  aussenstaende: 'M18 6.5a7 7 0 1 0 0 11M4 10h10M4 14h10',
+  importexport: 'M12 3v12M7 10l5 5 5-5M4 21h16',
+  settings: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2',
+  more: 'M5 12h.01M12 12h.01M19 12h.01',
+  reload: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',
+  theme: 'M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z',
+}
+export function NavIcon({ id, className = 'h-6 w-6' }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={id === 'more' ? 3 : 1.8} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <path d={ICON_PATHS[id]} />
+    </svg>
+  )
+}
+
+function NavButton({ item, active, onClick, className = '', children }) {
   return (
     <button
       type="button"
@@ -61,6 +88,7 @@ function NavButton({ item, active, onClick, className = '' }) {
         className
       }
     >
+      {children}
       {item.label}
     </button>
   )
@@ -248,9 +276,16 @@ export default function NavShell({
 
   const activeItem = ALL_ITEMS.find((i) => i.id === activeView)
 
+  // The floating build badge would sit on the bottom bar on a phone; there the
+  // number is shown in the "Mehr" sheet instead (index.css hides the badge).
+  useEffect(() => {
+    document.body.dataset.shell = '1'
+    return () => delete document.body.dataset.shell
+  }, [])
+
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3">
+      <header className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 max-md:py-2">
         <div className="flex items-center gap-3">
           {/* Burger — tablet only (md:), next to "Geld" (Markus's own
               placement request) — toggles the sidebar's collapsed state so
@@ -264,12 +299,14 @@ export default function NavShell({
           >
             ☰
           </button>
-          <h1 className="text-lg font-semibold">Geld</h1>
+          {/* Phone: only the screen's name (Nov 2026, Markus: the top bar was too cramped). */}
+          <h1 className="text-lg font-semibold max-md:hidden">Geld</h1>
+          {activeItem && <h1 className="text-lg font-semibold md:hidden">{activeItem.label}</h1>}
           {/* Screen title alongside the fixed "Geld" brand (spec.md §1b.3:
               "screen title... top app bar") — a plain dash-separated suffix
               rather than replacing "Geld" outright, so the app's own name
               stays the one constant landmark across every screen. */}
-          {activeItem && <span className="text-sm text-[var(--color-text-muted)]">— {activeItem.label}</span>}
+          {activeItem && <span className="text-sm text-[var(--color-text-muted)] max-md:hidden">— {activeItem.label}</span>}
         </div>
 
         <div className="flex items-center gap-3">
@@ -278,8 +315,23 @@ export default function NavShell({
               they exist). `years` comes from whichever screen currently
               knows what data exists (Konten reports it up via
               onYearsChange) — empty until that first reports in. */}
+          {/* Phone: one compact year picker instead of a row of buttons. */}
           {years.length > 0 && (
-            <div className="flex items-center gap-1">
+            <select
+              value={year}
+              onChange={(e) => onYearChange(e.target.value)}
+              aria-label="Jahr"
+              className="rounded-md bg-[var(--color-computed)] px-2 py-1 text-sm font-medium text-white md:hidden"
+            >
+              {years.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          )}
+          {years.length > 0 && (
+            <div className="flex items-center gap-1 max-md:hidden">
               {years.map((y) => (
                 <button
                   key={y}
@@ -306,7 +358,7 @@ export default function NavShell({
             disabled={reloading}
             aria-label="App neu laden"
             title="App neu laden — holt die neueste Version"
-            className={`flex h-8 w-8 items-center justify-center rounded-md text-lg text-[var(--color-text-muted)] hover:bg-[var(--color-bg)] ${reloading ? 'animate-spin' : ''}`}
+            className={`flex h-8 w-8 items-center justify-center rounded-md text-lg text-[var(--color-text-muted)] hover:bg-[var(--color-bg)] max-md:hidden ${reloading ? 'animate-spin' : ''}`}
           >
             ⟳
           </button>
@@ -317,7 +369,7 @@ export default function NavShell({
             type="button"
             onClick={() => setIsDark(toggleTheme() === 'dark')}
             aria-label={isDark ? 'Zu Tagmodus wechseln' : 'Zu Nachtmodus wechseln'}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-lg hover:bg-[var(--color-bg)]"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-lg hover:bg-[var(--color-bg)] max-md:hidden"
           >
             {isDark ? '☀️' : '🌙'}
           </button>
@@ -391,37 +443,33 @@ export default function NavShell({
             evaluated against the nearest scrolling ancestor under the
             touch point, not necessarily the document itself, so this
             needs the same fix directly, not just inherited from body. */}
-        <main className="flex flex-1 flex-col overflow-y-auto overscroll-none pb-16 md:pb-0">{children}</main>
+        <main className="flex flex-1 flex-col overflow-y-auto overscroll-none pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:pb-0">{children}</main>
       </div>
 
       {/* Phone bottom nav — hidden at md and above, where the sidebar takes
           over navigation instead (spec.md §1b.2). */}
-      <nav className="fixed inset-x-0 bottom-0 z-10 flex border-t border-[var(--color-border)] bg-[var(--color-surface)] md:hidden">
-        {PRIMARY_ITEMS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => navigate(item.id)}
-            aria-current={item.id === activeView ? 'page' : undefined}
-            className={
-              'flex-1 py-2 text-center text-xs ' +
-              (item.id === activeView ? 'font-semibold text-[var(--color-computed)]' : 'text-[var(--color-text-muted)]')
-            }
-          >
-            {item.label}
-          </button>
-        ))}
-        <button
-          type="button"
-          onClick={() => setMoreOpen(true)}
-          aria-current={MORE_ITEMS.some((i) => i.id === activeView) ? 'page' : undefined}
-          className={
-            'flex-1 py-2 text-center text-xs ' +
-            (MORE_ITEMS.some((i) => i.id === activeView) ? 'font-semibold text-[var(--color-computed)]' : 'text-[var(--color-text-muted)]')
-          }
-        >
-          More
-        </button>
+      <nav
+        className="fixed inset-x-0 bottom-0 z-10 flex border-t border-[var(--color-border)] bg-[var(--color-surface)] md:hidden"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
+        {[...PRIMARY_ITEMS, { id: 'more', label: 'Mehr' }].map((item) => {
+          const active = item.id === 'more' ? MORE_ITEMS.some((i) => i.id === activeView) : item.id === activeView
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => (item.id === 'more' ? setMoreOpen(true) : navigate(item.id))}
+              aria-current={active ? 'page' : undefined}
+              className={
+                'flex h-16 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] ' +
+                (active ? 'font-semibold text-[var(--color-computed)]' : 'text-[var(--color-text-muted)]')
+              }
+            >
+              <NavIcon id={item.id === 'more' && MORE_ITEMS.some((i) => i.id === activeView) ? activeView : item.id} />
+              {item.id === 'more' && MORE_ITEMS.some((i) => i.id === activeView) ? MORE_ITEMS.find((i) => i.id === activeView).label : item.label}
+            </button>
+          )
+        })}
       </nav>
 
       {/* "More" sheet (phone only) — same destinations as the tablet
@@ -433,8 +481,33 @@ export default function NavShell({
           <div className="relative flex w-full flex-col rounded-t-lg bg-[var(--color-surface)]" onClick={(e) => e.stopPropagation()}>
             <div className="flex flex-col gap-1 p-3">
               {MORE_ITEMS.map((item) => (
-                <NavButton key={item.id} item={item} active={item.id === activeView} onClick={() => navigate(item.id)} className="w-full" />
+                <NavButton key={item.id} item={item} active={item.id === activeView} onClick={() => navigate(item.id)} className="flex w-full items-center gap-3">
+                  <NavIcon id={item.id} className="h-5 w-5" />
+                </NavButton>
               ))}
+            </div>
+            {/* Reload, day/night and the build number live here on the phone. */}
+            <div className="flex items-center gap-2 border-t border-[var(--color-border)] px-3 py-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setReloading(true)
+                  reloadApp()
+                }}
+                className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]"
+              >
+                <NavIcon id="reload" className={`h-5 w-5 ${reloading ? 'animate-spin' : ''}`} />
+                Neu laden
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsDark(toggleTheme() === 'dark')}
+                className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]"
+              >
+                <NavIcon id="theme" className="h-5 w-5" />
+                {isDark ? 'Tagmodus' : 'Nachtmodus'}
+              </button>
+              <span className="ml-auto pr-2 text-xs text-[var(--color-text-muted)]">Build {__BUILD_NUMBER__}</span>
             </div>
             <UserBadge
               userEmail={userEmail}

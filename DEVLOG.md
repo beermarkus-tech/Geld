@@ -2653,3 +2653,9 @@ Markus asked whether the project can be handed to a new Claude chat. No app chan
 **Working notes for the next session:** the repo is public – Markus's backup JSON (uploaded per session) must never be committed; use it only in the sandbox. Browser checks were done with a throw-away harness (mock Firestore fed from the backup, Playwright) that is deleted before each commit – rebuild it when needed. After every push to `main`, tell Markus the build number (`git rev-list --count origin/main`).
 
 **Next:** nothing pending – wait for Markus's next request.
+
+## Session 38 — 2026-11-25 — Phone (Pixel 7): screen-by-screen check; step 1 navigation
+
+Markus (Pixel 7, upright, 412 px): the bottom bar needs icons, the top bar is too cramped. Checked every screen at 412 px in a rebuilt throw-away harness (mock Firestore with *made-up* data from `migration/seed` — no backup this session); findings and his decisions: bottom bar gets Quickview instead of Planung; he does enter bookings in Konten on the phone (sometimes); Verlauf on the phone = one month at a time. Order agreed: (1) navigation, (2) small fixes (Settings tag rows, Urlaube stacking, Dashboard Prognose/Monat, Außenstände total, Planung text, Verlauf comment box), (3) Konten phone layout, (4) Verlauf month view.
+
+**Step 1 built (SPEC §1b.2):** phone bottom bar with icons + labels (Dashboard · Konten · Verlauf · Quickview · Mehr; a Mehr-sheet screen shows its own icon/name in the fifth slot); Mehr sheet with icons plus Neu laden, Tag-/Nachtmodus and the build number; phone top bar = screen name + year dropdown only; floating build badge hidden on the phone (`body[data-shell]`). Tablet unchanged; Ctrl+1…0 order unchanged (`NAV_ORDER`). Harness: header 45 px, no sideways scroll on Außenstände, year dropdown switches. 296 tests, lint, build pass.

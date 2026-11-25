@@ -258,3 +258,11 @@ body {
   background-color: var(--color-needs-entry);
   color: #1f1a00;
 }
+
+/* Phone: the build number moves into the "Mehr" sheet (NavShell) instead of
+   floating over the bottom bar (Nov 2026). */
+@media (max-width: 767px) {
+  body[data-shell] .build-badge {
+    display: none;
+  }
+}

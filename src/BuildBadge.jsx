@@ -4,7 +4,7 @@
 export default function BuildBadge() {
   return (
     <span
-      className="tabular-figure pointer-events-none fixed z-50 text-[10px] text-[var(--color-text-muted)] opacity-60"
+      className="build-badge tabular-figure pointer-events-none fixed z-50 text-[10px] text-[var(--color-text-muted)] opacity-60"
       style={{
         right: 'calc(env(safe-area-inset-right, 0px) + 6px)',
         bottom: 'calc(env(safe-area-inset-bottom, 0px) + 4px)',
