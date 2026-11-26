@@ -210,9 +210,6 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
   return (
     <div className="flex min-h-0 flex-1 gap-4 px-4 py-4">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto">
-        <p className="text-sm text-[var(--color-text-muted)]">
-          ✓ / ⚠ prüft die App selbst, Kästchen hakst du ab. Einen Monat antippen (Kopf oder ✓ / ⚠) zeigt rechts alle Details dazu. „Abschließen“ ist derselbe Haken wie in Verlauf.
-        </p>
         <div className="min-w-[46rem] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-sm">
           <div className={`${cols} sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-surface)] py-1 font-medium`}>
             <span className="px-3 py-1">{yearNum}</span>
