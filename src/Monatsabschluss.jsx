@@ -122,7 +122,7 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
     return (
       <input
         type="checkbox"
-        className={className}
+        className={`${className} accent-[var(--color-plan-ok)]`}
         checked={m <= uptoMonth && isDone(it, m, ticks, autoTick)}
         disabled={m > uptoMonth}
         onChange={() => tick(it.id, m)}

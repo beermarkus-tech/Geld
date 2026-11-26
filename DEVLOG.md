@@ -2709,3 +2709,7 @@ Markus: hovering doesn't work (touch). **Built:** the tablet layout is now table
 ## Session 38, continued — 2026-11-26 — Monatsabschluss: green / amber tints
 
 Markus: tint checked fields light green, attention fields light red/amber. **Built:** `cellState()` (ok / warn / null) and `TINT` in `Monatsabschluss.jsx`, applied to table cells and panel rows; the selected month in the table is now an outline instead of a blue wash. 307 tests, lint, build pass.
+
+## Session 38, continued — 2026-11-26 — Monatsabschluss: green checkboxes
+
+Markus: ticked manual checkboxes green instead of blue. `accent-[var(--color-plan-ok)]` on the checkbox. Lint, tests, build pass.
