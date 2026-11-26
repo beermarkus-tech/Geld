@@ -2721,3 +2721,7 @@ Markus: indicate a new build on the reload button with a small dot. **Built (SPE
 ## Session 38, continued — 2026-11-26 — Monatsabschluss: manual ticks look like the automatic ✓
 
 Markus: manual boxes should look like the auto check marks but keep a box. The checkbox is now a `role="checkbox"` button: thin box, green ✓ when ticked (border turns green), empty box otherwise; same in table and panel. Harness: ticking DKB Sep/Okt shows boxed green ✓ on green tint. 307 tests, lint, build pass.
+
+## Session 38, continued — 2026-11-26 — Monatsabschluss: "Abgeschlossen" row removed
+
+Markus: remove the last row (push back if wrong). Removed; to keep the at-a-glance view of which months are closed, the month heading shows a small green ✓ for a closed month (the row's only content). Closing stays in the panel. 307 tests, lint, build pass.

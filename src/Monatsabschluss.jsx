@@ -225,6 +225,8 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
                 className={`mx-0.5 rounded py-1 text-center ${sel === i + 1 ? 'bg-[var(--color-computed)] text-white' : i + 1 === uptoMonth && yearNum === now.getFullYear() ? 'text-[var(--color-computed)]' : ''} ${i + 1 > uptoMonth ? 'opacity-40' : ''}`}
               >
                 {label}
+                {/* closed months (= Verlauf's tick) get a small ✓ in the heading — the old "Abgeschlossen" row is gone */}
+                {closedMonths.includes(i + 1) && <span className={`ml-0.5 text-xs ${sel === i + 1 ? '' : 'text-[var(--color-plan-ok)]'}`}>✓</span>}
               </button>
             ))}
           </div>
@@ -252,16 +254,6 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
                 ))}
             </Fragment>
           ))}
-          <div className={`${cols} items-center border-t-2 border-[var(--color-border)] py-2`}>
-            <span className="px-3 font-medium">Abgeschlossen</span>
-            {MONTHS.map((label, i) => (
-              <span key={label} className={`flex justify-center ${sel === i + 1 ? 'bg-[color-mix(in_srgb,var(--color-computed)_10%,transparent)]' : ''}`}>
-                <button type="button" onClick={() => setMonth(i + 1)} className={closedMonths.includes(i + 1) ? 'font-semibold text-[var(--color-plan-ok)]' : 'text-[var(--color-text-muted)]'}>
-                  {closedMonths.includes(i + 1) ? '✓' : '·'}
-                </button>
-              </span>
-            ))}
-          </div>
         </div>
       </div>
       {/* The selected month in full: every reason written out, ⚠ links, account hints, the close button. */}
