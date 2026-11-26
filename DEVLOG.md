@@ -2705,3 +2705,7 @@ Markus: Amazon auto-ticks when all Amazon bookings have a category; asked how Am
 ## Session 38, continued — 2026-11-26 — Monatsabschluss: detail panel instead of tooltips
 
 Markus: hovering doesn't work (touch). **Built:** the tablet layout is now table + right-hand panel for the selected month (`monthList()` / `monthSwitcher()`, shared with the phone view): reasons written out, account hints, ⚠ links, close button. In the table, month headings and ✓/⚠ select the month; the last table row only shows which months are closed. All `title` tooltips removed from this screen. Fixed on the way: a future month showed a ticked (disabled) Amazon box. 307 tests, lint, build pass.
+
+## Session 38, continued — 2026-11-26 — Monatsabschluss: green / amber tints
+
+Markus: tint checked fields light green, attention fields light red/amber. **Built:** `cellState()` (ok / warn / null) and `TINT` in `Monatsabschluss.jsx`, applied to table cells and panel rows; the selected month in the table is now an outline instead of a blue wash. 307 tests, lint, build pass.

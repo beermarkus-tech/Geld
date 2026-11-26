@@ -14,6 +14,8 @@ import { useTags } from './TagsProvider'
 // switch as the month's tick in Verlauf (settings/{year}.closedMonths) — warns when items are open.
 const MONTHS = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
 const MONTHS_LONG = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember']
+// Cell tints (Nov 2026, Markus): done = light green, needs attention = light amber.
+const TINT = { ok: 'color-mix(in srgb, var(--color-plan-ok) 16%, transparent)', warn: 'color-mix(in srgb, var(--color-plan-off) 22%, transparent)' }
 const euro = (cents) => `${(cents / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
 
 function AutoCell({ s, onJump, onSelect, wide = false }) {
@@ -134,6 +136,15 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
 
   // One month as a list — the phone's view, and the tablet's detail panel next to the table
   // (Nov 2026, Markus: tooltips don't work on a touch screen; every reason is written out here).
+  // 'ok' (ticked by hand or automatically, or an automatic ✓), 'warn' (an automatic ⚠) or null
+  const cellState = (it, m) => {
+    if (m > uptoMonth) return null
+    if (it.auto) {
+      const st = status(it.auto, m).state
+      return st === 'ok' || st === 'warn' ? st : null
+    }
+    return isDone(it, m, ticks, autoTick) ? 'ok' : null
+  }
   const monthList = (m) => {
     const closed = closedMonths.includes(m)
     return (
@@ -144,7 +155,7 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
             {items
               .filter((it) => it.section === sec.id)
               .map((it) => (
-                <div key={it.id} className="flex items-center gap-3 border-t border-[var(--color-border)] px-3 py-2 text-sm first-of-type:border-t-0">
+                <div key={it.id} className="flex items-center gap-3 border-t border-[var(--color-border)] px-3 py-2 text-sm first-of-type:border-t-0" style={{ backgroundColor: TINT[cellState(it, m)] }}>
                   <div className="min-w-0 flex-1">
                     <div>{it.label}</div>
                     {hintText(it, m) && <div className="text-xs text-[var(--color-text-muted)]">{hintText(it, m)}</div>}
@@ -222,7 +233,11 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
                     {MONTHS.map((label, i) => {
                       const m = i + 1
                       return (
-                        <span key={label} className={`flex justify-center ${sel === m ? 'bg-[color-mix(in_srgb,var(--color-computed)_10%,transparent)]' : ''}`}>
+                        <span
+                          key={label}
+                          className={`mx-px flex justify-center self-stretch rounded-sm py-0.5 ${sel === m ? 'outline outline-1 -outline-offset-1 outline-[var(--color-computed)]' : ''}`}
+                          style={{ backgroundColor: TINT[cellState(it, m)] }}
+                        >
                           {it.auto ? <AutoCell s={status(it.auto, m)} onSelect={() => setMonth(m)} /> : <Check it={it} m={m} label={`${it.label} ${label}`} onSelect={() => setMonth(m)} />}
                         </span>
                       )
