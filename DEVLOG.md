@@ -2697,3 +2697,7 @@ Markus: tick the account boxes automatically as soon as the account has bookings
 ## Session 38, continued — 2026-11-26 — Monatsabschluss: AIRBUS Gehalt ticks itself
 
 Markus: AIRBUS Gehalt is done once its booking has sub-lines that add up to the total. **Built:** `autoTick: 'salarySplit'`; `autoTicker()` in `lib/monthClose.js` replaces the plain counter (returns the reason text or null for 'bookings' and 'salarySplit'); a salary booking = money in with a line in `einnahmen-gehalt-markus`; ✓ when every such booking of the month has ≥ 2 lines, all categorised, summing to its amount (sums always match by the remainder rule; the category condition is what turns it green once the payslip is entered). +1 test (306). SPEC §3h updated.
+
+## Session 38, continued — 2026-11-26 — Monatsabschluss: Amazon ticks itself
+
+Markus: Amazon auto-ticks when all Amazon bookings have a category; asked how Amazon bookings are recognised. **Answer/built:** the existing rule of Konten's "Amazon" chip, now shared as `isAmazon()` in `lib/needsEntry.js` ("amazon" or a word starting with "amz" in Empfänger or bank text). `autoTick: 'amazonCategorized'` uses needs-entry's category rule per line (transfers need no category); a month without Amazon bookings counts as done. +1 test (307). SPEC §3h updated.

@@ -50,6 +50,15 @@ describe('monthClose', () => {
     expect(autoTicker([sal([{ amountCents: 700000, categoryId: g, tags: [] }, { amountCents: -100000, categoryId: 'steuer', tags: [] }])], 2026)(gehalt, 1)).toBe(null) // doesn't add up
     expect(autoTicker([], 2026)(gehalt, 1)).toBe(null) // no salary that month
   })
+  it('Amazon ticks itself when every Amazon booking of the month has a category (none = nothing to do)', () => {
+    const amazon = DEFAULT_ITEMS.find((i) => i.id === 'amazon')
+    const az = (id, cat) => ({ ...tx(id, '2026-01-12', 'bnp-konto', null, -2500, [{ amountCents: -2500, categoryId: cat, tags: [] }]), displayLabel: 'AMAZON PAYMENTS' })
+    expect(autoTicker([az('a', 'food'), az('b', 'food')], 2026)(amazon, 1)).toBe('2 Amazon-Buchungen kategorisiert')
+    expect(autoTicker([az('a', 'food'), az('b', null)], 2026)(amazon, 1)).toBe(null)
+    expect(autoTicker([], 2026)(amazon, 1)).toBe('keine Amazon-Buchungen')
+    // a transfer to the Außenstände account needs no category
+    expect(autoTicker([{ ...tx('t', '2026-01-12', 'bnp-konto', 'aussenstaende', 2500, [{ amountCents: 2500, categoryId: null, tags: [] }]), rawDescription: 'AMZ MKTP' }], 2026)(amazon, 1)).toBe('1 Amazon-Buchung kategorisiert')
+  })
   it('Consors: below 200 € warns, from 200 € on it is fine', () => {
     expect(run({ transactions: [...base, tx('c', '2026-01-05', null, 'consors-verrechnungskonto', 20000)] })('consors', 1).state).toBe('ok')
     expect(run({ transactions: [...base, tx('c', '2026-01-05', null, 'consors-verrechnungskonto', 19999)] })('consors', 1).state).toBe('warn')

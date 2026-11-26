@@ -3,7 +3,7 @@
 // are plain checkboxes stored per year and month (settings/{year}.closeTicks).
 import { balance } from './balance'
 import { claimTotal } from './claims'
-import { NEEDS_ENTRY_RULES, linesOf } from './needsEntry'
+import { NEEDS_ENTRY_RULES, isAmazon, linesOf } from './needsEntry'
 import { monthChecks } from './monthChecks'
 
 export const SECTIONS = [
@@ -18,7 +18,9 @@ export const SECTIONS = [
 // an account's bookings in one go, then ticks — one booking is a good enough sign); without bookings
 // the box can still be ticked by hand (a month with nothing to book). `autoTick: 'salarySplit'` (AIRBUS
 // Gehalt, Markus Nov 2026): ticked once the month's salary booking is split into lines that add up to
-// its total, every line with a category.
+// its total, every line with a category. `'amazonCategorized'` (Amazon, Markus Nov 2026): ticked when
+// every Amazon booking of the month (lib/needsEntry.js isAmazon) has its category — a transfer between
+// two accounts needs none; a month without Amazon bookings has nothing to do and is ticked too.
 // shows that account's month-end balance and booking count next to the checkbox.
 export const DEFAULT_ITEMS = [
   { id: 'bnp-import', section: 'daten', label: 'BNP', accountId: 'bnp-konto', autoTick: 'bookings' },
@@ -33,7 +35,7 @@ export const DEFAULT_ITEMS = [
   { id: 'notizen', section: 'daten', label: 'Notizen' },
   { id: 'kategorien', section: 'verfeinerung', label: 'Alles kategorisiert', auto: 'categorized' },
   { id: 'gehalt', section: 'verfeinerung', label: 'AIRBUS Gehalt', autoTick: 'salarySplit' },
-  { id: 'amazon', section: 'verfeinerung', label: 'Amazon' },
+  { id: 'amazon', section: 'verfeinerung', label: 'Amazon', autoTick: 'amazonCategorized' },
   { id: 'aussenstaende', section: 'verfeinerung', label: 'Außenstände', auto: 'claims' },
   { id: 'prognose', section: 'abschluss', label: 'Prognose = Kontostand', auto: 'prognose' },
   { id: 'unterkonten', section: 'abschluss', label: 'Unterkonten = Rücklagen', auto: 'reserves' },
@@ -155,6 +157,13 @@ export function autoTicker(transactions, year) {
     const m = Number(t.date.slice(5, 7))
     salary.set(m, [...(salary.get(m) ?? []), t])
   }
+  const amazon = new Map() // month → Amazon bookings
+  const categoryRule = NEEDS_ENTRY_RULES.find((r) => r.id === 'category')
+  for (const t of transactions) {
+    if (t.deletedAt || !t.date?.startsWith(String(year)) || !isAmazon(t)) continue
+    const m = Number(t.date.slice(5, 7))
+    amazon.set(m, [...(amazon.get(m) ?? []), t])
+  }
   const split = (t) => {
     const lines = t.lines ?? []
     return lines.length >= 2 && lines.every((l) => l.categoryId) && lines.reduce((a, l) => a + l.amountCents, 0) === t.amountCents
@@ -167,6 +176,11 @@ export function autoTicker(transactions, year) {
     if (it.autoTick === 'salarySplit') {
       const list = salary.get(m) ?? []
       return list.length > 0 && list.every(split) ? 'Gehalt aufgeteilt' : null
+    }
+    if (it.autoTick === 'amazonCategorized') {
+      const list = amazon.get(m) ?? []
+      if (list.length === 0) return 'keine Amazon-Buchungen'
+      return list.every((t) => linesOf(t).every((l) => !categoryRule.check(t, l))) ? `${list.length} Amazon-Buchung${list.length === 1 ? '' : 'en'} kategorisiert` : null
     }
     return null
   }

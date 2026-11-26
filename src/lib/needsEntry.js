@@ -64,9 +64,11 @@ export function bookingsNeedingEntry(transactions, ctx) {
 // belong to. A booking may fall under several chips; "Andere" is what none of the others show.
 // A booking belongs to a sub-category chip when one of its lines is in that Außenstände sub-category.
 const inCat = (tx, id) => (tx.lines ?? []).some((l) => l.categoryId === id)
+/** An Amazon booking: "amazon" or "amz…" in the Empfänger or the bank text (also used by Monatsabschluss). */
+export const isAmazon = (tx) => /amazon|\bamz/i.test(`${tx.displayLabel ?? ''} ${tx.rawDescription ?? ''}`)
 export const NEEDS_ENTRY_CHIPS = [
   { key: 'sign', label: 'Vorzeichen', test: (tx) => signMismatch(tx) },
-  { key: 'amazon', label: 'Amazon', test: (tx) => /amazon|\bamz/i.test(`${tx.displayLabel ?? ''} ${tx.rawDescription ?? ''}`) },
+  { key: 'amazon', label: 'Amazon', test: (tx) => isAmazon(tx) },
   { key: 'cpam', label: 'CPAM', test: (tx) => inCat(tx, 'aussenstaende-cpam') },
   { key: 'verliehen', label: 'Verliehen', test: (tx) => inCat(tx, 'aussenstaende-verliehen') },
   { key: 'airbus', label: 'Airbus', test: (tx) => inCat(tx, 'aussenstaende-airbus-reisekosten') },
