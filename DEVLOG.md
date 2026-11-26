@@ -2701,3 +2701,7 @@ Markus: AIRBUS Gehalt is done once its booking has sub-lines that add up to the 
 ## Session 38, continued — 2026-11-26 — Monatsabschluss: Amazon ticks itself
 
 Markus: Amazon auto-ticks when all Amazon bookings have a category; asked how Amazon bookings are recognised. **Answer/built:** the existing rule of Konten's "Amazon" chip, now shared as `isAmazon()` in `lib/needsEntry.js` ("amazon" or a word starting with "amz" in Empfänger or bank text). `autoTick: 'amazonCategorized'` uses needs-entry's category rule per line (transfers need no category); a month without Amazon bookings counts as done. +1 test (307). SPEC §3h updated.
+
+## Session 38, continued — 2026-11-26 — Monatsabschluss: detail panel instead of tooltips
+
+Markus: hovering doesn't work (touch). **Built:** the tablet layout is now table + right-hand panel for the selected month (`monthList()` / `monthSwitcher()`, shared with the phone view): reasons written out, account hints, ⚠ links, close button. In the table, month headings and ✓/⚠ select the month; the last table row only shows which months are closed. All `title` tooltips removed from this screen. Fixed on the way: a future month showed a ticked (disabled) Amazon box. 307 tests, lint, build pass.

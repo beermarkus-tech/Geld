@@ -3,7 +3,7 @@ import { collection, doc, onSnapshot, setDoc } from 'firebase/firestore'
 
 import { db } from './firebase'
 import { claimCategoryIds } from './lib/claims'
-import { DEFAULT_ITEMS, SECTIONS, accountHint, autoChecks, autoTicker, isDone, lastDay, openItems, toggleTick } from './lib/monthClose'
+import { DEFAULT_ITEMS, SECTIONS, accountHint, autoChecks, autoTicker, isDone, openItems, toggleTick } from './lib/monthClose'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { useNarrow } from './lib/useNarrow'
 import { useTags } from './TagsProvider'
@@ -16,7 +16,7 @@ const MONTHS = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 
 const MONTHS_LONG = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember']
 const euro = (cents) => `${(cents / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
 
-function AutoCell({ s, onJump, wide = false }) {
+function AutoCell({ s, onJump, onSelect, wide = false }) {
   if (!s || s.state === null) return <span className="text-[var(--color-text-muted)]">·</span>
   const color = s.state === 'ok' ? 'var(--color-plan-ok)' : s.state === 'warn' ? 'var(--color-plan-off)' : 'var(--color-text-muted)'
   const icon = s.state === 'ok' ? '✓' : s.state === 'warn' ? '⚠' : 'i'
@@ -26,12 +26,18 @@ function AutoCell({ s, onJump, wide = false }) {
       {wide && s.text && <span className="ml-1.5 text-xs">{s.text}</span>}
     </>
   )
+  if (onSelect)
+    return (
+      <button type="button" onClick={onSelect} className="rounded px-1" style={{ color }}>
+        {body}
+      </button>
+    )
   return s.jump ? (
-    <button type="button" onClick={() => onJump(s.jump)} title={s.text || undefined} className="rounded px-1 hover:underline" style={{ color }}>
+    <button type="button" onClick={() => onJump(s.jump)} className="rounded px-1 text-left hover:underline" style={{ color }}>
       {body}
     </button>
   ) : (
-    <span title={s.text || undefined} className="px-1" style={{ color }}>
+    <span className="px-1" style={{ color }}>
       {body}
     </span>
   )
@@ -102,19 +108,20 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
   }
 
   // A manual checkbox; an autoTick item whose rule holds that month shows a green ✓ instead.
-  const Check = ({ it, m, className = '', label }) => {
+  const Check = ({ it, m, className = '', label, wide = false, onSelect }) => {
     const reason = it.autoTick && m <= uptoMonth ? autoTick(it, m) : null
     if (reason)
       return (
-        <span className="font-semibold text-[var(--color-plan-ok)]" title={`Automatisch abgehakt: ${reason}`}>
-          ✓
-        </span>
+        <button type="button" onClick={onSelect} disabled={!onSelect} className="text-[var(--color-plan-ok)]">
+          <span className="font-semibold">✓</span>
+          {wide && <span className="ml-1.5 text-xs">automatisch · {reason}</span>}
+        </button>
       )
     return (
       <input
         type="checkbox"
         className={className}
-        checked={isDone(it, m, ticks, autoTick)}
+        checked={m <= uptoMonth && isDone(it, m, ticks, autoTick)}
         disabled={m > uptoMonth}
         onChange={() => tick(it.id, m)}
         aria-label={label ?? it.label}
@@ -125,22 +132,12 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
   // a new year (or the year arriving after the first render) starts on its latest month
   useEffect(() => setMonth(Math.max(1, Math.min(12, uptoMonth || 1))), [yearNum, uptoMonth])
 
-  if (narrow) {
-    const m = month
+  // One month as a list — the phone's view, and the tablet's detail panel next to the table
+  // (Nov 2026, Markus: tooltips don't work on a touch screen; every reason is written out here).
+  const monthList = (m) => {
     const closed = closedMonths.includes(m)
     return (
-      <div className="flex flex-col gap-3 px-4 py-3">
-        <div className="sticky top-0 z-10 -mx-4 flex items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-2">
-          <button type="button" onClick={() => setMonth((x) => Math.max(1, x - 1))} disabled={m === 1} aria-label="Voriger Monat" className="h-9 w-9 rounded-md border border-[var(--color-border)] text-lg disabled:opacity-30">
-            ‹
-          </button>
-          <div className="flex-1 text-center font-semibold">
-            {MONTHS_LONG[m - 1]} {yearNum}
-          </div>
-          <button type="button" onClick={() => setMonth((x) => Math.min(12, x + 1))} disabled={m === 12} aria-label="Nächster Monat" className="h-9 w-9 rounded-md border border-[var(--color-border)] text-lg disabled:opacity-30">
-            ›
-          </button>
-        </div>
+      <>
         {SECTIONS.map((sec) => (
           <section key={sec.id} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]">
             <h3 className="px-3 pt-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">{sec.label}</h3>
@@ -152,11 +149,7 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
                     <div>{it.label}</div>
                     {hintText(it, m) && <div className="text-xs text-[var(--color-text-muted)]">{hintText(it, m)}</div>}
                   </div>
-                  {it.auto ? (
-                    <AutoCell s={status(it.auto, m)} onJump={jump} wide />
-                  ) : (
-                    <Check it={it} m={m} className="h-5 w-5" />
-                  )}
+                  <div className="max-w-[60%] shrink-0 text-right">{it.auto ? <AutoCell s={status(it.auto, m)} onJump={jump} wide /> : <Check it={it} m={m} className="h-5 w-5" wide />}</div>
                 </div>
               ))}
           </section>
@@ -169,72 +162,92 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
         >
           {closed ? `✓ ${MONTHS_LONG[m - 1]} abgeschlossen — wieder öffnen` : `${MONTHS_LONG[m - 1]} abschließen`}
         </button>
+      </>
+    )
+  }
+  const monthSwitcher = (m, className) => (
+    <div className={className}>
+      <button type="button" onClick={() => setMonth((x) => Math.max(1, x - 1))} disabled={m === 1} aria-label="Voriger Monat" className="h-9 w-9 rounded-md border border-[var(--color-border)] text-lg disabled:opacity-30">
+        ‹
+      </button>
+      <div className="flex-1 text-center font-semibold">
+        {MONTHS_LONG[m - 1]} {yearNum}
+      </div>
+      <button type="button" onClick={() => setMonth((x) => Math.min(12, x + 1))} disabled={m === 12} aria-label="Nächster Monat" className="h-9 w-9 rounded-md border border-[var(--color-border)] text-lg disabled:opacity-30">
+        ›
+      </button>
+    </div>
+  )
+
+  if (narrow) {
+    const m = month
+    return (
+      <div className="flex flex-col gap-3 px-4 py-3">
+        {monthSwitcher(m, 'sticky top-0 z-10 -mx-4 flex items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-2')}
+        {monthList(m)}
       </div>
     )
   }
-
-  const cols = 'grid grid-cols-[minmax(14rem,1.4fr)_repeat(12,minmax(3.25rem,1fr))]'
+  const cols = 'grid grid-cols-[minmax(11rem,1.2fr)_repeat(12,minmax(2.75rem,1fr))]'
+  const sel = month
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto px-4 py-4">
-      <p className="text-sm text-[var(--color-text-muted)]">
-        ✓ / ⚠ prüft die App selbst (⚠ antippen führt zum Problem), Kästchen hakst du ab. „Abschließen“ ist derselbe Haken wie in Verlauf.
-      </p>
-      <div className="min-w-[56rem] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-sm">
-        <div className={`${cols} sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-surface)] py-2 font-medium`}>
-          <span className="px-3">{yearNum}</span>
-          {MONTHS.map((label, i) => (
-            <span key={label} className={`text-center ${i + 1 === uptoMonth && yearNum === now.getFullYear() ? 'text-[var(--color-computed)]' : ''} ${i + 1 > uptoMonth ? 'opacity-40' : ''}`}>
-              {label}
-            </span>
+    <div className="flex min-h-0 flex-1 gap-4 px-4 py-4">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto">
+        <p className="text-sm text-[var(--color-text-muted)]">
+          ✓ / ⚠ prüft die App selbst, Kästchen hakst du ab. Einen Monat antippen (Kopf oder ✓ / ⚠) zeigt rechts alle Details dazu. „Abschließen“ ist derselbe Haken wie in Verlauf.
+        </p>
+        <div className="min-w-[46rem] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-sm">
+          <div className={`${cols} sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-surface)] py-1 font-medium`}>
+            <span className="px-3 py-1">{yearNum}</span>
+            {MONTHS.map((label, i) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => setMonth(i + 1)}
+                aria-pressed={sel === i + 1}
+                className={`mx-0.5 rounded py-1 text-center ${sel === i + 1 ? 'bg-[var(--color-computed)] text-white' : i + 1 === uptoMonth && yearNum === now.getFullYear() ? 'text-[var(--color-computed)]' : ''} ${i + 1 > uptoMonth ? 'opacity-40' : ''}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {SECTIONS.map((sec) => (
+            <Fragment key={sec.id}>
+              <div className="bg-[var(--color-bg)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">{sec.label}</div>
+              {items
+                .filter((it) => it.section === sec.id)
+                .map((it) => (
+                  <div key={it.id} className={`${cols} items-center border-t border-[var(--color-border)] py-1`}>
+                    <span className="truncate px-3">{it.label}</span>
+                    {MONTHS.map((label, i) => {
+                      const m = i + 1
+                      return (
+                        <span key={label} className={`flex justify-center ${sel === m ? 'bg-[color-mix(in_srgb,var(--color-computed)_10%,transparent)]' : ''}`}>
+                          {it.auto ? <AutoCell s={status(it.auto, m)} onSelect={() => setMonth(m)} /> : <Check it={it} m={m} label={`${it.label} ${label}`} onSelect={() => setMonth(m)} />}
+                        </span>
+                      )
+                    })}
+                  </div>
+                ))}
+            </Fragment>
           ))}
-        </div>
-        {SECTIONS.map((sec) => (
-          <Fragment key={sec.id}>
-            <div className="bg-[var(--color-bg)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">{sec.label}</div>
-            {items
-              .filter((it) => it.section === sec.id)
-              .map((it) => (
-                <div key={it.id} className={`${cols} items-center border-t border-[var(--color-border)] py-1`}>
-                  <span className="truncate px-3">{it.label}</span>
-                  {MONTHS.map((label, i) => {
-                    const m = i + 1
-                    const current = m === uptoMonth && yearNum === now.getFullYear()
-                    return (
-                      <span key={label} className={`flex justify-center ${current ? 'bg-[color-mix(in_srgb,var(--color-computed)_8%,transparent)]' : ''}`} title={hintText(it, m) || undefined}>
-                        {it.auto ? (
-                          <AutoCell s={status(it.auto, m)} onJump={jump} />
-                        ) : (
-                          <Check it={it} m={m} label={`${it.label} ${label}`} />
-                        )}
-                      </span>
-                    )
-                  })}
-                </div>
-              ))}
-          </Fragment>
-        ))}
-        <div className={`${cols} items-center border-t-2 border-[var(--color-border)] py-2`}>
-          <span className="px-3 font-medium">Monat abschließen</span>
-          {MONTHS.map((label, i) => {
-            const m = i + 1
-            const closed = closedMonths.includes(m)
-            return (
-              <span key={label} className="flex justify-center">
-                <button
-                  type="button"
-                  onClick={() => toggleClosed(m)}
-                  disabled={m > uptoMonth}
-                  title={closed ? 'Abgeschlossen — klicken zum Wieder-Öffnen' : `Bis ${lastDay(yearNum, m).slice(8)}. abschließen`}
-                  className={`rounded px-1.5 py-0.5 text-xs disabled:opacity-30 ${closed ? 'font-semibold text-[var(--color-plan-ok)]' : 'border border-[var(--color-border)] text-[var(--color-computed)] hover:bg-[var(--color-bg)]'}`}
-                >
-                  {closed ? '✓' : 'zu'}
+          <div className={`${cols} items-center border-t-2 border-[var(--color-border)] py-2`}>
+            <span className="px-3 font-medium">Abgeschlossen</span>
+            {MONTHS.map((label, i) => (
+              <span key={label} className={`flex justify-center ${sel === i + 1 ? 'bg-[color-mix(in_srgb,var(--color-computed)_10%,transparent)]' : ''}`}>
+                <button type="button" onClick={() => setMonth(i + 1)} className={closedMonths.includes(i + 1) ? 'font-semibold text-[var(--color-plan-ok)]' : 'text-[var(--color-text-muted)]'}>
+                  {closedMonths.includes(i + 1) ? '✓' : '·'}
                 </button>
               </span>
-            )
-          })}
+            ))}
+          </div>
         </div>
       </div>
-      <p className="text-xs text-[var(--color-text-muted)]">Bei den Konten zeigt der Tooltip Kontostand am Monatsende und Anzahl Buchungen im Monat.</p>
+      {/* The selected month in full: every reason written out, ⚠ links, account hints, the close button. */}
+      <aside className="flex min-h-0 w-80 shrink-0 flex-col gap-3 overflow-y-auto">
+        {monthSwitcher(sel, 'flex items-center gap-2')}
+        {monthList(sel)}
+      </aside>
     </div>
   )
 }
