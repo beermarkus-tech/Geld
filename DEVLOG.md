@@ -2713,3 +2713,7 @@ Markus: tint checked fields light green, attention fields light red/amber. **Bui
 ## Session 38, continued — 2026-11-26 — Monatsabschluss: green checkboxes
 
 Markus: ticked manual checkboxes green instead of blue. `accent-[var(--color-plan-ok)]` on the checkbox. Lint, tests, build pass.
+
+## Session 38, continued — 2026-11-26 — Dot on the reload button when a new build is out
+
+Markus: indicate a new build on the reload button with a small dot. **Built (SPEC §1b.2, CODEMAP):** `version.json` per build (Vite plugin), `useNewBuild()` (on start, every 10 min, on returning to the foreground; `cache: 'no-store'`), red dot on the tablet reload button, the phone's Mehr button and the sheet's reload entry ("Neue Version laden"). Harness with an intercepted `version.json` = 356 vs running 355: dot visible in all three places. Lint, 307 tests, build pass (`dist/version.json` present, not in the precache list). Note: this build is the first to carry the file, so the dot shows from the *next* deploy on.

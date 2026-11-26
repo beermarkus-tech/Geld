@@ -27,6 +27,15 @@ export default defineConfig({
     __BUILD_NUMBER__: JSON.stringify(getBuildNumber()),
   },
   plugins: [
+    // version.json next to the app (Nov 2026): the running app polls it and shows a dot on the
+    // reload button when a newer build is deployed (lib/useNewBuild.js). Not precached by the
+    // service worker (its default patterns are js/css/html), so it always comes from the network.
+    {
+      name: 'geld-version-file',
+      generateBundle() {
+        this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ build: getBuildNumber() }) })
+      },
+    },
     react(),
     tailwindcss(),
     VitePWA({

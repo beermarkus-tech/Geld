@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { reloadApp } from './lib/reloadApp'
+import { useNewBuild } from './lib/useNewBuild'
 import { effectiveDark, toggleTheme } from './lib/theme'
 import { zoomLooksOff } from './lib/zoomGuard'
 
@@ -148,6 +149,9 @@ export default function NavShell({
   const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false)
   const [isDark, setIsDark] = useState(effectiveDark)
   const [reloading, setReloading] = useState(false)
+  const newBuild = useNewBuild()
+  // A small dot: a newer build is deployed — the reload button fetches it.
+  const NewDot = ({ className = '-right-0.5 -top-0.5' }) => (newBuild ? <span aria-hidden="true" className={`absolute h-2 w-2 rounded-full bg-[var(--color-alert)] ${className}`} /> : null)
 
   useEffect(() => {
     try {
@@ -356,11 +360,12 @@ export default function NavShell({
               reloadApp()
             }}
             disabled={reloading}
-            aria-label="App neu laden"
-            title="App neu laden — holt die neueste Version"
-            className={`flex h-8 w-8 items-center justify-center rounded-md text-lg text-[var(--color-text-muted)] hover:bg-[var(--color-bg)] max-md:hidden ${reloading ? 'animate-spin' : ''}`}
+            aria-label={newBuild ? 'Neue Version verfügbar — App neu laden' : 'App neu laden'}
+            title={newBuild ? 'Neue Version verfügbar — neu laden' : 'App neu laden — holt die neueste Version'}
+            className={`relative flex h-8 w-8 items-center justify-center rounded-md text-lg text-[var(--color-text-muted)] hover:bg-[var(--color-bg)] max-md:hidden ${reloading ? 'animate-spin' : ''}`}
           >
             ⟳
+            <NewDot className="right-0.5 top-0.5" />
           </button>
           {/* Day/night toggle, top-right of the header (Markus's own
               placement request) — a manual override on top of the system
@@ -465,7 +470,10 @@ export default function NavShell({
                 (active ? 'font-semibold text-[var(--color-computed)]' : 'text-[var(--color-text-muted)]')
               }
             >
-              <NavIcon id={item.id === 'more' && MORE_ITEMS.some((i) => i.id === activeView) ? activeView : item.id} />
+              <span className="relative">
+                <NavIcon id={item.id === 'more' && MORE_ITEMS.some((i) => i.id === activeView) ? activeView : item.id} />
+                {item.id === 'more' && <NewDot />}
+              </span>
               {item.id === 'more' && MORE_ITEMS.some((i) => i.id === activeView) ? MORE_ITEMS.find((i) => i.id === activeView).label : item.label}
             </button>
           )
@@ -494,20 +502,23 @@ export default function NavShell({
                   setReloading(true)
                   reloadApp()
                 }}
-                className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]"
+                className="flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]"
               >
-                <NavIcon id="reload" className={`h-5 w-5 ${reloading ? 'animate-spin' : ''}`} />
-                Neu laden
+                <span className="relative">
+                  <NavIcon id="reload" className={`h-5 w-5 ${reloading ? 'animate-spin' : ''}`} />
+                  <NewDot />
+                </span>
+                {newBuild ? 'Neue Version laden' : 'Neu laden'}
               </button>
               <button
                 type="button"
                 onClick={() => setIsDark(toggleTheme() === 'dark')}
-                className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]"
+                className="flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]"
               >
                 <NavIcon id="theme" className="h-5 w-5" />
                 {isDark ? 'Tagmodus' : 'Nachtmodus'}
               </button>
-              <span className="ml-auto pr-2 text-xs text-[var(--color-text-muted)]">Build {__BUILD_NUMBER__}</span>
+              <span className="ml-auto whitespace-nowrap pr-2 text-xs text-[var(--color-text-muted)]">Build {__BUILD_NUMBER__}</span>
             </div>
             <UserBadge
               userEmail={userEmail}
