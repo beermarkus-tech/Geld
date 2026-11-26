@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { autoChecks, lastDay, openItems, toggleTick, accountHint, DEFAULT_ITEMS } from './monthClose'
+import { autoChecks, bookingCounter, isDone, lastDay, openItems, toggleTick, accountHint, DEFAULT_ITEMS } from './monthClose'
 
 const accounts = [
   { id: 'bnp-konto', reportingGroup: 'Barkonten' },
@@ -17,7 +17,7 @@ const base = [
 ]
 const budgets = [{ id: 'b1', year: 2026, month: 1, planVersion: 'plan1', categoryId: 'food', breakdownTagId: null, plannedAmountCents: -12000 }]
 const run = (over = {}) =>
-  autoChecks({ year: 2026, accounts, categories, tags: [], budgets, transactions: base, importBatches: [], claimCats: new Set(), needsCtx: { claimCategoryIds: new Set(), tagById: new Map() }, uptoMonth: 2, ...over })
+  autoChecks({ year: 2026, accounts, categories, tags: [], budgets, transactions: base, claimCats: new Set(), needsCtx: { claimCategoryIds: new Set(), tagById: new Map() }, uptoMonth: 2, ...over })
 
 describe('monthClose', () => {
   it('lastDay knows the month lengths', () => {
@@ -28,12 +28,16 @@ describe('monthClose', () => {
   it('future months are not judged', () => {
     expect(run()('consors', 3).state).toBe(null)
   })
-  it('BNP import: missing, covering and matching, covering but off', () => {
-    expect(run()('bnpImport', 1).state).toBe('warn')
-    const ok = { accountId: 'bnp-konto', status: 'committed', balanceDate: '2026-02-03', bankBalanceCents: 88000 }
-    expect(run({ importBatches: [ok] })('bnpImport', 1).state).toBe('ok')
-    expect(run({ importBatches: [{ ...ok, bankBalanceCents: 90000 }] })('bnpImport', 1)).toMatchObject({ state: 'warn' })
-    expect(run({ importBatches: [{ ...ok, balanceDate: '2026-01-28' }] })('bnpImport', 1).state).toBe('warn')
+  it('autoTick accounts are done as soon as they have a booking in the month; without, a manual tick counts', () => {
+    const count = bookingCounter(base, 2026)
+    const bnp = DEFAULT_ITEMS.find((i) => i.id === 'bnp-import')
+    const bar = DEFAULT_ITEMS.find((i) => i.id === 'bar')
+    expect(count('bnp-konto', 1)).toBe(1)
+    expect(isDone(bnp, 1, {}, count)).toBe(true)
+    expect(isDone(bnp, 2, {}, count)).toBe(false)
+    expect(isDone(bnp, 2, { 'bnp-import': [2] }, count)).toBe(true)
+    expect(isDone(bar, 1, {}, count)).toBe(false)
+    expect(openItems([bnp, bar], 1, {}, () => ({ state: 'ok' }), count)).toEqual(['Bar'])
   })
   it('Consors: below 200 € warns, from 200 € on it is fine', () => {
     expect(run({ transactions: [...base, tx('c', '2026-01-05', null, 'consors-verrechnungskonto', 20000)] })('consors', 1).state).toBe('ok')

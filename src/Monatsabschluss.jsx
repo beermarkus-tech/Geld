@@ -3,7 +3,7 @@ import { collection, doc, onSnapshot, setDoc } from 'firebase/firestore'
 
 import { db } from './firebase'
 import { claimCategoryIds } from './lib/claims'
-import { DEFAULT_ITEMS, SECTIONS, accountHint, autoChecks, isTicked, lastDay, openItems, toggleTick } from './lib/monthClose'
+import { DEFAULT_ITEMS, SECTIONS, accountHint, autoChecks, bookingCounter, isDone, lastDay, openItems, toggleTick } from './lib/monthClose'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { useNarrow } from './lib/useNarrow'
 import { useTags } from './TagsProvider'
@@ -44,7 +44,6 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
   const [categories, setCategories] = useState([])
   const [budgets, setBudgets] = useState([])
   const [transactions, setTransactions] = useState([])
-  const [importBatches, setImportBatches] = useState([])
   const [settings, setSettings] = useState([])
   const narrow = useNarrow()
 
@@ -53,7 +52,6 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
       onSnapshot(collection(db, 'accounts'), (s) => setAccounts(s.docs.map((d) => d.data()))),
       onSnapshot(collection(db, 'categories'), (s) => setCategories(s.docs.map((d) => d.data()))),
       onSnapshot(collection(db, 'budgets'), (s) => setBudgets(s.docs.map((d) => d.data()))),
-      onSnapshot(collection(db, 'importBatches'), (s) => setImportBatches(s.docs.map((d) => d.data()))),
       onSnapshot(collection(db, 'settings'), (s) => setSettings(s.docs.map((d) => ({ id: d.id, ...d.data() })))),
       onSnapshot(collection(db, 'transactions'), (s) => {
         const v = s.docs.map((d) => d.data())
@@ -75,9 +73,10 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
   const status = useMemo(() => {
     const claimCats = claimCategoryIds(categories)
     const tagById = Object.fromEntries(tags.map((t) => [t.id, t]))
-    return autoChecks({ year: yearNum, accounts, categories, tags, budgets, transactions, importBatches, claimCats, needsCtx: { claimCategoryIds: claimCats, tagById }, uptoMonth })
-  }, [yearNum, accounts, categories, tags, budgets, transactions, importBatches, uptoMonth])
+    return autoChecks({ year: yearNum, accounts, categories, tags, budgets, transactions, claimCats, needsCtx: { claimCategoryIds: claimCats, tagById }, uptoMonth })
+  }, [yearNum, accounts, categories, tags, budgets, transactions, uptoMonth])
 
+  const count = useMemo(() => bookingCounter(transactions, yearNum), [transactions, yearNum])
   const saveYear = (fields) => setDoc(doc(db, 'settings', String(yearNum)), { id: String(yearNum), ...fields }, { merge: true })
   const tick = (itemId, m) => saveYear({ closeTicks: toggleTick(ticks, itemId, m) })
   function toggleClosed(m) {
@@ -86,7 +85,7 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
       saveYear({ closedMonths: closedMonths.filter((x) => x !== m) })
       return
     }
-    const open = openItems(items, m, ticks, status)
+    const open = openItems(items, m, ticks, status, count)
     if (open.length > 0 && !window.confirm(`Noch offen: ${open.join(', ')}.\n\n${MONTHS_LONG[m - 1]} trotzdem abschließen?`)) return
     saveYear({ closedMonths: [...closedMonths, m].sort((a, b) => a - b) })
   }
@@ -102,6 +101,26 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
     return `${euro(h.balanceCents)} · ${h.count} ${h.count === 1 ? 'Buchung' : 'Buchungen'}`
   }
 
+  // A manual checkbox; an autoTick account with bookings that month is ticked by itself (locked).
+  const Check = ({ it, m, className = '', label }) => {
+    const auto = it.autoTick && count(it.accountId, m) > 0 && m <= uptoMonth
+    if (auto)
+      return (
+        <span className="font-semibold text-[var(--color-plan-ok)]" title={`Automatisch abgehakt: ${count(it.accountId, m)} Buchungen im Monat`}>
+          ✓
+        </span>
+      )
+    return (
+      <input
+        type="checkbox"
+        className={className}
+        checked={isDone(it, m, ticks, count)}
+        disabled={m > uptoMonth}
+        onChange={() => tick(it.id, m)}
+        aria-label={label ?? it.label}
+      />
+    )
+  }
   const [month, setMonth] = useState(() => Math.max(1, Math.min(12, uptoMonth || 1)))
   // a new year (or the year arriving after the first render) starts on its latest month
   useEffect(() => setMonth(Math.max(1, Math.min(12, uptoMonth || 1))), [yearNum, uptoMonth])
@@ -136,7 +155,7 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
                   {it.auto ? (
                     <AutoCell s={status(it.auto, m)} onJump={jump} wide />
                   ) : (
-                    <input type="checkbox" className="h-5 w-5" checked={isTicked(ticks, it.id, m)} disabled={m > uptoMonth} onChange={() => tick(it.id, m)} aria-label={it.label} />
+                    <Check it={it} m={m} className="h-5 w-5" />
                   )}
                 </div>
               ))}
@@ -185,7 +204,7 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
                         {it.auto ? (
                           <AutoCell s={status(it.auto, m)} onJump={jump} />
                         ) : (
-                          <input type="checkbox" checked={isTicked(ticks, it.id, m)} disabled={m > uptoMonth} onChange={() => tick(it.id, m)} aria-label={`${it.label} ${label}`} />
+                          <Check it={it} m={m} label={`${it.label} ${label}`} />
                         )}
                       </span>
                     )

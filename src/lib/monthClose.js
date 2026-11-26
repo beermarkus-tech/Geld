@@ -13,15 +13,19 @@ export const SECTIONS = [
 ]
 
 // Markus's Check tab, mapped (spec.md §3h). `auto` = the check below; `accountId` on a manual item
+// shows that account's month-end balance and booking count next to the checkbox; `autoTick` ticks
+// the box by itself as soon as the account has a booking in that month (Nov 2026, Markus: he enters
+// an account's bookings in one go, then ticks — one booking is a good enough sign); without bookings
+// the box can still be ticked by hand (a month with nothing to book).
 // shows that account's month-end balance and booking count next to the checkbox.
 export const DEFAULT_ITEMS = [
-  { id: 'bnp-import', section: 'daten', label: 'BNP importiert', auto: 'bnpImport' },
-  { id: 'dkb', section: 'daten', label: 'DKB', accountId: 'dkb-konto' },
-  { id: 'paypal', section: 'daten', label: 'PayPal', accountId: 'paypal' },
-  { id: 'visa', section: 'daten', label: 'Visa Airbus', accountId: 'visa-airbus' },
-  { id: 'consors', section: 'daten', label: 'Consors', accountId: 'consors-verrechnungskonto' },
-  { id: 'smartbroker', section: 'daten', label: 'Smartbroker', accountId: 'smartbroker-verrechnungskonto' },
-  { id: 'coinbase', section: 'daten', label: 'Coinbase', accountId: 'coinbase-verrechnungskonto' },
+  { id: 'bnp-import', section: 'daten', label: 'BNP', accountId: 'bnp-konto', autoTick: true },
+  { id: 'dkb', section: 'daten', label: 'DKB', accountId: 'dkb-konto', autoTick: true },
+  { id: 'paypal', section: 'daten', label: 'PayPal', accountId: 'paypal', autoTick: true },
+  { id: 'visa', section: 'daten', label: 'Visa Airbus', accountId: 'visa-airbus', autoTick: true },
+  { id: 'consors', section: 'daten', label: 'Consors', accountId: 'consors-verrechnungskonto', autoTick: true },
+  { id: 'smartbroker', section: 'daten', label: 'Smartbroker', accountId: 'smartbroker-verrechnungskonto', autoTick: true },
+  { id: 'coinbase', section: 'daten', label: 'Coinbase', accountId: 'coinbase-verrechnungskonto', autoTick: true },
   { id: 'ancv', section: 'daten', label: 'ANCV Chèques Vacances', accountId: 'cheqvac' },
   { id: 'bar', section: 'daten', label: 'Bar' },
   { id: 'notizen', section: 'daten', label: 'Notizen' },
@@ -57,7 +61,7 @@ const euro = (cents) => `${(cents / 100).toLocaleString('de-DE', { minimumFracti
  * @returns {(key: string, m: number) => { state: 'ok'|'warn'|'info'|null, text: string, jump?: object }}
  *   state null = nothing to judge yet (a future month)
  */
-export function autoChecks({ year, accounts, categories, tags, budgets, transactions, importBatches = [], claimCats, needsCtx, uptoMonth }) {
+export function autoChecks({ year, accounts, categories, tags, budgets, transactions, claimCats, needsCtx, uptoMonth }) {
   const live = transactions.filter((t) => !t.deletedAt)
   const months = Array.from({ length: uptoMonth }, (_, i) => i + 1)
   // The two month-end checks, judged as if every month up to now were ticked (bookings, not plans).
@@ -69,19 +73,11 @@ export function autoChecks({ year, accounts, categories, tags, budgets, transact
     const r = rule(ruleId)
     return live.filter((tx) => inMonth(tx, year, m) && linesOf(tx).some((line) => r.check(tx, line, needsCtx))).map((tx) => tx.id)
   }
-  const bnpBatches = importBatches.filter((b) => b.accountId === BNP_ID && b.status === 'committed' && b.balanceDate)
 
   return (key, m) => {
     if (m > uptoMonth) return { state: null, text: '' }
     const end = lastDay(year, m)
     switch (key) {
-      case 'bnpImport': {
-        const covering = bnpBatches.filter((b) => b.balanceDate >= end).sort((a, b) => a.balanceDate.localeCompare(b.balanceDate))[0]
-        if (!covering) return { state: 'warn', text: 'Noch kein Import bis Monatsende', jump: { view: 'importexport' } }
-        const diff = balance(BNP_ID, covering.balanceDate, live) - (covering.bankBalanceCents ?? 0)
-        if (covering.bankBalanceCents != null && diff !== 0) return { state: 'warn', text: `Kontostand am ${covering.balanceDate.slice(8)}.${covering.balanceDate.slice(5, 7)}. weicht um ${euro(diff)} ab`, jump: { view: 'konten', accountId: BNP_ID } }
-        return { state: 'ok', text: `Import bis ${covering.balanceDate.slice(8)}.${covering.balanceDate.slice(5, 7)}.` }
-      }
       case 'categorized': {
         const ids = failing('category', m)
         return ids.length === 0 ? { state: 'ok', text: '' } : { state: 'warn', text: `${ids.length} ohne Kategorie`, jump: { view: 'konten', txIds: ids } }
@@ -131,6 +127,20 @@ export function toggleTick(ticks, itemId, m) {
 }
 
 /** What still stands in the way of closing month m (for the warning). */
-export function openItems(items, m, ticks, status) {
-  return items.filter((it) => (it.auto ? status(it.auto, m).state === 'warn' : !isTicked(ticks, it.id, m))).map((it) => it.label)
+/** Booking counts per account and month of one year: count(accountId, m). */
+export function bookingCounter(transactions, year) {
+  const counts = new Map()
+  for (const t of transactions) {
+    if (t.deletedAt || !t.date?.startsWith(String(year))) continue
+    const m = Number(t.date.slice(5, 7))
+    for (const id of new Set([t.fromAccountId, t.toAccountId])) if (id) counts.set(`${id}|${m}`, (counts.get(`${id}|${m}`) ?? 0) + 1)
+  }
+  return (accountId, m) => counts.get(`${accountId}|${m}`) ?? 0
+}
+
+/** A manual item counts as done when ticked — or, for an `autoTick` item, when its account has bookings that month. */
+export const isDone = (it, m, ticks, count) => isTicked(ticks, it.id, m) || Boolean(it.autoTick && count(it.accountId, m) > 0)
+
+export function openItems(items, m, ticks, status, count = () => 0) {
+  return items.filter((it) => (it.auto ? status(it.auto, m).state === 'warn' : !isDone(it, m, ticks, count))).map((it) => it.label)
 }
