@@ -11,6 +11,7 @@ import ui from './lib/uiState'
 import { useValueWhileVisible } from './lib/useDeferWhileHidden'
 import NavShell, { ALL_ITEMS } from './NavShell'
 import PlaceholderScreen from './PlaceholderScreen'
+import Monatsabschluss from './Monatsabschluss'
 import Aussenstaende from './Aussenstaende'
 import Urlaube from './Urlaube'
 import Planung from './Planung'
@@ -375,12 +376,15 @@ export default function App() {
             <ImportExportScreen userEmail={user.email} usingCachedSession={usingCachedSession} active={view === 'importexport'} onOpenInKonten={openInKonten} />
           </div>
         )}
+        <div className={view === 'monatsabschluss' ? SCREEN_WRAPPER : 'hidden'}>
+          <Monatsabschluss year={year} active={view === 'monatsabschluss'} onOpenInKonten={openInKonten} onNavigate={setView} />
+        </div>
         {/* Every other nav item (Dashboard,
             Monatsabschluss, Außenstände, Settings) isn't built yet —
             resolved Sept 2026 (Markus): a real nav entry exists for each
             from the start anyway, landing on a plain placeholder rather than
             being left out until its own phase ships. */}
-        {!['dashboard', 'konten', 'verlauf', 'planung', 'quickview', 'urlaube', 'aussenstaende', 'importexport', 'settings'].includes(view) && (
+        {!['dashboard', 'konten', 'verlauf', 'planung', 'quickview', 'urlaube', 'monatsabschluss', 'aussenstaende', 'importexport', 'settings'].includes(view) && (
           <PlaceholderScreen title={ALL_ITEMS.find((i) => i.id === view)?.label ?? view} />
         )}
       </NavShell>
