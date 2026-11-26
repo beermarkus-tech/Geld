@@ -3,7 +3,7 @@ import { collection, doc, onSnapshot, setDoc } from 'firebase/firestore'
 
 import { db } from './firebase'
 import { claimCategoryIds } from './lib/claims'
-import { DEFAULT_ITEMS, SECTIONS, accountHint, autoChecks, bookingCounter, isDone, lastDay, openItems, toggleTick } from './lib/monthClose'
+import { DEFAULT_ITEMS, SECTIONS, accountHint, autoChecks, autoTicker, isDone, lastDay, openItems, toggleTick } from './lib/monthClose'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { useNarrow } from './lib/useNarrow'
 import { useTags } from './TagsProvider'
@@ -76,7 +76,7 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
     return autoChecks({ year: yearNum, accounts, categories, tags, budgets, transactions, claimCats, needsCtx: { claimCategoryIds: claimCats, tagById }, uptoMonth })
   }, [yearNum, accounts, categories, tags, budgets, transactions, uptoMonth])
 
-  const count = useMemo(() => bookingCounter(transactions, yearNum), [transactions, yearNum])
+  const autoTick = useMemo(() => autoTicker(transactions, yearNum), [transactions, yearNum])
   const saveYear = (fields) => setDoc(doc(db, 'settings', String(yearNum)), { id: String(yearNum), ...fields }, { merge: true })
   const tick = (itemId, m) => saveYear({ closeTicks: toggleTick(ticks, itemId, m) })
   function toggleClosed(m) {
@@ -85,7 +85,7 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
       saveYear({ closedMonths: closedMonths.filter((x) => x !== m) })
       return
     }
-    const open = openItems(items, m, ticks, status, count)
+    const open = openItems(items, m, ticks, status, autoTick)
     if (open.length > 0 && !window.confirm(`Noch offen: ${open.join(', ')}.\n\n${MONTHS_LONG[m - 1]} trotzdem abschließen?`)) return
     saveYear({ closedMonths: [...closedMonths, m].sort((a, b) => a - b) })
   }
@@ -101,12 +101,12 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
     return `${euro(h.balanceCents)} · ${h.count} ${h.count === 1 ? 'Buchung' : 'Buchungen'}`
   }
 
-  // A manual checkbox; an autoTick account with bookings that month is ticked by itself (locked).
+  // A manual checkbox; an autoTick item whose rule holds that month shows a green ✓ instead.
   const Check = ({ it, m, className = '', label }) => {
-    const auto = it.autoTick && count(it.accountId, m) > 0 && m <= uptoMonth
-    if (auto)
+    const reason = it.autoTick && m <= uptoMonth ? autoTick(it, m) : null
+    if (reason)
       return (
-        <span className="font-semibold text-[var(--color-plan-ok)]" title={`Automatisch abgehakt: ${count(it.accountId, m)} Buchungen im Monat`}>
+        <span className="font-semibold text-[var(--color-plan-ok)]" title={`Automatisch abgehakt: ${reason}`}>
           ✓
         </span>
       )
@@ -114,7 +114,7 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
       <input
         type="checkbox"
         className={className}
-        checked={isDone(it, m, ticks, count)}
+        checked={isDone(it, m, ticks, autoTick)}
         disabled={m > uptoMonth}
         onChange={() => tick(it.id, m)}
         aria-label={label ?? it.label}

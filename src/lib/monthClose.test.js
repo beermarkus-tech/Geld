@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { autoChecks, bookingCounter, isDone, lastDay, openItems, toggleTick, accountHint, DEFAULT_ITEMS } from './monthClose'
+import { autoChecks, autoTicker, bookingCounter, isDone, lastDay, openItems, toggleTick, accountHint, DEFAULT_ITEMS } from './monthClose'
 
 const accounts = [
   { id: 'bnp-konto', reportingGroup: 'Barkonten' },
@@ -33,11 +33,22 @@ describe('monthClose', () => {
     const bnp = DEFAULT_ITEMS.find((i) => i.id === 'bnp-import')
     const bar = DEFAULT_ITEMS.find((i) => i.id === 'bar')
     expect(count('bnp-konto', 1)).toBe(1)
-    expect(isDone(bnp, 1, {}, count)).toBe(true)
-    expect(isDone(bnp, 2, {}, count)).toBe(false)
-    expect(isDone(bnp, 2, { 'bnp-import': [2] }, count)).toBe(true)
-    expect(isDone(bar, 1, {}, count)).toBe(false)
-    expect(openItems([bnp, bar], 1, {}, () => ({ state: 'ok' }), count)).toEqual(['Bar'])
+    const auto = autoTicker(base, 2026)
+    expect(isDone(bnp, 1, {}, auto)).toBe(true)
+    expect(isDone(bnp, 2, {}, auto)).toBe(false)
+    expect(isDone(bnp, 2, { 'bnp-import': [2] }, auto)).toBe(true)
+    expect(isDone(bar, 1, {}, auto)).toBe(false)
+    expect(openItems([bnp, bar], 1, {}, () => ({ state: 'ok' }), auto)).toEqual(['Bar'])
+  })
+  it('AIRBUS Gehalt ticks itself once the salary booking is split into categorised lines adding up to it', () => {
+    const gehalt = DEFAULT_ITEMS.find((i) => i.id === 'gehalt')
+    const sal = (lines) => tx('s', '2026-01-27', null, 'bnp-konto', 500000, lines)
+    const g = 'einnahmen-gehalt-markus'
+    expect(autoTicker([sal([{ amountCents: 500000, categoryId: g, tags: [] }])], 2026)(gehalt, 1)).toBe(null) // not split
+    expect(autoTicker([sal([{ amountCents: 700000, categoryId: g, tags: [] }, { amountCents: -200000, categoryId: 'steuer', tags: [] }])], 2026)(gehalt, 1)).toBe('Gehalt aufgeteilt')
+    expect(autoTicker([sal([{ amountCents: 700000, categoryId: g, tags: [] }, { amountCents: -200000, categoryId: null, tags: [] }])], 2026)(gehalt, 1)).toBe(null) // a line without category
+    expect(autoTicker([sal([{ amountCents: 700000, categoryId: g, tags: [] }, { amountCents: -100000, categoryId: 'steuer', tags: [] }])], 2026)(gehalt, 1)).toBe(null) // doesn't add up
+    expect(autoTicker([], 2026)(gehalt, 1)).toBe(null) // no salary that month
   })
   it('Consors: below 200 € warns, from 200 € on it is fine', () => {
     expect(run({ transactions: [...base, tx('c', '2026-01-05', null, 'consors-verrechnungskonto', 20000)] })('consors', 1).state).toBe('ok')

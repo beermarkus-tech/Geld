@@ -2693,3 +2693,7 @@ Proposed the design (chat); Markus answered: Außenstände info only, Consors �
 ## Session 38, continued — 2026-11-26 — Monatsabschluss: account items tick themselves
 
 Markus: tick the account boxes automatically as soon as the account has bookings in the month (BNP included; Bar, ANCV, Notizen stay manual). **Built:** `autoTick` items in `DEFAULT_ITEMS` (BNP, DKB, PayPal, Visa Airbus, Consors, Smartbroker, Coinbase), `bookingCounter()` + `isDone()` in `lib/monthClose.js`; an auto-done box shows a green ✓ (tooltip: number of bookings), otherwise a normal checkbox; `openItems` counts them as done. The BNP import/balance check and the `importBatches` subscription are gone. SPEC §3h updated. 305 tests, lint, build pass.
+
+## Session 38, continued — 2026-11-26 — Monatsabschluss: AIRBUS Gehalt ticks itself
+
+Markus: AIRBUS Gehalt is done once its booking has sub-lines that add up to the total. **Built:** `autoTick: 'salarySplit'`; `autoTicker()` in `lib/monthClose.js` replaces the plain counter (returns the reason text or null for 'bookings' and 'salarySplit'); a salary booking = money in with a line in `einnahmen-gehalt-markus`; ✓ when every such booking of the month has ≥ 2 lines, all categorised, summing to its amount (sums always match by the remainder rule; the category condition is what turns it green once the payslip is entered). +1 test (306). SPEC §3h updated.

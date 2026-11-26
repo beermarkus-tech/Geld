@@ -16,21 +16,23 @@ export const SECTIONS = [
 // shows that account's month-end balance and booking count next to the checkbox; `autoTick` ticks
 // the box by itself as soon as the account has a booking in that month (Nov 2026, Markus: he enters
 // an account's bookings in one go, then ticks — one booking is a good enough sign); without bookings
-// the box can still be ticked by hand (a month with nothing to book).
+// the box can still be ticked by hand (a month with nothing to book). `autoTick: 'salarySplit'` (AIRBUS
+// Gehalt, Markus Nov 2026): ticked once the month's salary booking is split into lines that add up to
+// its total, every line with a category.
 // shows that account's month-end balance and booking count next to the checkbox.
 export const DEFAULT_ITEMS = [
-  { id: 'bnp-import', section: 'daten', label: 'BNP', accountId: 'bnp-konto', autoTick: true },
-  { id: 'dkb', section: 'daten', label: 'DKB', accountId: 'dkb-konto', autoTick: true },
-  { id: 'paypal', section: 'daten', label: 'PayPal', accountId: 'paypal', autoTick: true },
-  { id: 'visa', section: 'daten', label: 'Visa Airbus', accountId: 'visa-airbus', autoTick: true },
-  { id: 'consors', section: 'daten', label: 'Consors', accountId: 'consors-verrechnungskonto', autoTick: true },
-  { id: 'smartbroker', section: 'daten', label: 'Smartbroker', accountId: 'smartbroker-verrechnungskonto', autoTick: true },
-  { id: 'coinbase', section: 'daten', label: 'Coinbase', accountId: 'coinbase-verrechnungskonto', autoTick: true },
+  { id: 'bnp-import', section: 'daten', label: 'BNP', accountId: 'bnp-konto', autoTick: 'bookings' },
+  { id: 'dkb', section: 'daten', label: 'DKB', accountId: 'dkb-konto', autoTick: 'bookings' },
+  { id: 'paypal', section: 'daten', label: 'PayPal', accountId: 'paypal', autoTick: 'bookings' },
+  { id: 'visa', section: 'daten', label: 'Visa Airbus', accountId: 'visa-airbus', autoTick: 'bookings' },
+  { id: 'consors', section: 'daten', label: 'Consors', accountId: 'consors-verrechnungskonto', autoTick: 'bookings' },
+  { id: 'smartbroker', section: 'daten', label: 'Smartbroker', accountId: 'smartbroker-verrechnungskonto', autoTick: 'bookings' },
+  { id: 'coinbase', section: 'daten', label: 'Coinbase', accountId: 'coinbase-verrechnungskonto', autoTick: 'bookings' },
   { id: 'ancv', section: 'daten', label: 'ANCV Chèques Vacances', accountId: 'cheqvac' },
   { id: 'bar', section: 'daten', label: 'Bar' },
   { id: 'notizen', section: 'daten', label: 'Notizen' },
   { id: 'kategorien', section: 'verfeinerung', label: 'Alles kategorisiert', auto: 'categorized' },
-  { id: 'gehalt', section: 'verfeinerung', label: 'AIRBUS Gehalt' },
+  { id: 'gehalt', section: 'verfeinerung', label: 'AIRBUS Gehalt', autoTick: 'salarySplit' },
   { id: 'amazon', section: 'verfeinerung', label: 'Amazon' },
   { id: 'aussenstaende', section: 'verfeinerung', label: 'Außenstände', auto: 'claims' },
   { id: 'prognose', section: 'abschluss', label: 'Prognose = Kontostand', auto: 'prognose' },
@@ -138,9 +140,41 @@ export function bookingCounter(transactions, year) {
   return (accountId, m) => counts.get(`${accountId}|${m}`) ?? 0
 }
 
-/** A manual item counts as done when ticked — or, for an `autoTick` item, when its account has bookings that month. */
-export const isDone = (it, m, ticks, count) => isTicked(ticks, it.id, m) || Boolean(it.autoTick && count(it.accountId, m) > 0)
+export const SALARY_CATEGORY_ID = 'einnahmen-gehalt-markus'
 
-export function openItems(items, m, ticks, status, count = () => 0) {
-  return items.filter((it) => (it.auto ? status(it.auto, m).state === 'warn' : !isDone(it, m, ticks, count))).map((it) => it.label)
+/**
+ * Why an `autoTick` item ticks itself in month m — a short reason text, or null when it doesn't.
+ * @returns {(item, m: number) => string | null}
+ */
+export function autoTicker(transactions, year) {
+  const count = bookingCounter(transactions, year)
+  const salary = new Map() // month → salary bookings (money in with a Gehalt Markus line)
+  for (const t of transactions) {
+    if (t.deletedAt || !t.date?.startsWith(String(year)) || !(t.amountCents > 0)) continue
+    if (!(t.lines ?? []).some((l) => l.categoryId === SALARY_CATEGORY_ID)) continue
+    const m = Number(t.date.slice(5, 7))
+    salary.set(m, [...(salary.get(m) ?? []), t])
+  }
+  const split = (t) => {
+    const lines = t.lines ?? []
+    return lines.length >= 2 && lines.every((l) => l.categoryId) && lines.reduce((a, l) => a + l.amountCents, 0) === t.amountCents
+  }
+  return (it, m) => {
+    if (it.autoTick === 'bookings') {
+      const n = count(it.accountId, m)
+      return n > 0 ? `${n} ${n === 1 ? 'Buchung' : 'Buchungen'} im Monat` : null
+    }
+    if (it.autoTick === 'salarySplit') {
+      const list = salary.get(m) ?? []
+      return list.length > 0 && list.every(split) ? 'Gehalt aufgeteilt' : null
+    }
+    return null
+  }
+}
+
+/** A manual item counts as done when ticked — or when its `autoTick` rule ticks it (see autoTicker). */
+export const isDone = (it, m, ticks, auto) => isTicked(ticks, it.id, m) || Boolean(it.autoTick && auto(it, m))
+
+export function openItems(items, m, ticks, status, auto = () => null) {
+  return items.filter((it) => (it.auto ? status(it.auto, m).state === 'warn' : !isDone(it, m, ticks, auto))).map((it) => it.label)
 }
