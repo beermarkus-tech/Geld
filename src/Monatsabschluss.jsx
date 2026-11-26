@@ -6,7 +6,6 @@ import { claimCategoryIds } from './lib/claims'
 import { DEFAULT_ITEMS, SECTIONS, accountHint, autoChecks, isTicked, lastDay, openItems, toggleTick } from './lib/monthClose'
 import { useDeferWhileHidden } from './lib/useDeferWhileHidden'
 import { useNarrow } from './lib/useNarrow'
-import { usePlanTolerance } from './lib/usePlanTolerance'
 import { useTags } from './TagsProvider'
 
 // Monatsabschluss (spec.md §3h, Nov 2026): the year's checklist, one column per month (tablet) or
@@ -47,7 +46,6 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
   const [transactions, setTransactions] = useState([])
   const [importBatches, setImportBatches] = useState([])
   const [settings, setSettings] = useState([])
-  const [percent] = usePlanTolerance()
   const narrow = useNarrow()
 
   useEffect(() => {
@@ -76,9 +74,9 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
 
   const status = useMemo(() => {
     const claimCats = claimCategoryIds(categories)
-    const tagById = new Map(tags.map((t) => [t.id, t]))
-    return autoChecks({ year: yearNum, accounts, categories, tags, budgets, transactions, importBatches, claimCats, needsCtx: { claimCategoryIds: claimCats, tagById }, percent, uptoMonth })
-  }, [yearNum, accounts, categories, tags, budgets, transactions, importBatches, percent, uptoMonth])
+    const tagById = Object.fromEntries(tags.map((t) => [t.id, t]))
+    return autoChecks({ year: yearNum, accounts, categories, tags, budgets, transactions, importBatches, claimCats, needsCtx: { claimCategoryIds: claimCats, tagById }, uptoMonth })
+  }, [yearNum, accounts, categories, tags, budgets, transactions, importBatches, uptoMonth])
 
   const saveYear = (fields) => setDoc(doc(db, 'settings', String(yearNum)), { id: String(yearNum), ...fields }, { merge: true })
   const tick = (itemId, m) => saveYear({ closeTicks: toggleTick(ticks, itemId, m) })

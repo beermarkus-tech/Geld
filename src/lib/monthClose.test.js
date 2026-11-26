@@ -17,7 +17,7 @@ const base = [
 ]
 const budgets = [{ id: 'b1', year: 2026, month: 1, planVersion: 'plan1', categoryId: 'food', breakdownTagId: null, plannedAmountCents: -12000 }]
 const run = (over = {}) =>
-  autoChecks({ year: 2026, accounts, categories, tags: [], budgets, transactions: base, importBatches: [], claimCats: new Set(), needsCtx: { claimCategoryIds: new Set(), tagById: new Map() }, percent: 5, uptoMonth: 2, ...over })
+  autoChecks({ year: 2026, accounts, categories, tags: [], budgets, transactions: base, importBatches: [], claimCats: new Set(), needsCtx: { claimCategoryIds: new Set(), tagById: new Map() }, uptoMonth: 2, ...over })
 
 describe('monthClose', () => {
   it('lastDay knows the month lengths', () => {
@@ -35,21 +35,25 @@ describe('monthClose', () => {
     expect(run({ importBatches: [{ ...ok, bankBalanceCents: 90000 }] })('bnpImport', 1)).toMatchObject({ state: 'warn' })
     expect(run({ importBatches: [{ ...ok, balanceDate: '2026-01-28' }] })('bnpImport', 1).state).toBe('warn')
   })
-  it('Consors: over 200 € warns, up to 200 € is fine', () => {
+  it('Consors: below 200 € warns, from 200 € on it is fine', () => {
     expect(run({ transactions: [...base, tx('c', '2026-01-05', null, 'consors-verrechnungskonto', 20000)] })('consors', 1).state).toBe('ok')
-    expect(run({ transactions: [...base, tx('c', '2026-01-05', null, 'consors-verrechnungskonto', 20001)] })('consors', 1).state).toBe('warn')
+    expect(run({ transactions: [...base, tx('c', '2026-01-05', null, 'consors-verrechnungskonto', 19999)] })('consors', 1).state).toBe('warn')
   })
-  it('Verlauf: a category off its Plan1 warns', () => {
-    expect(run()('verlauf', 1).state).toBe('ok')
-    expect(run({ transactions: [...base, tx('f2', '2026-01-12', 'bnp-konto', null, -9000, [{ amountCents: -9000, categoryId: 'food', tags: [] }])] })('verlauf', 1)).toMatchObject({ state: 'warn', jump: { view: 'verlauf', month: 1 } })
+  it('categorized only looks at the category, not at other yellow cells (e.g. a sign mismatch)', () => {
+    const r = run({ transactions: [...base, tx('s', '2026-01-03', 'bnp-konto', null, 500, [{ amountCents: 500, categoryId: 'food', tags: [] }])] })
+    expect(r('categorized', 1).state).toBe('ok')
+  })
+  it('Außenstände: ✓ when every claim line of the month has a claim tag', () => {
+    const claimCats = new Set(['cpam'])
+    const needsCtx = { claimCategoryIds: claimCats, tagById: { c1: { id: 'c1', class: 'grouping', groupingType: 'claim' } } }
+    const line = (tags) => [{ amountCents: -3000, categoryId: 'cpam', tags }]
+    expect(run({ claimCats, needsCtx, transactions: [...base, tx('a', '2026-01-04', 'bnp-konto', null, -3000, line(['c1']))] })('claims', 1).state).toBe('ok')
+    expect(run({ claimCats, needsCtx, transactions: [...base, tx('a', '2026-01-04', 'bnp-konto', null, -3000, line([]))] })('claims', 1)).toMatchObject({ state: 'warn', jump: { txIds: ['a'] } })
   })
   it('categorized: a booking without category in that month warns with its id', () => {
     const r = run({ transactions: [...base, tx('x', '2026-02-02', 'bnp-konto', null, -500, [{ amountCents: -500, categoryId: null, tags: [] }])] })
     expect(r('categorized', 1).state).toBe('ok')
     expect(r('categorized', 2)).toMatchObject({ state: 'warn', jump: { txIds: ['x'] } })
-  })
-  it('claims are info only', () => {
-    expect(run()('claims', 1).state).toBe('info')
   })
   it('ticks toggle, and open items list unticked manual and warning auto items', () => {
     const t = toggleTick({}, 'dkb', 1)
@@ -57,7 +61,7 @@ describe('monthClose', () => {
     expect(toggleTick(t, 'dkb', 1)).toEqual({ dkb: [] })
     const items = [DEFAULT_ITEMS.find((i) => i.id === 'dkb'), DEFAULT_ITEMS.find((i) => i.id === 'consors-saldo')]
     expect(openItems(items, 1, {}, () => ({ state: 'ok' }))).toEqual(['DKB'])
-    expect(openItems(items, 1, t, () => ({ state: 'warn' }))).toEqual(['Consors Verrechnungskonto ≤ 200 €'])
+    expect(openItems(items, 1, t, () => ({ state: 'warn' }))).toEqual(['Consors Verrechnungskonto ≥ 200 €'])
   })
   it('account hint: balance at month end and bookings in the month', () => {
     expect(accountHint('bnp-konto', 2026, 1, base)).toEqual({ balanceCents: 88000, count: 1 })

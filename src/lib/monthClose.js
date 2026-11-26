@@ -3,9 +3,7 @@
 // are plain checkboxes stored per year and month (settings/{year}.closeTicks).
 import { balance } from './balance'
 import { claimTotal } from './claims'
-import { categoryActualIndex, planStatus } from './planCheck'
-import { budgetTopLineMonths } from './budget'
-import { bookingsNeedingEntry } from './needsEntry'
+import { NEEDS_ENTRY_RULES, linesOf } from './needsEntry'
 import { monthChecks } from './monthChecks'
 
 export const SECTIONS = [
@@ -33,8 +31,8 @@ export const DEFAULT_ITEMS = [
   { id: 'aussenstaende', section: 'verfeinerung', label: 'Außenstände', auto: 'claims' },
   { id: 'prognose', section: 'abschluss', label: 'Prognose = Kontostand', auto: 'prognose' },
   { id: 'unterkonten', section: 'abschluss', label: 'Unterkonten = Rücklagen', auto: 'reserves' },
-  { id: 'verlauf', section: 'abschluss', label: 'Verlauf geprüft', auto: 'verlauf' },
-  { id: 'consors-saldo', section: 'abschluss', label: 'Consors Verrechnungskonto ≤ 200 €', auto: 'consors' },
+  { id: 'verlauf', section: 'abschluss', label: 'Verlauf geprüft' }, // manual (Nov 2026, Markus)
+  { id: 'consors-saldo', section: 'abschluss', label: 'Consors Verrechnungskonto ≥ 200 €', auto: 'consors' },
   { id: 'urlaub', section: 'abschluss', label: 'Urlaub' },
   { id: 'sonderausgaben', section: 'abschluss', label: 'Sonderausgaben' },
   { id: 'haus', section: 'abschluss', label: 'Investitionen Haus' },
@@ -44,7 +42,7 @@ export const DEFAULT_ITEMS = [
   { id: 'ueberweisungen', section: 'abschluss', label: 'Überweisungen' },
 ]
 
-// Consors: money left on the cash account above this should be invested (Markus, Nov 2026).
+// Consors: the cash account should keep at least this much (Markus, Nov 2026: below → warning).
 export const CONSORS_LIMIT_CENTS = 20000
 export const CONSORS_ID = 'consors-verrechnungskonto'
 export const BNP_ID = 'bnp-konto'
@@ -59,16 +57,18 @@ const euro = (cents) => `${(cents / 100).toLocaleString('de-DE', { minimumFracti
  * @returns {(key: string, m: number) => { state: 'ok'|'warn'|'info'|null, text: string, jump?: object }}
  *   state null = nothing to judge yet (a future month)
  */
-export function autoChecks({ year, accounts, categories, tags, budgets, transactions, importBatches = [], claimCats, needsCtx, percent, uptoMonth }) {
+export function autoChecks({ year, accounts, categories, tags, budgets, transactions, importBatches = [], claimCats, needsCtx, uptoMonth }) {
   const live = transactions.filter((t) => !t.deletedAt)
   const months = Array.from({ length: uptoMonth }, (_, i) => i + 1)
   // The two month-end checks, judged as if every month up to now were ticked (bookings, not plans).
   const checks = new Map(monthChecks({ accounts, categories, tags, budgets, transactions: live, year, closedMonths: months }).map((c) => [c.m, c]))
-  const needing = new Set(bookingsNeedingEntry(live, needsCtx))
-  const actual = categoryActualIndex(live, year)
-  const planned = categories
-    .filter((c) => c.parentCategoryId)
-    .map((c) => ({ id: c.id, name: c.name, months: budgetTopLineMonths('categoryId', c.id, 'plan1', year, budgets).months }))
+  // Bookings of a month failing one needs-entry rule (lib/needsEntry.js): 'category' for
+  // "Alles kategorisiert", 'claim-tag' (an Außenstände line without its claim tag) for Außenstände.
+  const rule = (id) => NEEDS_ENTRY_RULES.find((r) => r.id === id)
+  const failing = (ruleId, m) => {
+    const r = rule(ruleId)
+    return live.filter((tx) => inMonth(tx, year, m) && linesOf(tx).some((line) => r.check(tx, line, needsCtx))).map((tx) => tx.id)
+  }
   const bnpBatches = importBatches.filter((b) => b.accountId === BNP_ID && b.status === 'committed' && b.balanceDate)
 
   return (key, m) => {
@@ -83,12 +83,16 @@ export function autoChecks({ year, accounts, categories, tags, budgets, transact
         return { state: 'ok', text: `Import bis ${covering.balanceDate.slice(8)}.${covering.balanceDate.slice(5, 7)}.` }
       }
       case 'categorized': {
-        const ids = live.filter((t) => inMonth(t, year, m) && needing.has(t.id)).map((t) => t.id)
-        return ids.length === 0 ? { state: 'ok', text: '' } : { state: 'warn', text: `${ids.length} unvollständig`, jump: { view: 'konten', txIds: ids } }
+        const ids = failing('category', m)
+        return ids.length === 0 ? { state: 'ok', text: '' } : { state: 'warn', text: `${ids.length} ohne Kategorie`, jump: { view: 'konten', txIds: ids } }
       }
       case 'claims': {
+        // ✓ when every Außenstände line of the month carries its claim tag (Nov 2026, Markus);
+        // the amount still open at month end is shown alongside.
+        const ids = failing('claim-tag', m)
         const open = claimTotal(live, claimCats, end)
-        return { state: 'info', text: open === 0 ? 'nichts offen' : `${euro(open)} offen`, jump: { view: 'aussenstaende' } }
+        const openText = open === 0 ? 'nichts offen' : `${euro(open)} offen`
+        return ids.length === 0 ? { state: 'ok', text: openText, jump: { view: 'aussenstaende' } } : { state: 'warn', text: `${ids.length} ohne Forderungs-Tag · ${openText}`, jump: { view: 'konten', txIds: ids } }
       }
       case 'prognose': {
         const c = checks.get(m)
@@ -101,13 +105,9 @@ export function autoChecks({ year, accounts, categories, tags, budgets, transact
         const off = c.reserves.filter((r) => r.delta !== 0)
         return off.length === 0 ? { state: 'ok', text: '' } : { state: 'warn', text: off.map((r) => `${r.group} ${euro(r.delta)}`).join(' · '), jump: { view: 'dashboard' } }
       }
-      case 'verlauf': {
-        const off = planned.filter((c) => planStatus({ plan: c.months[m - 1], actual: actual.total(c.id, m), closed: true, percent }) === 'off' || planStatus({ plan: c.months[m - 1], actual: actual.total(c.id, m), closed: true, percent }) === 'unplanned')
-        return off.length === 0 ? { state: 'ok', text: '' } : { state: 'warn', text: `${off.length} abweichend: ${off.slice(0, 3).map((c) => c.name).join(', ')}${off.length > 3 ? ' …' : ''}`, jump: { view: 'verlauf', month: m } }
-      }
       case 'consors': {
         const b = balance(CONSORS_ID, end, live)
-        return b > CONSORS_LIMIT_CENTS ? { state: 'warn', text: `${euro(b)} — anlegen?`, jump: { view: 'konten', accountId: CONSORS_ID } } : { state: 'ok', text: euro(b) }
+        return b < CONSORS_LIMIT_CENTS ? { state: 'warn', text: `nur ${euro(b)} — auffüllen?`, jump: { view: 'konten', accountId: CONSORS_ID } } : { state: 'ok', text: euro(b) }
       }
       default:
         return { state: null, text: '' }
