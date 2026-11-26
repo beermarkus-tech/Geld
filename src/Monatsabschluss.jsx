@@ -119,15 +119,21 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
           {wide && <span className="ml-1.5 text-xs">automatisch · {reason}</span>}
         </button>
       )
+    const checked = m <= uptoMonth && isDone(it, m, ticks, autoTick)
     return (
-      <input
-        type="checkbox"
-        className={`${className} accent-[var(--color-plan-ok)]`}
-        checked={m <= uptoMonth && isDone(it, m, ticks, autoTick)}
+      // A manual tick looks like the automatic ✓, but keeps a box around it (Nov 2026, Markus): the
+      // box says "you can tick this yourself".
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={checked}
         disabled={m > uptoMonth}
-        onChange={() => tick(it.id, m)}
+        onClick={() => tick(it.id, m)}
         aria-label={label ?? it.label}
-      />
+        className={`flex items-center justify-center rounded-[3px] border font-semibold leading-none text-[var(--color-plan-ok)] disabled:opacity-40 ${checked ? 'border-[var(--color-plan-ok)]' : 'border-[var(--color-text-muted)]'} ${className || 'h-4 w-4 text-xs'}`}
+      >
+        {checked ? '✓' : ''}
+      </button>
     )
   }
   const [month, setMonth] = useState(() => Math.max(1, Math.min(12, uptoMonth || 1)))
@@ -160,7 +166,7 @@ export default function Monatsabschluss({ year, active = true, onOpenInKonten, o
                     <div>{it.label}</div>
                     {hintText(it, m) && <div className="text-xs text-[var(--color-text-muted)]">{hintText(it, m)}</div>}
                   </div>
-                  <div className="max-w-[60%] shrink-0 text-right">{it.auto ? <AutoCell s={status(it.auto, m)} onJump={jump} wide /> : <Check it={it} m={m} className="h-5 w-5" wide />}</div>
+                  <div className="max-w-[60%] shrink-0 text-right">{it.auto ? <AutoCell s={status(it.auto, m)} onJump={jump} wide /> : <Check it={it} m={m} className="h-5 w-5 text-sm" wide />}</div>
                 </div>
               ))}
           </section>
